@@ -39,7 +39,7 @@
 #define HAVE_ANSI_COMPILER 1
 
 /* Define to 1 if you have the `atexit' function. */
-#undef HAVE_ATEXIT
+#define HAVE_ATEXIT 1
 
 /* Use case insensitive file names */
 #undef HAVE_CASE_INSENSITIVE_FS

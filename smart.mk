@@ -1,4 +1,4 @@
-$(call sm-new-module, smart, gcc0:exe)
+$(call sm-new-module, smart, gcc:exe)
 
 sm.this.sources := \
 alloca.c\
