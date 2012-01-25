@@ -332,7 +332,7 @@ strerror (int errnum)
   static char buf[] = "Unknown error 12345678901234567890";
 
   if (errno < sys_nerr) {
-    strncpy(buf, sys_errlist[errnum], 24);
+    strcpy(buf, sys_errlist[errnum]);
   } else {
     sprintf (buf, _("Unknown error %d"), errnum);
   }
