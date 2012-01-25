@@ -93,7 +93,7 @@
 #undef HAVE_FORK
 
 /* Define to 1 if you have the `getcwd' function. */
-#undef HAVE_GETCWD
+#define HAVE_GETCWD 1
 
 /* Define to 1 if you have the `getgroups' function. */
 #undef HAVE_GETGROUPS
