@@ -264,8 +264,10 @@ sub get_this_pwd {
 sub set_defaults
 {
    # $profile = 1;
-   $testee = "GNU make";
-   $make_path = "make";
+   #$testee = "GNU make";
+   #$make_path = "make";
+   $testee = "Smart";
+   $make_path = "../out/gcc/debug/bin/smart";
    $tmpfilesuffix = "mk";
    $pwd = &get_this_pwd;
 }
