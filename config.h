@@ -321,7 +321,7 @@
 #undef MAKE_JOBSERVER
 
 /* Define to 1 to enable symbolic link timestamp checking. */
-#undef MAKE_SYMLINKS
+#define MAKE_SYMLINKS 1
 
 /* Define to 1 if your `struct nlist' has an `n_un' member. Obsolete, depend
    on `HAVE_STRUCT_NLIST_N_UN_N_NAME */
