@@ -318,7 +318,7 @@
 #undef MAKE_HOST
 
 /* Define to 1 to enable job server support in GNU make. */
-#undef MAKE_JOBSERVER
+#define MAKE_JOBSERVER 1
 
 /* Define to 1 to enable symbolic link timestamp checking. */
 #define MAKE_SYMLINKS 1
