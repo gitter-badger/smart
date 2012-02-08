@@ -1,2 +1,6 @@
-out
-tests/work
+make/out
+make/tests/work
+smart
+smart.a
+*~
+*.6
