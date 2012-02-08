@@ -1,12 +1,16 @@
 package smart
 
 import (
-        //"path/filepath"
+        "os"
 )
 
 func init() {
-        gcc := &toolset{ name:"gcc" }
-
-        registerToolset(gcc)
+        registerToolset("gcc", &_gcc{})
 }
 
+type _gcc struct {
+}
+
+func (gcc *_gcc) processFile(dname string, fi os.FileInfo) {
+        print("TODO: "+dname+"\n")
+}

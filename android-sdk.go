@@ -1,12 +1,15 @@
 package smart
 
 import (
-        //"path/filepath"
+        "os"
 )
 
 func init() {
-        androidsdk := &toolset{ name:"android-sdk" }
-
-        registerToolset(androidsdk)
+        registerToolset("android-sdk", &_androidsdk{})
 }
 
+type _androidsdk struct {
+}
+
+func (sdk *_androidsdk) processFile(dname string, fi os.FileInfo) {
+}

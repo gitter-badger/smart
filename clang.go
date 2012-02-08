@@ -1,12 +1,15 @@
 package smart
 
 import (
-        //"path/filepath"
+        "os"
 )
 
 func init() {
-        clang := &toolset{ name:"clang" }
-
-        registerToolset(clang)
+        registerToolset("clang", &_clang{})
 }
 
+type _clang struct {
+}
+
+func (clang *_clang) processFile(dname string, fi os.FileInfo) {
+}

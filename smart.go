@@ -12,13 +12,17 @@ import (
 )
 
 // An toolset represents a toolchain like gcc or utilities.
-type toolset struct {
-        name string
-        noignore bool
+type toolset interface {
+        processFile(dname string, fi os.FileInfo)
 }
 
-func (ts *toolset) processFile(dname string, fi os.FileInfo) {
-        
+type toolsetStub struct {
+        name string
+        noignore bool
+        toolset toolset
+}
+
+func (ts *toolsetStub) auto() {
 }
 
 // An action represents a action to be performed while generating a required target.
@@ -73,7 +77,7 @@ func (r *filerule) match(fi os.FileInfo) bool {
         return false
 }
 
-var toolsets = map[string]*toolset{}
+var toolsets = map[string]*toolsetStub{}
 var root *action
 var generalMetaFiles = []*filerule{
         { "backup", os.ModeDir |^ os.ModeType, regexp.MustCompile(`[^~]*~$`) },
@@ -92,12 +96,12 @@ var (
         flag_C = flag.String("C", "", "change directory")
 )
 
-func registerToolset(ts *toolset) {
-        if _, has := toolsets[ts.name]; has {
-                panic("toolset already registered: "+ts.name)
+func registerToolset(name string, ts toolset) {
+        if _, has := toolsets[name]; has {
+                panic("toolset already registered: "+name)
         }
 
-        toolsets[ts.name] = ts;
+        toolsets[name] = &toolsetStub{ name:name, toolset:ts };
 }
 
 type traverseCallback func(dname string, fi os.FileInfo) bool
@@ -155,25 +159,31 @@ func processFile(dname string, fi os.FileInfo) bool {
                 return false
         }
 
-        for _, ts := range toolsets {
-                ts.processFile(dname, fi)
+        for _, stub := range toolsets {
+                stub.toolset.processFile(dname, fi)
         }
 
-        fmt.Printf("traverse: %s\n", dname)
+        //fmt.Printf("traverse: %s\n", dname)
         return true
 }
 
 func auto() {
-        var d string
-        if d = *flag_C; d == "" { d = "." }
-
+        /*
         for name, ts := range toolsets {
                 fmt.Printf("toolset: %v, %v\n", name, ts)
         }
+        */
+
+        var d string
+        if d = *flag_C; d == "" { d = "." }
 
         err := traverse(d, processFile)
         if err != nil {
                 fmt.Printf("error: %v\n", err)
+        }
+
+        for _, ts := range toolsets {
+                ts.auto()
         }
 }
 
