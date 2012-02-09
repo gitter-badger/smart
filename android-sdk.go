@@ -13,3 +13,11 @@ type _androidsdk struct {
 
 func (sdk *_androidsdk) processFile(dname string, fi os.FileInfo) {
 }
+
+func (sdk *_androidsdk) updateAll() {
+        
+}
+
+func (sdk *_androidsdk) cleanAll() {
+        
+}

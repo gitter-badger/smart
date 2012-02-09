@@ -9,92 +9,162 @@ import (
         "os/exec"
         "path/filepath"
         "regexp"
+        "strings"
+)
+
+var toolsets = map[string]*toolsetStub{}
+var generalMetaFiles = []*filerule{
+        { "backup", os.ModeDir |^ os.ModeType, `[^~]*~$` },
+        //{ "git", os.ModeDir |^ os.ModeType, `\.git(ignore)?` },
+        { "git", os.ModeDir, `^\.git$` },
+        { "git", ^os.ModeType, `^\.gitignore$` },
+        { "mercurial", os.ModeDir, `^\.hg$` },
+        { "subversion", os.ModeDir, `^\.svn$` },
+        { "cvs", ^os.ModeType, `^CVS$` },
+}
+var (
+        flag_a = flag.Bool("a", false, "automode")
+        flag_g = flag.Bool("g", true, "ignore names like \".git\", \".svn\", etc.")
+        flag_o = flag.String("o", "", "output directory")
+        flag_v = flag.Bool("v", false, "prompt command")
+        flag_C = flag.String("C", "", "change directory")
+        flag_T = flag.String("T", "", "traverse")
+        flag_V = flag.Bool("V", false, "print command verbolly")
 )
 
 // An toolset represents a toolchain like gcc or utilities.
 type toolset interface {
         processFile(dname string, fi os.FileInfo)
+        updateAll()
+        cleanAll()
 }
 
 type toolsetStub struct {
         name string
-        noignore bool
         toolset toolset
 }
 
-func (ts *toolsetStub) auto() {
+func (stub *toolsetStub) processFile(dname string, fi os.FileInfo) {
+        stub.toolset.processFile(dname, fi)
+}
+
+func (stub *toolsetStub) auto(cmds []string) {
+        for _, cmd := range cmds {
+                switch cmd {
+                case "update":
+                        stub.toolset.updateAll()
+                case "clean":
+                        stub.toolset.cleanAll()
+                default:
+                        fmt.Printf("smart:0: unknown command '%v'\n", cmd)
+                }
+        }
+}
+
+// A command executed by an action while updating a target.
+type command interface {
+        execute(target string, prequisites []string) bool
+}
+
+type execCommand struct {
+        name string
+}
+
+func (c *execCommand) run(args ...string) bool {
+        var buf bytes.Buffer
+        cmd := exec.Command(c.name, args...)
+        cmd.Stdout, cmd.Stderr = &buf, &buf
+        //cmd.Dir = ""
+
+        if *flag_v {
+                fmt.Printf("%v\n", c.name)
+        } else if *flag_V {
+                fmt.Printf("%v\n", strings.Join(cmd.Args, " "))
+        }
+
+        updated := false
+        if err := cmd.Run(); err == nil {
+                updated = true
+        } else {
+                fmt.Printf("smart:0: %s(%v):\n", c.name, err)
+                fmt.Printf("%v\n", buf.String())
+        }
+
+        return updated
 }
 
 // An action represents a action to be performed while generating a required target.
 type action struct {
         target string
         prequisites []*action
-}
-
-func (a *action) needsUpdate() (required bool) {
-        required = true
-        return
-}
-
-func (a *action) updatePrequisites() (updated int) {
-        for _, p := range a.prequisites {
-                if p.update() { updated++ }
-        }
-        return
+        command command
 }
 
 func (a *action) update() (updated bool) {
-        updatedPreNum := a.updatePrequisites()
-        if 0 < updatedPreNum || a.needsUpdate() {
-                updated = a.updateForcibly()
+        fi, err := os.Stat(a.target)
+        if err != nil {
+                //fi = nil
+        }
+
+        updatedPreNum, outdatedNum := 0, 0
+        for _, p := range a.prequisites {
+                if p.update() {
+                        updatedPreNum++
+                        outdatedNum++
+                } else {
+                        pfi, err := os.Stat(p.target)
+                        if err != nil {
+                                fmt.Printf("smart:0: '%v' not found\n", p.target)
+                                return // continue
+                        }
+                        if fi == nil || fi.ModTime().Before(pfi.ModTime()) {
+                                outdatedNum++
+                        }
+                }
+        }
+
+        if 0 < updatedPreNum || 0 < outdatedNum {
+                updated = a.updateForcibly(fi)
         }
         return
 }
 
-func (a *action) updateForcibly() (updated bool) {
-        var bufOut, bufErr bytes.Buffer
-        cmd := exec.Command("ls", "-l")
-        cmd.Stdout, cmd.Stderr = &bufOut, &bufErr
-        if err := cmd.Run(); err == nil {
-                updated = true
-                fmt.Printf("%s", string(bufOut.Bytes()))
-        } else {
-                fmt.Printf("error: %v: %s", err, string(bufErr.Bytes()))
+func (a *action) updateForcibly(fi os.FileInfo) (updated bool) {
+        if a.command == nil && fi == nil {
+                fmt.Printf("smart: no sense for `%s'\n", a.target)
+                // TODO: should panic here
+                return
         }
+
+        var pres []string
+        for _, p := range a.prequisites { pres = append(pres, p.target) }
+        updated = a.command.execute(a.target, pres)
         return
+}
+
+func (a *action) clean() {
+}
+
+func makeAction(target string) *action {
+        a := &action{
+        target: target,
+        }
+        return a
 }
 
 type filerule struct {
-        s string
-        m os.FileMode
-        r *regexp.Regexp
+        name string
+        mode os.FileMode
+        r string //*regexp.Regexp
 }
 
 func (r *filerule) match(fi os.FileInfo) bool {
-        if fi.Mode() & r.m != 0 && r.r.MatchString(fi.Name()) {
+        re := regexp.MustCompile(r.r)
+        if fi.Mode() & r.mode != 0 && re.MatchString(fi.Name()) {
                 return true
         }
         return false
 }
-
-var toolsets = map[string]*toolsetStub{}
-var root *action
-var generalMetaFiles = []*filerule{
-        { "backup", os.ModeDir |^ os.ModeType, regexp.MustCompile(`[^~]*~$`) },
-        //{ "git", os.ModeDir |^ os.ModeType, regexp.MustCompile(`\.git(ignore)?`) },
-        { "git", os.ModeDir, regexp.MustCompile(`\.git`) },
-        { "git", ^os.ModeType, regexp.MustCompile(`\.gitignore`) },
-        { "mercurial", os.ModeDir, regexp.MustCompile(`\.hg`) },
-        { "subversion", os.ModeDir, regexp.MustCompile(`\.svn`) },
-        { "cvs", ^os.ModeType, regexp.MustCompile(`CVS`) },
-}
-var (
-        flag_a = flag.Bool("a", false, "automode")
-        flag_g = flag.Bool("g", true, "ignore names like \".git\", \".svn\", etc.")
-        flag_o = flag.String("o", "", "output directory")
-        flag_T = flag.String("T", "", "traverse")
-        flag_C = flag.String("C", "", "change directory")
-)
 
 func registerToolset(name string, ts toolset) {
         if _, has := toolsets[name]; has {
@@ -147,11 +217,15 @@ func traverse(d string, fun traverseCallback) (err error) {
         return
 }
 
-func isGeneralMeta(fi os.FileInfo) bool {
-        for _, g := range generalMetaFiles {
-                if g.match(fi) { return true }
+func matchFile(fi os.FileInfo, rules []*filerule) *filerule {
+        for _, g := range rules {
+                if g.match(fi) { return g }
         }
-        return false
+        return nil
+}
+
+func isGeneralMeta(fi os.FileInfo) bool {
+        return matchFile(fi, generalMetaFiles) != nil
 }
 
 func processFile(dname string, fi os.FileInfo) bool {
@@ -160,20 +234,14 @@ func processFile(dname string, fi os.FileInfo) bool {
         }
 
         for _, stub := range toolsets {
-                stub.toolset.processFile(dname, fi)
+                stub.processFile(dname, fi)
         }
 
         //fmt.Printf("traverse: %s\n", dname)
         return true
 }
 
-func auto() {
-        /*
-        for name, ts := range toolsets {
-                fmt.Printf("toolset: %v, %v\n", name, ts)
-        }
-        */
-
+func auto(vars map[string]string, cmds []string) {
         var d string
         if d = *flag_C; d == "" { d = "." }
 
@@ -182,21 +250,30 @@ func auto() {
                 fmt.Printf("error: %v\n", err)
         }
 
-        for _, ts := range toolsets {
-                ts.auto()
+        for _, stub := range toolsets {
+                stub.auto(cmds)
         }
 }
 
 func Main() {
-        //fmt.Printf("args: %v\n", os.Args)
         flag.Parse()
 
-        if *flag_a {
-                auto();
+        var vars = map[string]string{}
+        var cmds []string
+        for _, arg := range os.Args[1:] {
+                if arg[0] == '-' { continue }
+                if i := strings.Index(arg, "="); 0 < i /* false at '=foo' */ {
+                        vars[arg[0:i]] = arg[i+1:]
+                        continue
+                }
+                cmds = append(cmds, arg)
         }
 
-        if root != nil {
-                fmt.Printf("target: %s\n", root.target)
-                root.update()
+        if 0 == len(cmds) {
+                cmds = append(cmds, "update")
+        }
+
+        if *flag_a {
+                auto(vars, cmds);
         }
 }
