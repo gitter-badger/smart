@@ -193,7 +193,7 @@ func (p *parser) getLine() (s string, err error) {
                                         if rr, _, e = p.getRune(); e != nil {
                                                 err = e; return true
                                         }
-                                        if rr == '\n' { return false }
+                                        if rr == '\n' { *r = 0; return true }
                                         if !unicode.IsSpace(rr) {
                                                 if e = p.ungetRune(); e != nil {
                                                         err = e; return true
@@ -209,6 +209,38 @@ func (p *parser) getLine() (s string, err error) {
         })
         if err == nil && e != nil { err = e }
         return
+}
+
+func (p *parser) expand(s string) string {
+        var buf bytes.Buffer
+        var call func(name string, args ...string) string
+        var exp func()
+
+        call = func(name string, args ...string) string {
+                
+        }
+
+        i := 0
+        exp = func() {
+                if d := strings.IndexRune(s[i:], '$'); d == -1 {
+                        fmt.Fprintf(&buf, s)
+                        return
+                } else {
+                        i = d + 1
+                        var rr = rune(0)
+                        switch s[i] {
+                        case '(': rr = ')'
+                        case '{': rr = '}'
+                        default:
+                                panic(p.newError("unbalaned parets"))
+                        }
+                        fmt.Fprintf(&buf, s[0:d])
+                        fmt.Printf("TODO: %v\n", s[d:])
+                }
+        }
+
+        exp()
+        return string(buf.Bytes())
 }
 
 func (p *parser) parse() (err error) {
@@ -237,6 +269,8 @@ func (p *parser) parse() (err error) {
                 if _, err = p.skipSpace(true); err != nil { break }
                 if s, err = p.getLine(); err != nil && err != io.EOF { break }
 
+                w = strings.TrimSpace(p.expand(w))
+
                 switch del {
                 case '=':
                         p.saveVariable(w, s)
@@ -244,7 +278,9 @@ func (p *parser) parse() (err error) {
                 case ':':
                         //print("parse: "+w+" : "+s+"\n")
                 default:
-                        panic(p.newError(0, w))
+                        if w != "" {
+                                panic(p.newError(0, w))
+                        }
                 }
         }
         if err == io.EOF { err = nil }
@@ -263,7 +299,7 @@ func (p *parser) saveVariable(name, value string) {
         v.loc.file = &p.file
         v.loc.lineno = p.lineno
 
-        //fmt.Printf("%v %s = %s\n", &v.loc, name, value)
+        fmt.Printf("%v %s = %s\n", &v.loc, name, value)
 }
 
 func (m *module) parse(conf string) (err error) {
