@@ -155,7 +155,7 @@ func (p *parser) skipLine() (size int, err error) {
 }
 
 // get a sequence of 
-func (p *parser) get(stop func(rune) bool) (w string, err error) {
+func (p *parser) get(stop func(*rune) bool) (w string, err error) {
         var r rune
         p.buf.Reset()
         for {
@@ -163,11 +163,11 @@ func (p *parser) get(stop func(rune) bool) (w string, err error) {
                 if err != nil {
                         break
                 }
-                if stop(r) {
+                if stop(&r) {
                         err = p.ungetRune()
                         break
                 }
-                p.buf.WriteRune(r)
+                if r != 0 { p.buf.WriteRune(r) }
         }
         w = string(p.buf.Bytes())
         return
@@ -175,16 +175,40 @@ func (p *parser) get(stop func(rune) bool) (w string, err error) {
 
 // getWord read a word(non-space rune sequence)
 func (p *parser) getWord() (string, error) {
-        return p.get(func(r rune) bool {
-                return unicode.IsSpace(r)
+        return p.get(func(r *rune) bool {
+                return unicode.IsSpace(*r)
         })
 }
 
 // getLine read a sequence of rune until '\n'
-func (p *parser) getLine() (string, error) {
-        return p.get(func(r rune) bool {
-                return r == '\n'
+func (p *parser) getLine() (s string, err error) {
+        s, e := p.get(func(r *rune) bool {
+                if *r == '\\' {
+                        rr, _, e := p.getRune()
+                        if e != nil {
+                                err = e; return true
+                        }
+                        if rr == '\n' {
+                                for {
+                                        if rr, _, e = p.getRune(); e != nil {
+                                                err = e; return true
+                                        }
+                                        if rr == '\n' { return false }
+                                        if !unicode.IsSpace(rr) {
+                                                if e = p.ungetRune(); e != nil {
+                                                        err = e; return true
+                                                }
+                                                break
+                                        }
+                                }
+                                *r = ' ' // replace '\\' with a space
+                                return false
+                        }
+                }
+                return *r == '\n'
         })
+        if err == nil && e != nil { err = e }
+        return
 }
 
 func (p *parser) parse() (err error) {
@@ -197,9 +221,9 @@ func (p *parser) parse() (err error) {
                         break
                 }
 
-                w, err = p.get(func(r rune) bool {
-                        if r == '=' || r == ':' || r == '\n' {
-                                del = r; return true
+                w, err = p.get(func(r *rune) bool {
+                        if *r == '=' || *r == ':' || *r == '\n' {
+                                del = *r; return true
                         }
                         return false
                 })//p.getWord()
@@ -216,7 +240,7 @@ func (p *parser) parse() (err error) {
                 switch del {
                 case '=':
                         p.saveVariable(w, s)
-                        //print("parse: "+w+" = "+s+"\n")
+                        print("parse: "+w+" = "+s+"\n")
                 case ':':
                         //print("parse: "+w+" : "+s+"\n")
                 default:
