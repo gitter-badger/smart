@@ -1,9 +1,9 @@
 # -*- makefile -*-
+name = foo
 toolset = gcc
 type = exe
 sources = *.c
 includes = \
-  shared\
-  static
+  .\
 
-foo: { foo.c }
+$(use shared static)

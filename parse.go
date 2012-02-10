@@ -240,7 +240,7 @@ func (p *parser) parse() (err error) {
                 switch del {
                 case '=':
                         p.saveVariable(w, s)
-                        print("parse: "+w+" = "+s+"\n")
+                        //print("parse: "+w+" = "+s+"\n")
                 case ':':
                         //print("parse: "+w+" : "+s+"\n")
                 default:
