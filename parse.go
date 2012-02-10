@@ -6,6 +6,7 @@ import (
         //"errors"
         "fmt"
         "unicode"
+        "unicode/utf8"
         "io"
         "os"
         "strings"
@@ -211,36 +212,106 @@ func (p *parser) getLine() (s string, err error) {
         return
 }
 
-func (p *parser) expand(s string) string {
-        var buf bytes.Buffer
-        var call func(name string, args ...string) string
-        var exp func()
+func (p *parser) call(name string, args []string) string {
+        //fmt.Printf("call: %v %v %v\n", name, args, p.variables[name])
+        //fmt.Printf("call: %v %v\n", name, args)
+        if v, ok := p.variables[name]; ok {
+                return v.value
+        }
+        return ""
+}
 
-        call = func(name string, args ...string) string {
-                
+func (p *parser) expand(str string) string {
+        var buf bytes.Buffer
+        var exp func(s []byte) (out string, l int)
+        var getRune func(s []byte) (r rune, l int)
+
+        getRune = func(s []byte) (r rune, l int) {
+                if r, l = utf8.DecodeRune(s); r == utf8.RuneError || l <= 0 {
+                        panic(p.newError(1, "bad UTF8 encoding"))
+                }
+                return
         }
 
-        i := 0
-        exp = func() {
-                if d := strings.IndexRune(s[i:], '$'); d == -1 {
-                        fmt.Fprintf(&buf, s)
-                        return
+        exp = func(s []byte) (out string, l int) {
+                var r, rr rune
+                var sz = 0
+
+                if r, sz = getRune(s); r == '$' {
+                        s, l = s[sz:], l + sz
                 } else {
-                        i = d + 1
-                        var rr = rune(0)
-                        switch s[i] {
-                        case '(': rr = ')'
-                        case '{': rr = '}'
-                        default:
-                                panic(p.newError("unbalaned parets"))
+                        panic(p.newError(1, "not a variable"))
+                }
+
+                r, sz = getRune(s); s, l = s[sz:], l + sz
+                switch r {
+                case '(': rr = ')'
+                case '{': rr = '}'
+                case '$': out = "$"; return // for "$$"
+                }
+
+                var name string
+                var args []string
+                var t bytes.Buffer
+                if rr == 0 {
+                        t.WriteRune(r)
+                        out = p.call(t.String(), args)
+                        return
+                }
+
+                for 0 < len(s) {
+                        r, sz = getRune(s)
+
+                        switch r {
+                        default: t.WriteRune(r)
+                        case ' ':
+                                name = t.String(); t.Reset()
+                        case ',':
+                                args = append(args, t.String()); t.Reset()
+                        case '$':
+                                //fmt.Printf("inner: %v, %v, %v\n", string(s), sz, l)
+                                if ss, ll := exp(s); 0 < ll {
+                                        t.WriteString(ss)
+                                        s, l = s[ll:], l + ll
+                                        //fmt.Printf("inner: %v, %v, %v, %v\n", string(s), ll, ss, sz)
+                                        continue
+                                } else {
+                                        panic(p.newError(1, string(s)))
+                                }
+                        case rr:
+                                if 0 < t.Len() {
+                                        if 0 < len(args) {
+                                                args = append(args, t.String())
+                                        } else {
+                                                name = t.String()
+                                        }
+                                        t.Reset()
+                                }
+                                //fmt.Printf("rr: %v, %v, %v\n", string(s), rr, l)
+                                out, l = p.call(name, args), l + sz
+                                return /* do not "break" */
                         }
-                        fmt.Fprintf(&buf, s[0:d])
-                        fmt.Printf("TODO: %v\n", s[d:])
+                        s, l = s[sz:], l + sz
+                }
+                return
+        }
+
+        s := []byte(str)
+        for 0 < len(s) {
+                r, l := getRune(s)
+                if r == '$' {
+                        if ss, ll := exp(s); ll <= 0 {
+                                panic(p.newError(0, "bad variable"))
+                        } else {
+                                s = s[ll:]
+                                buf.WriteString(ss)
+                        }
+                } else {
+                        buf.WriteRune(r)
+                        s = s[l:]
                 }
         }
-
-        exp()
-        return string(buf.Bytes())
+        return buf.String()
 }
 
 func (p *parser) parse() (err error) {
@@ -262,7 +333,7 @@ func (p *parser) parse() (err error) {
                 if err != nil { break }
 
                 if w = strings.TrimSpace(w); w == "" {
-                        p.stepCol(); panic(p.newError(0, "illegal '='"))
+                        p.stepCol(); panic(p.newError(0, "illegal"))
                 }
 
                 if _, err = p.skipRune(); err != nil { break }
@@ -277,6 +348,8 @@ func (p *parser) parse() (err error) {
                         //print("parse: "+w+" = "+s+"\n")
                 case ':':
                         //print("parse: "+w+" : "+s+"\n")
+                case '\n':
+                        fmt.Printf("line: %v\n", w)
                 default:
                         if w != "" {
                                 panic(p.newError(0, w))
