@@ -22,7 +22,7 @@ enter() {
 
 leave() {
     local D=$1
-    cd - > /dev/null && echo "smart: Entering directory \`$D'"
+    cd - > /dev/null && echo "smart: Leaving directory \`$D'"
 }
 
 needs_build || {

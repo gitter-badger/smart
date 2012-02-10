@@ -61,6 +61,14 @@ func (stub *toolsetStub) auto(cmds []string) {
         }
 }
 
+func registerToolset(name string, ts toolset) {
+        if _, has := toolsets[name]; has {
+                panic("toolset already registered: "+name)
+        }
+
+        toolsets[name] = &toolsetStub{ name:name, toolset:ts };
+}
+
 // A command executed by an action while updating a target.
 type command interface {
         execute(target string, prequisites []string) bool
@@ -143,6 +151,7 @@ func (a *action) updateForcibly(fi os.FileInfo) (updated bool) {
 }
 
 func (a *action) clean() {
+        fmt.Printf("smart: TODO: clean `%s'\n", a.target)
 }
 
 func makeAction(target string) *action {
@@ -150,6 +159,27 @@ func makeAction(target string) *action {
         target: target,
         }
         return a
+}
+
+type module struct {
+        dir string
+        name string
+        toolset string
+        kind string
+        sources string
+        action *action // action for building this module
+        variables map[string]*variable
+}
+
+func makeModule(conf string) (mod *module, err error) {
+        mod = &module{ dir:filepath.Dir(conf), }
+
+        if err = mod.parse(conf); err != nil {
+                mod = nil
+                return
+        }
+
+        return
 }
 
 type filerule struct {
@@ -164,14 +194,6 @@ func (r *filerule) match(fi os.FileInfo) bool {
                 return true
         }
         return false
-}
-
-func registerToolset(name string, ts toolset) {
-        if _, has := toolsets[name]; has {
-                panic("toolset already registered: "+name)
-        }
-
-        toolsets[name] = &toolsetStub{ name:name, toolset:ts };
 }
 
 type traverseCallback func(dname string, fi os.FileInfo) bool
@@ -224,14 +246,25 @@ func matchFile(fi os.FileInfo, rules []*filerule) *filerule {
         return nil
 }
 
-func isGeneralMeta(fi os.FileInfo) bool {
-        return matchFile(fi, generalMetaFiles) != nil
-}
-
 func processFile(dname string, fi os.FileInfo) bool {
-        if *flag_g && isGeneralMeta(fi) {
+        fr := matchFile(fi, generalMetaFiles)
+
+        if *flag_g && fr != nil {
                 return false
         }
+
+        var mod *module
+        var err error
+
+        if fi.Name() == ".smart" {
+                mod, err = makeModule(dname)
+                if err != nil {
+                        fmt.Printf("smart:0: open `%v', %v\n", dname, err)
+                        return false
+                }
+        }
+
+        if mod == nil {}
 
         for _, stub := range toolsets {
                 stub.processFile(dname, fi)
@@ -241,7 +274,7 @@ func processFile(dname string, fi os.FileInfo) bool {
         return true
 }
 
-func auto(vars map[string]string, cmds []string) {
+func run(vars map[string]string, cmds []string) {
         var d string
         if d = *flag_C; d == "" { d = "." }
 
@@ -250,8 +283,12 @@ func auto(vars map[string]string, cmds []string) {
                 fmt.Printf("error: %v\n", err)
         }
 
-        for _, stub := range toolsets {
-                stub.auto(cmds)
+        if *flag_a {
+                for _, stub := range toolsets {
+                        stub.auto(cmds)
+                }
+        } else {
+                
         }
 }
 
@@ -273,7 +310,5 @@ func Main() {
                 cmds = append(cmds, "update")
         }
 
-        if *flag_a {
-                auto(vars, cmds);
-        }
+        run(vars, cmds);
 }

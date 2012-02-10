@@ -1,3 +1,8 @@
-name = foo
-type = gcc:exe
+# -*- makefile -*-
+foo:
+toolset = gcc
+type = exe
 sources = *.c
+includes =
+
+foo: { foo.c }
