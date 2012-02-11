@@ -88,7 +88,7 @@ func (p *parser) getRune() (r rune, rs int, err error) {
 
 func (p *parser) ungetRune() (err error) {
         if p.lineno == 1 && p.colno <= 1 { return }
-        if err = p.in.UnreadRune(); err != nil { panic(p.newError(-3, "unget")) }
+        if err = p.in.UnreadRune(); err != nil { panic(p.newError(0, fmt.Sprintf("%v", err))) }
         if p.rune == '\n' {
                 p.lineno, p.colno = p.lineno-1, p.prevColno
         } else {
@@ -108,8 +108,7 @@ func (p *parser) skip(shouldSkip func(r rune) bool) (bytes int, err error) {
                 if shouldSkip(r) {
                         bytes += rs;
                 } else {
-                        p.ungetRune()
-                        break
+                        p.ungetRune(); break
                 }
         }
         return
@@ -131,10 +130,7 @@ func (p *parser) skipSpace(inline bool) (bytes int, err error) {
                                         return false
                                 }
                                 if r == '\n' {
-                                        if e := p.ungetRune(); e != nil {
-                                                panic(p.newError(-1, "unget '\n'"))
-                                        }
-                                        break
+                                        err = p.ungetRune(); break
                                 }
                                 bytes += rs
                         }
@@ -161,14 +157,8 @@ func (p *parser) get(stop func(*rune) bool) (w string, err error) {
         var r rune
         p.buf.Reset()
         for {
-                r, _, err = p.getRune()
-                if err != nil {
-                        break
-                }
-                if stop(&r) {
-                        err = p.ungetRune()
-                        break
-                }
+                if r, _, err = p.getRune(); err != nil { break }
+                if stop(&r) { err = p.ungetRune(); break }
                 if r != 0 { p.buf.WriteRune(r) }
         }
         w = string(p.buf.Bytes())
@@ -190,22 +180,32 @@ func (p *parser) getLine(delimeters string) (s string, del rune, err error) {
                         if e != nil {
                                 err = e; return true
                         }
-                        if rr == '\n' {
+                        if rr == '\n' { // line continual by "\\\n"
                                 for {
                                         if rr, _, e = p.getRune(); e != nil {
                                                 err = e; return true
                                         }
                                         if rr == '\n' { *r = 0; return true }
                                         if !unicode.IsSpace(rr) {
-                                                if e = p.ungetRune(); e != nil {
-                                                        err = e; return true
-                                                }
-                                                break
+                                                err = p.ungetRune(); break
                                         }
                                 }
                                 *r = ' ' // replace '\\' with a space
                                 return false
                         }
+                }
+                if *r == '#' {
+                        /*
+                        var b bytes.Buffer
+                        for {
+                                if rr, _, e := p.getRune(); rr == '\n' || e != nil {
+                                        fmt.Printf("comment: %v\n", &b)
+                                        err = e; break
+                                } else {
+                                        b.WriteRune(rr)
+                                }
+                        } */
+                        del = '\n'; return true
                 }
                 if strings.IndexRune(delimeters, *r) != -1 {
                         del = *r; return true
@@ -228,7 +228,7 @@ func (p *parser) parse() (err error) {
 
                 if err != nil && err != io.EOF { break }
                 if w = strings.TrimSpace(w); w == "" {
-                        p.stepCol(); panic(p.newError(0, "illegal"))
+                        p.stepCol(); panic(p.newError(0, fmt.Sprintf("illegal: %v", w)))
                 }
 
                 w = p.expand(w)
@@ -244,13 +244,13 @@ func (p *parser) parse() (err error) {
                 switch del {
                 case '=': //print("parse: "+w+" = "+s+"\n")
                         if w == "" {
-                                panic(p.newError(0, "illegal"))
+                                panic(p.newError(0, fmt.Sprintf("illegal: %v", w)))
                         }
                         p.saveVariable(w, s)
 
                 case ':': //print("parse: "+w+" : "+s+"\n")
                         if w == "" {
-                                panic(p.newError(0, "illegal"))
+                                panic(p.newError(0, fmt.Sprintf("illegal: %v", w)))
                         }
 
                         switch rr {
@@ -262,13 +262,13 @@ func (p *parser) parse() (err error) {
 
                 case '\n':
                         if w != "" {
-                                p.lineno, p.colno = p.lineno - 1, p.prevColno
+                                //p.lineno, p.colno = p.lineno - 1, p.prevColno
                                 panic(p.newError(0, fmt.Sprintf("illegal: %v", w)))
                         }
 
                 default:
                         if w != "" {
-                                panic(p.newError(0, w))
+                                panic(p.newError(0, fmt.Sprintf("illegal: %v", w)))
                         }
                 }
         }
