@@ -172,7 +172,10 @@ type module struct {
 }
 
 func makeModule(conf string) (mod *module, err error) {
-        mod = &module{ dir:filepath.Dir(conf), }
+        mod = &module{
+                dir: filepath.Dir(conf),
+                variables: make(map[string]*variable, 200),
+        }
 
         if err = mod.parse(conf); err != nil {
                 mod = nil

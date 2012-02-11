@@ -3,7 +3,7 @@
 set -e -b
 
 OFILES=
-GOFILES="smart.go parse.go gcc.go clang.go android-ndk.go android-sdk.go"
+GOFILES="smart.go parse.go internals.go gcc.go clang.go android-ndk.go android-sdk.go"
 for i in $GOFILES; do
     O="${i/%.go/.6}"
     OFILES="$OFILES $O"

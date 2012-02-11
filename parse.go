@@ -40,6 +40,7 @@ func (e *parseError) String() string {
 }
 
 type parser struct {
+        module *module
         file string
         in *bufio.Reader //io.RuneReader
         buf bytes.Buffer // token or word or line accumulator
@@ -181,8 +182,8 @@ func (p *parser) getWord() (string, error) {
         })
 }
 
-// getLine read a sequence of rune until '\n'
-func (p *parser) getLine() (s string, err error) {
+// getLine read a sequence of rune until delimeters
+func (p *parser) getLine(delimeters string) (s string, del rune, err error) {
         s, e := p.get(func(r *rune) bool {
                 if *r == '\\' {
                         rr, _, e := p.getRune()
@@ -206,27 +207,79 @@ func (p *parser) getLine() (s string, err error) {
                                 return false
                         }
                 }
-                return *r == '\n'
+                if strings.IndexRune(delimeters, *r) != -1 {
+                        del = *r; return true
+                }
+                return false
         })
         if err == nil && e != nil { err = e }
         return
 }
 
-func (p *parser) call(name string, args []string) string {
-        //fmt.Printf("call: %v %v %v\n", name, args, p.variables[name])
-        //fmt.Printf("call: %v %v\n", name, args)
-        if v, ok := p.variables[name]; ok {
-                return v.value
+func (p *parser) parse() (err error) {
+        p.lineno, p.colno = 1, 0
+
+        var w, s string
+        var del rune
+        parse_loop: for {
+                if _, err = p.skipSpace(false); err != nil { break }
+
+                w, del, err = p.getLine("=:\n")
+
+                if err != nil && err != io.EOF { break }
+                if w = strings.TrimSpace(w); w == "" {
+                        p.stepCol(); panic(p.newError(0, "illegal"))
+                }
+
+                w = p.expand(w)
+
+                var rr rune
+                if _, err = p.skipRune(); err != nil { break parse_loop }
+                if rr, _, err = p.getRune(); err != nil { break } else {
+                        if strings.IndexRune("=:", rr) == -1 { p.ungetRune() }
+                }
+                if _, err = p.skipSpace(true); err != nil { break }
+                if s, _, err = p.getLine("\n"); err != nil && err != io.EOF { break }
+
+                switch del {
+                case '=': //print("parse: "+w+" = "+s+"\n")
+                        if w == "" {
+                                panic(p.newError(0, "illegal"))
+                        }
+                        p.saveVariable(w, s)
+
+                case ':': //print("parse: "+w+" : "+s+"\n")
+                        if w == "" {
+                                panic(p.newError(0, "illegal"))
+                        }
+
+                        switch rr {
+                        case '=':
+                                p.saveVariable(w, p.expand(s))
+                        case ':':
+                                fmt.Printf("TODO: %v : %v\n", w, s)
+                        }
+
+                case '\n':
+                        if w != "" {
+                                p.lineno, p.colno = p.lineno - 1, p.prevColno
+                                panic(p.newError(0, fmt.Sprintf("illegal: %v", w)))
+                        }
+
+                default:
+                        if w != "" {
+                                panic(p.newError(0, w))
+                        }
+                }
         }
-        return ""
+        if err == io.EOF { err = nil }
+        return
 }
 
 func (p *parser) expand(str string) string {
         var buf bytes.Buffer
         var exp func(s []byte) (out string, l int)
-        var getRune func(s []byte) (r rune, l int)
-
-        getRune = func(s []byte) (r rune, l int) {
+        var getRune = func(s []byte) (r rune, l int) {
                 if r, l = utf8.DecodeRune(s); r == utf8.RuneError || l <= 0 {
                         panic(p.newError(1, "bad UTF8 encoding"))
                 }
@@ -235,15 +288,9 @@ func (p *parser) expand(str string) string {
 
         exp = func(s []byte) (out string, l int) {
                 var r, rr rune
-                var sz = 0
+                var rs = 0
 
-                if r, sz = getRune(s); r == '$' {
-                        s, l = s[sz:], l + sz
-                } else {
-                        panic(p.newError(1, "not a variable"))
-                }
-
-                r, sz = getRune(s); s, l = s[sz:], l + sz
+                r, rs = getRune(s); s, l = s[rs:], l + rs
                 switch r {
                 case '(': rr = ')'
                 case '{': rr = '}'
@@ -260,38 +307,45 @@ func (p *parser) expand(str string) string {
                 }
 
                 for 0 < len(s) {
-                        r, sz = getRune(s)
+                        r, rs = getRune(s)
 
                         switch r {
                         default: t.WriteRune(r)
                         case ' ':
-                                name = t.String(); t.Reset()
+                                if name == "" {
+                                        name = t.String(); t.Reset()
+                                } else {
+                                        t.WriteRune(r); break
+                                }
                         case ',':
                                 args = append(args, t.String()); t.Reset()
                         case '$':
-                                //fmt.Printf("inner: %v, %v, %v\n", string(s), sz, l)
-                                if ss, ll := exp(s); 0 < ll {
+                                //fmt.Printf("inner: %v, %v, %v\n", string(s), rs, l)
+                                if ss, ll := exp(s[rs:]); 0 < ll {
                                         t.WriteString(ss)
-                                        s, l = s[ll:], l + ll
-                                        //fmt.Printf("inner: %v, %v, %v, %v\n", string(s), ll, ss, sz)
+                                        s, l = s[rs+ll:], l + rs + ll
+                                        //fmt.Printf("inner: %v, %v, %v, %v\n", string(s), ll, ss, rs)
                                         continue
                                 } else {
                                         panic(p.newError(1, string(s)))
                                 }
                         case rr:
                                 if 0 < t.Len() {
-                                        if 0 < len(args) {
+                                        if 0 < len(name) /*0 < len(args)*/ {
                                                 args = append(args, t.String())
                                         } else {
                                                 name = t.String()
                                         }
                                         t.Reset()
                                 }
-                                //fmt.Printf("rr: %v, %v, %v\n", string(s), rr, l)
-                                out, l = p.call(name, args), l + sz
+                                //fmt.Printf("expcall: %v, %v, %v, %v\n", name, string(s[0:rs]), string(s[rs:]), rs)
+                                out, l = p.call(name, args), l + rs
                                 return /* do not "break" */
                         }
-                        s, l = s[sz:], l + sz
+
+                        //fmt.Printf("exp: %v, %v, %v, %v\n", name, args, string(s[0:rs]), rs)
+
+                        s, l = s[rs:], l + rs
                 }
                 return
         }
@@ -299,6 +353,7 @@ func (p *parser) expand(str string) string {
         s := []byte(str)
         for 0 < len(s) {
                 r, l := getRune(s)
+                s = s[l:]
                 if r == '$' {
                         if ss, ll := exp(s); ll <= 0 {
                                 panic(p.newError(0, "bad variable"))
@@ -308,56 +363,24 @@ func (p *parser) expand(str string) string {
                         }
                 } else {
                         buf.WriteRune(r)
-                        s = s[l:]
                 }
         }
+
         return buf.String()
 }
 
-func (p *parser) parse() (err error) {
-        p.lineno, p.colno = 1, 0
+func (p *parser) call(name string, args []string) string {
+        //fmt.Printf("call: %v %v %v\n", name, args, p.variables[name])
+        //fmt.Printf("call: %v %v\n", name, args)
 
-        var w, s string
-        var del rune
-        for {
-                if _, err = p.skipSpace(false); err != nil {
-                        break
-                }
-
-                w, err = p.get(func(r *rune) bool {
-                        if *r == '=' || *r == ':' || *r == '\n' {
-                                del = *r; return true
-                        }
-                        return false
-                })//p.getWord()
-                if err != nil { break }
-
-                if w = strings.TrimSpace(w); w == "" {
-                        p.stepCol(); panic(p.newError(0, "illegal"))
-                }
-
-                if _, err = p.skipRune(); err != nil { break }
-                if _, err = p.skipSpace(true); err != nil { break }
-                if s, err = p.getLine(); err != nil && err != io.EOF { break }
-
-                w = strings.TrimSpace(p.expand(w))
-
-                switch del {
-                case '=':
-                        p.saveVariable(w, s)
-                        //print("parse: "+w+" = "+s+"\n")
-                case ':':
-                        //print("parse: "+w+" : "+s+"\n")
-                case '\n':
-                        fmt.Printf("line: %v\n", w)
-                default:
-                        if w != "" {
-                                panic(p.newError(0, w))
-                        }
-                }
+        if f, ok := internals[name]; ok {
+                return f(args)
         }
-        if err == io.EOF { err = nil }
-        return
+
+        if v, ok := p.variables[name]; ok {
+                return v.value
+        }
+        return ""
 }
 
 func (p *parser) saveVariable(name, value string) {
@@ -371,8 +394,9 @@ func (p *parser) saveVariable(name, value string) {
         v.value = value
         v.loc.file = &p.file
         v.loc.lineno = p.lineno
+        v.loc.colno = p.colno
 
-        fmt.Printf("%v %s = %s\n", &v.loc, name, value)
+        //fmt.Printf("%v %s = %s\n", &v.loc, name, value)
 }
 
 func (m *module) parse(conf string) (err error) {
@@ -395,11 +419,15 @@ func (m *module) parse(conf string) (err error) {
                 }
         }()
 
-        p := &parser{ file:conf, in:bufio.NewReader(f), variables:make(map[string]*variable, 200) }
+        p := &parser{
+                module: m,
+                file: conf,
+                in: bufio.NewReader(f),
+                variables: m.variables,
+        }
         if err = p.parse(); err != nil {
                 return
         }
 
-        m.variables = p.variables
         return
 }

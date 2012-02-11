@@ -1,9 +1,8 @@
 # -*- makefile -*-
-name = foo
-toolset = gcc
-type = exe
-sources = *.c
-includes = \
+$(module foo, gcc, exe)
+
+this.sources = *.c
+this.includes = \
   .\
 
 a = a
@@ -11,7 +10,17 @@ i = i
 sh$ared = shared
 stat$ic = static
 a$$a = foo
+中文 = 天籁
+汉字 = 之音
+foo := $(a$$a)
 
-xxx$(use $(sh$ared),$(stat$ic))-$(a$$a)-xxx
+$(use $(sh$ared),$(stat$ic)-$(a$$a))
 
-#
+$(info xxx-(use $(sh$ared),$(stat$ic))-$(a$$a)-xxx) # output: xxx-(use shared static)-foo-xxx
+$(info $(中文 $(汉字))) # output: 天籁
+$(info $(中文) $(汉字)) # output: 天籁 之音
+
+$(build)
+
+$(use $(sh$ared),$(stat$ic)-$(a$$a))error # output: gcc/.smart:16:0: illegal: error (0)
+#$(use $(sh$ared),$(stat$ic)-$(a$$a))error
