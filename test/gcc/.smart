@@ -7,8 +7,8 @@ this.includes = \
 
 a = a
 i = i
-sh$ared = shared
-stat$ic = static
+sh$ared = sh$ared
+stat$ic = st$at$ic
 a$$a = foo
 中文 = 天籁
 汉字 = 之音
@@ -22,5 +22,5 @@ $(info $(中文) $(汉字)) # output: 天籁 之音
 
 $(build)
 
-$(use $(sh$ared),$(stat$ic)-$(a$$a))error # output: gcc/.smart:16:0: illegal: error (0)
+$(use $(sh$ared),$(stat$ic)-$(a$$a))should-emit-error # output: gcc/.smart:16:0: illegal: error (0)
 #$(use $(sh$ared),$(stat$ic)-$(a$$a))error

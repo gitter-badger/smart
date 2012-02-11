@@ -306,11 +306,12 @@ func (p *parser) expand(str string) string {
                         return
                 }
 
+                var parentheses []rune
                 for 0 < len(s) {
                         r, rs = getRune(s)
 
                         switch r {
-                        default: t.WriteRune(r)
+                        default:  t.WriteRune(r)
                         case ' ':
                                 if name == "" {
                                         name = t.String(); t.Reset()
@@ -329,7 +330,13 @@ func (p *parser) expand(str string) string {
                                 } else {
                                         panic(p.newError(1, string(s)))
                                 }
+                        case '(': t.WriteRune(r); parentheses = append(parentheses, ')')
+                        case '{': t.WriteRune(r); parentheses = append(parentheses, '}')
                         case rr:
+                                if 0 < len(parentheses) && rr == parentheses[len(parentheses)-1] {
+                                        parentheses = parentheses[0:len(parentheses)-1]
+                                        t.WriteRune(r); break
+                                }
                                 if 0 < t.Len() {
                                         if 0 < len(name) /*0 < len(args)*/ {
                                                 args = append(args, t.String())
@@ -374,6 +381,8 @@ func (p *parser) call(name string, args []string) string {
         //fmt.Printf("call: %v %v\n", name, args)
 
         if f, ok := internals[name]; ok {
+                // All arguments should be expended.
+                for i, _ := range args { args[i] = p.expand(args[i]) }
                 return f(args)
         }
 
