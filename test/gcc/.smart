@@ -14,7 +14,7 @@ a$$a = foo
 汉字 = 之音
 foo := $(a$$a)
 
-$(use $(sh$ared), $(stat$ic)-$(a$$a))
+$(use $(sh$ared), $(stat$ic)-$(a$$a)) # output:
 
 $(info xxx-(use $(sh$ared),$(stat$ic))-$(a$$a)-xxx) # output: xxx-(use shared static)-foo-xxx
 $(info $(中文 $(汉字))) # output: 天籁
@@ -30,5 +30,5 @@ $(info "$(foo)") # outputs: "foo "
 $(info "$(bar)") # outputs: ""foo "
 $(info "$(baz)") # outputs: "'foo "
 
-$(use $(sh$ared),$(stat$ic)-$(a$$a))should-emit-error # output: gcc/.smart:34:42: illegal: should-emit-error (0)
+$(use $(sh$ared),$(stat$ic)-$(a$$a))should-emit-error # output: gcc/.smart:34:37: illegal: should-emit-error (0)
 #$(use $(sh$ared),$(stat$ic)-$(a$$a))error

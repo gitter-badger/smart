@@ -152,7 +152,7 @@ func (p *parser) skipLine() (size int, err error) {
         })
 }
 
-// get a sequence of 
+// get a sequence of runes
 func (p *parser) get(stop func(*rune) bool) (w string, err error) {
         var r rune
         p.buf.Reset()
@@ -224,9 +224,9 @@ func (p *parser) parse() (err error) {
         parse_loop: for {
                 if _, err = p.skipSpace(false); err != nil { break }
 
-                w, del, err = p.getLine("=:\n")
+                if w, del, err = p.getLine("=:\n"); err != nil && err != io.EOF { break }
+                if _, err = p.skipRune(); err != nil { break parse_loop }
 
-                if err != nil && err != io.EOF { break }
                 if w = strings.TrimSpace(w); w == "" {
                         p.stepCol(); panic(p.newError(0, fmt.Sprintf("illegal: %v", w)))
                 }
@@ -234,11 +234,19 @@ func (p *parser) parse() (err error) {
                 w = p.expand(w)
 
                 var rr rune
-                if _, err = p.skipRune(); err != nil { break parse_loop }
                 if rr, _, err = p.getRune(); err != nil { break } else {
                         if strings.IndexRune("=:", rr) == -1 { p.ungetRune() }
                 }
-                if _, err = p.skipSpace(true); err != nil { break }
+
+                // check this before skipSpace to avoid skipping the comment
+                if del == '\n' {
+                        if w = strings.TrimSpace(w); w != "" {
+                                p.colno -= utf8.RuneCount([]byte(w)) + 1
+                                panic(p.newError(0, fmt.Sprintf("illegal: %v", w)))
+                        }
+                }
+                
+                if _, err = p.skipSpace(true); err != nil && err != io.EOF { break }
                 if s, _, err = p.getLine("\n"); err != nil && err != io.EOF { break }
 
                 switch del {
@@ -257,13 +265,9 @@ func (p *parser) parse() (err error) {
                         case '=':
                                 p.saveVariable(w, p.expand(s))
                         case ':':
+                                fmt.Printf("TODO: %v :: %v\n", w, s)
+                        default:
                                 fmt.Printf("TODO: %v : %v\n", w, s)
-                        }
-
-                case '\n':
-                        if w != "" {
-                                //p.lineno, p.colno = p.lineno - 1, p.prevColno
-                                panic(p.newError(0, fmt.Sprintf("illegal: %v", w)))
                         }
 
                 default:
