@@ -163,6 +163,7 @@ func makeAction(target string) *action {
 
 type module struct {
         dir string
+        location location // where does it defined
         name string
         toolset string
         kind string
@@ -171,19 +172,7 @@ type module struct {
         variables map[string]*variable
 }
 
-func makeModule(conf string) (mod *module, err error) {
-        mod = &module{
-                dir: filepath.Dir(conf),
-                variables: make(map[string]*variable, 200),
-        }
-
-        if err = mod.parse(conf); err != nil {
-                mod = nil
-                return
-        }
-
-        return
-}
+var modules = map[string]*module{}
 
 type filerule struct {
         name string
@@ -256,18 +245,12 @@ func processFile(dname string, fi os.FileInfo) bool {
                 return false
         }
 
-        var mod *module
-        var err error
-
         if fi.Name() == ".smart" {
-                mod, err = makeModule(dname)
-                if err != nil {
+                if err := parse(dname); err != nil {
                         fmt.Printf("smart:0: open `%v', %v\n", dname, err)
                         return false
                 }
         }
-
-        if mod == nil {}
 
         for _, stub := range toolsets {
                 stub.processFile(dname, fi)

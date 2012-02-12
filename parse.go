@@ -9,6 +9,7 @@ import (
         "unicode/utf8"
         "io"
         "os"
+        //"reflect"
         "strings"
 )
 
@@ -49,6 +50,12 @@ type parser struct {
         lineno int
         colno, prevColno int
         variables map[string]*variable
+}
+
+func (p *parser) setModule(m *module) (prev *module) {
+        prev = p.module
+        p.module = m
+        return
 }
 
 func (p *parser) newError(l int, s string) *parseError {
@@ -254,7 +261,7 @@ func (p *parser) parse() (err error) {
                         if w == "" {
                                 panic(p.newError(0, fmt.Sprintf("illegal: %v", w)))
                         }
-                        p.saveVariable(w, s)
+                        p.setVariable(w, s)
 
                 case ':': //print("parse: "+w+" : "+s+"\n")
                         if w == "" {
@@ -263,7 +270,7 @@ func (p *parser) parse() (err error) {
 
                         switch rr {
                         case '=':
-                                p.saveVariable(w, p.expand(s))
+                                p.setVariable(w, p.expand(s))
                         case ':':
                                 fmt.Printf("TODO: %v :: %v\n", w, s)
                         default:
@@ -381,27 +388,50 @@ func (p *parser) expand(str string) string {
 }
 
 func (p *parser) call(name string, args []string) string {
-        //fmt.Printf("call: %v %v %v\n", name, args, p.variables[name])
         //fmt.Printf("call: %v %v\n", name, args)
 
         if f, ok := internals[name]; ok {
                 // All arguments should be expended.
                 for i, _ := range args { args[i] = p.expand(args[i]) }
-                return f(args)
+                return f(p, args)
         }
 
-        if v, ok := p.variables[name]; ok {
-                return v.value
+        if name == "this" {
+                return p.module.name
+        }
+
+        vars := p.variables
+        if strings.HasPrefix(name, "this.") {
+                vars = p.module.variables
+        }
+        if vars != nil {
+                if v, ok := vars[name]; ok {
+                        return v.value
+                }
         }
         return ""
 }
 
-func (p *parser) saveVariable(name, value string) {
+func (p *parser) setVariable(name, value string) {
+        if name == "this" {
+                fmt.Printf("%s:%v:%v:warning: ignore attempts on \"this\"\n", p.file, p.lineno, p.colno+1)
+                return
+        }
+
+        vars := p.variables
+        if strings.HasPrefix(name, "this.") {
+                vars = p.module.variables
+        }
+        if vars == nil {
+                fmt.Printf("%s:%v:%v:warning: no \"this\" module\n", p.file, p.lineno, p.colno+1)
+                return
+        }
+
         var v *variable
-        var has bool
-        if v, has = p.variables[name]; !has {
+        var has = false
+        if v, has = vars[name]; !has {
                 v = &variable{}
-                p.variables[name] = v
+                vars[name] = v
         }
         v.name = name
         v.value = value
@@ -412,7 +442,7 @@ func (p *parser) saveVariable(name, value string) {
         //fmt.Printf("%v %s = %s\n", &v.loc, name, value)
 }
 
-func (m *module) parse(conf string) (err error) {
+func parse(conf string) (err error) {
         var f *os.File
 
         f, err = os.Open(conf)
@@ -433,10 +463,9 @@ func (m *module) parse(conf string) (err error) {
         }()
 
         p := &parser{
-                module: m,
                 file: conf,
                 in: bufio.NewReader(f),
-                variables: m.variables,
+                variables: make(map[string]*variable, 128),
         }
         if err = p.parse(); err != nil {
                 return

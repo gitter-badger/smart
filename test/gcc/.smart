@@ -1,9 +1,13 @@
 # -*- makefile -*-
 $(module foo, gcc, exe)
 
+this = no effect
 this.sources = *.c
 this.includes = \
   .\
+
+$(info sources $(this.sources))
+$(info includes $(this.includes))
 
 a = a
 i = i
