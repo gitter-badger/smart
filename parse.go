@@ -9,6 +9,7 @@ import (
         "unicode/utf8"
         "io"
         "os"
+        "path/filepath"
         //"reflect"
         "strings"
 )
@@ -58,6 +59,23 @@ func (p *parser) setModule(m *module) (prev *module) {
         return
 }
 
+func (p *parser) getModuleSources() (sources []string) {
+        if p.module == nil {
+                return
+        }
+
+        if s, ok := p.module.variables["this.sources"]; ok {
+                dir := filepath.Dir(p.file)
+                str := p.expand(s.value)
+                sources = strings.Split(str, " ")
+                for i, _ := range sources {
+                        if sources[i][0] == '/' { continue }
+                        sources[i] = filepath.Join(dir, sources[i])
+                }
+        }
+        return
+}
+
 func (p *parser) newError(l int, s string) *parseError {
         return &parseError{ l, s, p.lineno, p.colno }
 }
@@ -65,6 +83,10 @@ func (p *parser) newError(l int, s string) *parseError {
 func (p *parser) stepLine() {
         p.lineno++
         p.prevColno, p.colno = p.colno, 0
+}
+
+func (p *parser) stepLineBack() {
+        p.lineno, p.colno = p.lineno-1, p.prevColno+1
 }
 
 func (p *parser) stepCol() {

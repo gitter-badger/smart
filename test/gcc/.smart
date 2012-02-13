@@ -1,8 +1,8 @@
 # -*- makefile -*-
 $(module foo, gcc, exe)
 
-this = no effect
-this.sources = *.c
+this = no effect, but a warning
+this.sources = foo.c
 this.includes = \
   .\
 
@@ -34,5 +34,5 @@ $(info "$(foo)") # outputs: "foo "
 $(info "$(bar)") # outputs: ""foo "
 $(info "$(baz)") # outputs: "'foo "
 
-$(use $(sh$ared),$(stat$ic)-$(a$$a))should-emit-error # output: gcc/.smart:34:37: illegal: should-emit-error (0)
+#$(use $(sh$ared),$(stat$ic)-$(a$$a))should-emit-error # output: gcc/.smart:34:37: illegal: should-emit-error (0)
 #$(use $(sh$ared),$(stat$ic)-$(a$$a))error

@@ -11,6 +11,10 @@ func init() {
 type _clang struct {
 }
 
+func (clang *_clang) buildModule(p *parser, args []string) bool {
+        return false
+}
+
 func (clang *_clang) processFile(dname string, fi os.FileInfo) {
 }
 

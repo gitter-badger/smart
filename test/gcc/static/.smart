@@ -1,0 +1,6 @@
+# -*- makefile -*-
+$(module static, gcc, static)
+
+this.sources := foo.c
+
+$(build)

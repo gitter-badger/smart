@@ -11,6 +11,10 @@ func init() {
 type _androidndk struct {
 }
 
+func (ndk *_androidndk) buildModule(p *parser, args []string) bool {
+        return false
+}
+
 func (ndk *_androidndk) processFile(dname string, fi os.FileInfo) {
 }
 

@@ -2,6 +2,7 @@ package smart
 
 import (
         "bytes"
+        "errors"
         "flag"
         "fmt"
         "io"
@@ -34,6 +35,7 @@ var (
 
 // An toolset represents a toolchain like gcc or utilities.
 type toolset interface {
+        buildModule(p *parser, args []string) bool
         processFile(dname string, fi os.FileInfo)
         updateAll()
         cleanAll()
@@ -78,14 +80,14 @@ type execCommand struct {
         name string
 }
 
-func (c *execCommand) run(args ...string) bool {
+func (c *execCommand) run(target string, args ...string) bool {
         var buf bytes.Buffer
         cmd := exec.Command(c.name, args...)
         cmd.Stdout, cmd.Stderr = &buf, &buf
         //cmd.Dir = ""
 
         if *flag_v {
-                fmt.Printf("%v\n", c.name)
+                fmt.Printf("%v: %v\n", c.name, target)
         } else if *flag_V {
                 fmt.Printf("%v\n", strings.Join(cmd.Args, " "))
         }
@@ -154,7 +156,7 @@ func (a *action) clean() {
         fmt.Printf("smart: TODO: clean `%s'\n", a.target)
 }
 
-func makeAction(target string) *action {
+func newAction(target string) *action {
         a := &action{
         target: target,
         }
@@ -165,7 +167,7 @@ type module struct {
         dir string
         location location // where does it defined
         name string
-        toolset string
+        toolset toolset
         kind string
         sources string
         action *action // action for building this module
@@ -173,6 +175,29 @@ type module struct {
 }
 
 var modules = map[string]*module{}
+
+func (m *module) update() {
+        //fmt.Printf("update: module: %v\n", m.name)
+
+        if m.action == nil {
+                fmt.Printf("%v: no action for module \"%v\"\n", &(m.location), m.name)
+                return
+        }
+
+        if updated := m.action.update(); !updated {
+                fmt.Printf("smart: Noting done for module `%v'\n", m.name)
+        }
+}
+
+func (m *module) build(p *parser, args []string) {
+        if m.toolset == nil {
+                panic(errors.New("nil toolset"))
+        }
+        if !m.toolset.buildModule(p, args) {
+                fmt.Printf("error: buildModule\n")
+                return
+        }
+}
 
 type filerule struct {
         name string
@@ -183,6 +208,14 @@ type filerule struct {
 func (r *filerule) match(fi os.FileInfo) bool {
         re := regexp.MustCompile(r.r)
         if fi.Mode() & r.mode != 0 && re.MatchString(fi.Name()) {
+                return true
+        }
+        return false
+}
+
+func (r *filerule) matchName(fn string) bool {
+        re := regexp.MustCompile(r.r)
+        if re.MatchString(fn) {
                 return true
         }
         return false
@@ -238,6 +271,13 @@ func matchFile(fi os.FileInfo, rules []*filerule) *filerule {
         return nil
 }
 
+func matchFileName(fn string, rules []*filerule) *filerule {
+        for _, g := range rules {
+                if g.matchName(fn) { return g }
+        }
+        return nil
+}
+
 func processFile(dname string, fi os.FileInfo) bool {
         fr := matchFile(fi, generalMetaFiles)
 
@@ -274,7 +314,11 @@ func run(vars map[string]string, cmds []string) {
                         stub.auto(cmds)
                 }
         } else {
-                
+                // ...
+        }
+
+        for _, m := range modules {
+                m.update()
         }
 }
 

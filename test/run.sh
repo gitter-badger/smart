@@ -31,6 +31,7 @@ needs_build || {
     leave ..
 }
 
-smart="../smart -v"
+smart="../smart -V"
 
-$smart -a toolset=gcc && ./a.out
+#$smart -a toolset=gcc && ./a.out
+$smart toolset=gcc && ./foo

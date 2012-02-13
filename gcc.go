@@ -1,7 +1,9 @@
 package smart
 
 import (
+        "fmt"
         "os"
+        "strings"
 )
 
 func init() {
@@ -18,6 +20,73 @@ type _gcc struct {
         a *action
 }
 
+func (gcc *_gcc) buildModule(p *parser, args []string) bool {
+        var m *module
+        if m = p.module; m == nil {
+                p.stepLineBack(); panic(p.newError(0, "no module"))
+        }
+
+        if m.action == nil {
+                m.action = newAction(m.name)
+                switch m.kind {
+                case "exe":
+                        m.action.command = gccNewCommand("ld")
+                case "shared":
+                        if !strings.HasSuffix(m.action.target, ".so") {
+                                m.action.target = m.action.target + ".so"
+                        }
+                        m.action.command = gccNewCommand("ld", "-shared")
+                case "static":
+                        if !strings.HasPrefix(m.action.target, "lib") {
+                                m.action.target = "lib" + m.action.target
+                        }
+                        if !strings.HasSuffix(m.action.target, ".a") {
+                                m.action.target = m.action.target + ".a"
+                        }
+                        m.action.command = gccNewCommand("ar", "crs")
+                default:
+                        p.stepLineBack(); panic(p.newError(0, fmt.Sprintf("unknown type `%v'", m.kind)))
+                }
+        }
+
+        var ld *gccCommand
+        if l, ok := m.action.command.(*gccCommand); !ok {
+                p.stepLineBack(); panic(p.newError(0, fmt.Sprintf("internal: wrong module command")))
+        } else {
+                ld = l
+        }
+
+        sources := p.getModuleSources()
+        for _, src := range sources {
+                a, asrc := newAction(src + ".o"), newAction(src)
+
+                var fr *filerule
+                if fi, err := os.Stat(src); err != nil {
+                        fr = matchFileName(src, gccSourcePatterns)
+                } else {
+                        fr = matchFile(fi, gccSourcePatterns)
+                }
+
+                if fr == nil {
+                        panic(p.newError(0, fmt.Sprintf("unknown source `%v'", src)))
+                }
+
+                switch fr.name {
+                case "c":
+                        a.command = gccNewCommand("gcc", "-c")
+                        if ld.name == "ld" { ld.name = "gcc" }
+                case "c++":
+                        a.command = gccNewCommand("g++", "-c")
+                        if ld.name != "g++" && ld.name != "ar" { ld.name = "g++" }
+                }
+
+                a.prequisites = append(a.prequisites, asrc)
+                m.action.prequisites = append(m.action.prequisites, a)
+        }
+
+        return m.action != nil
+}
+
 func (gcc *_gcc) processFile(dname string, fi os.FileInfo) {
         fr := matchFile(fi, gccSourcePatterns)
         if fr == nil {
@@ -25,13 +94,13 @@ func (gcc *_gcc) processFile(dname string, fi os.FileInfo) {
         }
 
         if gcc.a == nil {
-                gcc.a = makeAction("a.out")
+                gcc.a = newAction("a.out")
                 gcc.a.command = gccNewCommand("ld")
         }
 
         ld := gcc.a.command.(*gccCommand)
 
-        a, asrc := makeAction(dname + ".o"), makeAction(dname)
+        a, asrc := newAction(dname + ".o"), newAction(dname)
         switch fr.name {
         case "c":
                 a.command = gccNewCommand("gcc", "-c")
@@ -66,10 +135,17 @@ func gccNewCommand(name string, args ...string) *gccCommand {
 }
 
 func (c *gccCommand) execute(target string, prequisites []string) bool {
-        args := append([]string{ "-o", target, }, c.args...)
+        var args []string
+
+        if c.name == "ar" {
+                args = append(c.args, target)
+        } else {
+                args = append([]string{ "-o", target, }, c.args...)
+        }
+
         for _, p := range prequisites {
                 //print("gcc: TODO: "+c.name+", "+target+", "+p+"\n")
                 args = append(args, p)
         }
-        return c.run(args...)
+        return c.run(target, args...)
 }

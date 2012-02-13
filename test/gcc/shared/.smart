@@ -1,0 +1,6 @@
+# -*- makefile -*-
+$(module foo_shared, gcc, shared)
+
+this.sources := foo.c
+
+$(build)
