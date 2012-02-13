@@ -1,7 +1,7 @@
 package smart
 
 import (
-        "os"
+        //"os"
 )
 
 func init() {
@@ -11,17 +11,10 @@ func init() {
 type _clang struct {
 }
 
+func (clang *_clang) setupModule(p *parser, args []string) bool {
+        return true
+}
+
 func (clang *_clang) buildModule(p *parser, args []string) bool {
         return false
-}
-
-func (clang *_clang) processFile(dname string, fi os.FileInfo) {
-}
-
-func (clang *_clang) updateAll() {
-        
-}
-
-func (clang *_clang) cleanAll() {
-        
 }

@@ -35,10 +35,13 @@ var (
 
 // An toolset represents a toolchain like gcc or utilities.
 type toolset interface {
+        setupModule(p *parser, args []string) bool
         buildModule(p *parser, args []string) bool
+        /*
         processFile(dname string, fi os.FileInfo)
         updateAll()
         cleanAll()
+        */
 }
 
 type toolsetStub struct {
@@ -46,6 +49,7 @@ type toolsetStub struct {
         toolset toolset
 }
 
+/*
 func (stub *toolsetStub) processFile(dname string, fi os.FileInfo) {
         stub.toolset.processFile(dname, fi)
 }
@@ -62,6 +66,7 @@ func (stub *toolsetStub) auto(cmds []string) {
                 }
         }
 }
+*/
 
 func registerToolset(name string, ts toolset) {
         if _, has := toolsets[name]; has {
@@ -124,7 +129,7 @@ func (a *action) update() (updated bool) {
                 } else {
                         pfi, err := os.Stat(p.target)
                         if err != nil {
-                                fmt.Printf("smart:0: '%v' not found\n", p.target)
+                                fmt.Printf("smart:0: `%v' not found\n", p.target)
                                 return // continue
                         }
                         if fi == nil || fi.ModTime().Before(pfi.ModTime()) {
@@ -156,9 +161,10 @@ func (a *action) clean() {
         fmt.Printf("smart: TODO: clean `%s'\n", a.target)
 }
 
-func newAction(target string) *action {
+func newAction(target string, pre ...*action) *action {
         a := &action{
         target: target,
+        prequisites: pre,
         }
         return a
 }
@@ -194,7 +200,7 @@ func (m *module) build(p *parser, args []string) {
                 panic(errors.New("nil toolset"))
         }
         if !m.toolset.buildModule(p, args) {
-                fmt.Printf("error: buildModule\n")
+                //fmt.Printf("error: buildModule\n")
                 return
         }
 }
@@ -292,9 +298,11 @@ func processFile(dname string, fi os.FileInfo) bool {
                 }
         }
 
+        /*
         for _, stub := range toolsets {
                 stub.processFile(dname, fi)
         }
+        */
 
         //fmt.Printf("traverse: %s\n", dname)
         return true
@@ -310,9 +318,11 @@ func run(vars map[string]string, cmds []string) {
         }
 
         if *flag_a {
+                /*
                 for _, stub := range toolsets {
                         stub.auto(cmds)
                 }
+                */
         } else {
                 // ...
         }

@@ -20,7 +20,7 @@ type _gcc struct {
         a *action
 }
 
-func (gcc *_gcc) buildModule(p *parser, args []string) bool {
+func (gcc *_gcc) setupModule(p *parser, args []string) bool {
         var m *module
         if m = p.module; m == nil {
                 p.stepLineBack(); panic(p.newError(0, "no module"))
@@ -47,6 +47,14 @@ func (gcc *_gcc) buildModule(p *parser, args []string) bool {
                 default:
                         p.stepLineBack(); panic(p.newError(0, fmt.Sprintf("unknown type `%v'", m.kind)))
                 }
+        }
+        return true
+}
+
+func (gcc *_gcc) buildModule(p *parser, args []string) bool {
+        var m *module
+        if m = p.module; m == nil {
+                p.stepLineBack(); panic(p.newError(0, "no module"))
         }
 
         var ld *gccCommand
@@ -112,14 +120,6 @@ func (gcc *_gcc) processFile(dname string, fi os.FileInfo) {
 
         a.prequisites = append(a.prequisites, asrc)
         gcc.a.prequisites = append(gcc.a.prequisites, a)
-}
-
-func (gcc *_gcc) updateAll() {
-        gcc.a.update()
-}
-
-func (gcc *_gcc) cleanAll() {
-        gcc.a.clean()
 }
 
 type gccCommand struct {

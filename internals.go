@@ -27,6 +27,7 @@ func internalModule(p *parser, args []string) string {
                 p.setModule(nil)
                 return ""
         }
+
         var toolset toolset
         if ts, ok := toolsets[toolsetName]; !ok {
                 p.lineno -= 1; p.colno = p.prevColno + 1
@@ -56,6 +57,10 @@ func internalModule(p *parser, args []string) string {
         }
 
         p.setModule(m)
+
+        if !has {
+                toolset.setupModule(p, args[3:])
+        }
         return ""
 }
 

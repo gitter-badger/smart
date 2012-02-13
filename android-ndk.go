@@ -1,7 +1,7 @@
 package smart
 
 import (
-        "os"
+        //"os"
 )
 
 func init() {
@@ -11,17 +11,10 @@ func init() {
 type _androidndk struct {
 }
 
+func (ndk *_androidndk) setupModule(p *parser, args []string) bool {
+        return true
+}
+
 func (ndk *_androidndk) buildModule(p *parser, args []string) bool {
         return false
-}
-
-func (ndk *_androidndk) processFile(dname string, fi os.FileInfo) {
-}
-
-func (ndk *_androidndk) updateAll() {
-        
-}
-
-func (ndk *_androidndk) cleanAll() {
-        
 }

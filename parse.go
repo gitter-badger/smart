@@ -76,6 +76,16 @@ func (p *parser) getModuleSources() (sources []string) {
         return
 }
 
+/*
+func (p *parser) getModuleSourceActions(func f(a *action)) (sources []*action) {
+        sources := p.getModuleSources()
+        for _, src := range sources {
+                asrc := newAction(src)
+                
+        }
+}
+*/
+
 func (p *parser) newError(l int, s string) *parseError {
         return &parseError{ l, s, p.lineno, p.colno }
 }
@@ -434,7 +444,7 @@ func (p *parser) call(name string, args []string) string {
         return ""
 }
 
-func (p *parser) setVariable(name, value string) {
+func (p *parser) setVariable(name, value string) (v *variable) {
         if name == "this" {
                 fmt.Printf("%s:%v:%v:warning: ignore attempts on \"this\"\n", p.file, p.lineno, p.colno+1)
                 return
@@ -449,7 +459,6 @@ func (p *parser) setVariable(name, value string) {
                 return
         }
 
-        var v *variable
         var has = false
         if v, has = vars[name]; !has {
                 v = &variable{}
@@ -462,6 +471,7 @@ func (p *parser) setVariable(name, value string) {
         v.loc.colno = p.colno
 
         //fmt.Printf("%v %s = %s\n", &v.loc, name, value)
+        return
 }
 
 func parse(conf string) (err error) {
