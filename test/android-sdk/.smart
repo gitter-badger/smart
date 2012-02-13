@@ -1,5 +1,5 @@
 # -*- makefile -*-
-$(module foo_sdk, android-sdk, apk)
+$(module foo_androidsdk, android-sdk, apk)
 
 $(info java $(this.sources))
 

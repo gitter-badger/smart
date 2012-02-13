@@ -46,7 +46,7 @@ func internalModule(p *parser, args []string) string {
                         toolset: toolset,
                         kind: kind,
                         dir: filepath.Dir(p.file),
-                        location: location{ &p.file, p.lineno, p.colno },
+                        location: location{ &p.file, p.lineno-1, p.prevColno+1 },
                         variables: make(map[string]*variable, 128),
                 }
                 modules[m.name] = m

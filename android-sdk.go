@@ -31,7 +31,7 @@ func (sdk *_androidsdk) setupModule(p *parser, args []string) bool {
         })
 
         if err != nil {
-                panic(p.newError(0, fmt.Sprintf("can't find Java sources in `$v'", d)))
+                p.stepLineBack(); panic(p.newError(0, fmt.Sprintf("can't find Java sources in `%v'", d)))
         }
 
         v := p.setVariable("this.sources", strings.Join(sources, " "))
