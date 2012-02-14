@@ -268,6 +268,38 @@ type androidsdkGenJar struct {
 func (ic *androidsdkGenJar) target() string { return ic.jar }
 func (ic *androidsdkGenJar) needsUpdate() bool { return ic.jar == "" }
 func (ic *androidsdkGenJar) execute(target string, prequisites []string) bool {
+        libname := "out/library.jar"
+        if !androidsdkCreateEmptyPackage(libname) {
+                os.Remove(libname)
+                return false
+        }
+
+        c := &execCommand{ name:"aapt", slient:androidsdkSlientSome, path: filepath.Join(androidsdk, "platform-tools", "aapt"), }
+
+        args := []string{ "package", "-u",
+                "-M", filepath.Join(ic.d, "AndroidManifest.xml"),
+                "-I", filepath.Join(androidsdk, "platforms", androidPlatform, "android.jar"),
+        }
+        if ic.res != "" { args = append(args, "-S", ic.res) }
+        if ic.assets != "" { args = append(args, "-A", ic.assets) }
+        if !c.run("package resources", args...) {
+                //fmt.Printf("error: %v\n", e)
+                return false
+        }
+
+        manifest := ""
+        args = []string{}
+        if manifest != "" {
+                args = append(args, "-ufm")
+        } else {
+                args = append(args, "-uf")
+        }
+        args = append(args, libname, "-C", "out/classes", ".")
+        c = &execCommand{ name:"jar", slient:androidsdkSlientSome, }
+        if !c.run("PackageClasses", args...) {
+                return false
+        }
+
         fmt.Printf("TODO: %v, %v\n", target, prequisites)
         return false
 }
