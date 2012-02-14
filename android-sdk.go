@@ -7,14 +7,27 @@ import (
         "path/filepath"
         "runtime"
         "strings"
+
+        "os/exec"
 )
+
+var androidsdk = "/android-sdk-linux_x86"
+var androidPlatform = "android-10"
 
 func init() {
         registerToolset("android-sdk", &_androidsdk{})
-}
 
-var androidsdk = "/home/duzy/open/android-sdk-linux_x86"
-var androidPlatform = "android-10"
+        /*  */ if c, e := exec.LookPath("android"); e == nil {
+                androidsdk = filepath.Dir(filepath.Dir(c))
+        } else if c, e := exec.LookPath("aapt"); e == nil {
+                androidsdk = filepath.Dir(filepath.Dir(c))
+        } else {
+                androidsdk = os.Getenv("ANDROIDSDK")
+                if androidsdk == "" {
+                        fmt.Printf("error: %v\n", e)
+                }
+        }
+}
 
 type _androidsdk struct {
 }
