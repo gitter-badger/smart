@@ -27,7 +27,7 @@ func (gcc *_gcc) setupModule(p *parser, args []string) bool {
         }
 
         if m.action == nil {
-                m.action = newAction(m.name)
+                m.action = newAction(m.name, nil)
                 switch m.kind {
                 case "exe":
                         m.action.command = gccNewCommand("ld")
@@ -66,7 +66,7 @@ func (gcc *_gcc) buildModule(p *parser, args []string) bool {
 
         sources := p.getModuleSources()
         for _, src := range sources {
-                a, asrc := newAction(src + ".o"), newAction(src)
+                a, asrc := newAction(src + ".o", nil), newAction(src, nil)
 
                 var fr *filerule
                 if fi, err := os.Stat(src); err != nil {
@@ -102,13 +102,13 @@ func (gcc *_gcc) processFile(dname string, fi os.FileInfo) {
         }
 
         if gcc.a == nil {
-                gcc.a = newAction("a.out")
+                gcc.a = newAction("a.out", nil)
                 gcc.a.command = gccNewCommand("ld")
         }
 
         ld := gcc.a.command.(*gccCommand)
 
-        a, asrc := newAction(dname + ".o"), newAction(dname)
+        a, asrc := newAction(dname + ".o", nil), newAction(dname, nil)
         switch fr.name {
         case "c":
                 a.command = gccNewCommand("gcc", "-c")

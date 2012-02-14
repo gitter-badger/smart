@@ -83,29 +83,66 @@ type command interface {
 
 type execCommand struct {
         name string
+        path string
+        mkdir string
+        precall func() bool
+        postcall func(*bytes.Buffer)
+        cmd func() bool
 }
 
 func (c *execCommand) run(target string, args ...string) bool {
-        var buf bytes.Buffer
-        cmd := exec.Command(c.name, args...)
-        cmd.Stdout, cmd.Stderr = &buf, &buf
-        //cmd.Dir = ""
-
-        if *flag_v {
-                fmt.Printf("%v: %v\n", c.name, target)
-        } else if *flag_V {
-                fmt.Printf("%v\n", strings.Join(cmd.Args, " "))
+        if strings.HasPrefix(c.path, "~/") {
+                c.path = os.Getenv("HOME") + c.path[1:]
+        }
+        if c.mkdir != "" {
+                if e := os.MkdirAll(c.mkdir, 0755); e != nil {
+                        return false
+                }
         }
 
+        var buf bytes.Buffer
         updated := false
-        if err := cmd.Run(); err == nil {
-                updated = true
+        if c.name == "" {
+                if c.cmd != nil {
+                        updated = c.cmd()
+                } else {
+                        // TODO: should panic smart error
+                        fmt.Printf("%v: %v\n", c.name, target)
+                        return false
+                }
         } else {
-                fmt.Printf("smart:0: %s(%v):\n", c.name, err)
-                fmt.Printf("%v\n", buf.String())
+                cmd := exec.Command(c.name, args...)
+                cmd.Stdout, cmd.Stderr = &buf, &buf
+                if c.path != "" { cmd.Path = c.path }
+
+                if *flag_v {
+                        fmt.Printf("%v: %v\n", c.name, target)
+                } else if *flag_V {
+                        fmt.Printf("%v\n", strings.Join(cmd.Args, " "))
+                }
+
+                if c.precall != nil && c.precall() == false {
+                        return false
+                }
+
+                if err := cmd.Run(); err == nil {
+                        updated = true
+                } else {
+                        fmt.Printf("smart:0: %s(%v):\n", c.name, err)
+                        fmt.Printf("%v\n", buf.String())
+                }
+
+                if c.postcall != nil {
+                        c.postcall(&buf)
+                }
         }
 
         return updated
+}
+
+type inmemCommand interface {
+        target() string
+        needsUpdate() bool
 }
 
 // An action represents a action to be performed while generating a required target.
@@ -115,17 +152,33 @@ type action struct {
         command command
 }
 
+func (a *action) getPrequisites() (l []string) {
+        for _, p := range a.prequisites { l = append(l, p.target) }
+        return
+}
+
 func (a *action) update() (updated bool) {
+        var im inmemCommand
+        if a.command != nil {
+                if i, ok := a.command.(inmemCommand); ok {
+                        im = i
+                }
+        }
+
         fi, err := os.Stat(a.target)
         if err != nil {
-                //fi = nil
+                fi = nil
         }
+
+        //fmt.Printf("action.update: %v, %v, %v\n", a.target, a.getPrequisites(), a.command)
 
         updatedPreNum, outdatedNum := 0, 0
         for _, p := range a.prequisites {
                 if p.update() {
                         updatedPreNum++
                         outdatedNum++
+                } else if _, ok := p.command.(inmemCommand); ok {
+                        //...
                 } else {
                         pfi, err := os.Stat(p.target)
                         if err != nil {
@@ -138,7 +191,7 @@ func (a *action) update() (updated bool) {
                 }
         }
 
-        if 0 < updatedPreNum || 0 < outdatedNum {
+        if fi == nil || 0 < updatedPreNum || 0 < outdatedNum || (im != nil && im.needsUpdate()) {
                 updated = a.updateForcibly(fi)
         }
         return
@@ -147,13 +200,28 @@ func (a *action) update() (updated bool) {
 func (a *action) updateForcibly(fi os.FileInfo) (updated bool) {
         if a.command == nil && fi == nil {
                 fmt.Printf("smart: no sense for `%s'\n", a.target)
-                // TODO: should panic here
+                // TODO: should panic a smart error here
                 return
         }
 
         var pres []string
-        for _, p := range a.prequisites { pres = append(pres, p.target) }
+        for _, p := range a.prequisites {
+                if pc, ok := p.command.(inmemCommand); ok {
+                        pres = append(pres, pc.target())
+                } else {
+                        pres = append(pres, p.target)
+                }
+        }
         updated = a.command.execute(a.target, pres)
+
+        if updated {
+                if _, ok := a.command.(inmemCommand); ok {
+                        // ...
+                } else if _, e := os.Stat(a.target); e != nil {
+                        fmt.Printf("smart:0: `%s' not built\n", a.target)
+                        updated = false
+                }
+        }
         return
 }
 
@@ -161,8 +229,9 @@ func (a *action) clean() {
         fmt.Printf("smart: TODO: clean `%s'\n", a.target)
 }
 
-func newAction(target string, pre ...*action) *action {
+func newAction(target string, c command, pre ...*action) *action {
         a := &action{
+        command: c,
         target: target,
         prequisites: pre,
         }
