@@ -263,12 +263,10 @@ func (ic *androidsdkGenApk) execute(target string, prequisites []string) bool {
 }
 
 type androidsdkGenJar struct {
-        d, res, assets string
+        d, res, assets, jar string
 }
-func (ic *androidsdkGenJar) target() string {
-        return ""
-}
-func (ic *androidsdkGenJar) needsUpdate() bool { return true }
+func (ic *androidsdkGenJar) target() string { return ic.jar }
+func (ic *androidsdkGenJar) needsUpdate() bool { return ic.jar == "" }
 func (ic *androidsdkGenJar) execute(target string, prequisites []string) bool {
         fmt.Printf("TODO: %v, %v\n", target, prequisites)
         return false
