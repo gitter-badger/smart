@@ -82,8 +82,10 @@ type command interface {
 }
 
 type execCommand struct {
+        slient bool
         name string
         path string
+        dir string
         mkdir string
         precall func() bool
         postcall func(*bytes.Buffer)
@@ -114,11 +116,14 @@ func (c *execCommand) run(target string, args ...string) bool {
                 cmd := exec.Command(c.name, args...)
                 cmd.Stdout, cmd.Stderr = &buf, &buf
                 if c.path != "" { cmd.Path = c.path }
+                if c.dir != "" { cmd.Dir = c.dir }
 
-                if *flag_v {
-                        fmt.Printf("%v: %v\n", c.name, target)
-                } else if *flag_V {
-                        fmt.Printf("%v\n", strings.Join(cmd.Args, " "))
+                if !c.slient {
+                        if *flag_v {
+                                fmt.Printf("%v: %v\n", c.name, target)
+                        } else if *flag_V {
+                                fmt.Printf("%v\n", strings.Join(cmd.Args, " "))
+                        }
                 }
 
                 if c.precall != nil && c.precall() == false {
@@ -207,7 +212,7 @@ func (a *action) updateForcibly(fi os.FileInfo) (updated bool) {
         var pres []string
         for _, p := range a.prequisites {
                 if pc, ok := p.command.(inmemCommand); ok {
-                        pres = append(pres, pc.target())
+                        pres = append(pres, strings.Split(pc.target(), " ")...)
                 } else {
                         pres = append(pres, p.target)
                 }
@@ -334,6 +339,40 @@ func traverse(d string, fun traverseCallback) (err error) {
                                 return
                         }
                         continue
+                }
+        }
+        return
+}
+
+func findFiles(d string, sre string, num int) (files []string, err error) {
+        re := regexp.MustCompile(sre)
+        err = traverse(d, func(dname string, fi os.FileInfo) bool {
+                if re.MatchString(dname) {
+                        files = append(files, dname)
+                        num -= 1
+                        if num == 0 { return false }
+                }
+                return true
+        })
+        return
+}
+
+func findFile(d string, sre string) (file string) {
+        if fs, err := findFiles(d, sre, 1); err == nil {
+                if 0 < len(fs) { file = fs[0] }
+        }
+        return
+}
+
+func copyFile(s, d string) (err error) {
+        var f1, f2 *os.File
+        if f1, err = os.Open(s); err == nil {
+                defer f1.Close()
+                if f2, err = os.Create(d); err == nil {
+                        defer f2.Close()
+                        if _, err = io.Copy(f2, f1); err != nil {
+                                os.Remove(d)
+                        }
                 }
         }
         return
