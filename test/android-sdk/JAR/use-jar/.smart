@@ -3,4 +3,6 @@ $(module foo_androidsdk_use_jar, android-sdk, apk)
 
 $(info java $(this.sources))
 
+$(use foo_androidsdk_jar)
+
 $(build)

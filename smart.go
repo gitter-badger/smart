@@ -252,6 +252,7 @@ type module struct {
         sources string
         action *action // action for building this module
         variables map[string]*variable
+        using, usedBy []*module
 }
 
 var modules = map[string]*module{}

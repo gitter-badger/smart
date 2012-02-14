@@ -86,8 +86,8 @@ func (p *parser) getModuleSourceActions(func f(a *action)) (sources []*action) {
 }
 */
 
-func (p *parser) newError(l int, s string) *parseError {
-        return &parseError{ l, s, p.lineno, p.colno }
+func (p *parser) newError(l int, f string, a ...interface{}) *parseError {
+        return &parseError{ l, fmt.Sprintf(f, a...), p.lineno, p.colno }
 }
 
 func (p *parser) stepLine() {
