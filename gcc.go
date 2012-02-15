@@ -32,16 +32,16 @@ func (gcc *_gcc) setupModule(p *parser, args []string) bool {
                 case "exe":
                         m.action.command = gccNewCommand("ld")
                 case "shared":
-                        if !strings.HasSuffix(m.action.target, ".so") {
-                                m.action.target = m.action.target + ".so"
+                        if !strings.HasSuffix(m.action.targets[0], ".so") {
+                                m.action.targets[0] = m.action.targets[0] + ".so"
                         }
                         m.action.command = gccNewCommand("ld", "-shared")
                 case "static":
-                        if !strings.HasPrefix(m.action.target, "lib") {
-                                m.action.target = "lib" + m.action.target
+                        if !strings.HasPrefix(m.action.targets[0], "lib") {
+                                m.action.targets[0] = "lib" + m.action.targets[0]
                         }
-                        if !strings.HasSuffix(m.action.target, ".a") {
-                                m.action.target = m.action.target + ".a"
+                        if !strings.HasSuffix(m.action.targets[0], ".a") {
+                                m.action.targets[0] = m.action.targets[0] + ".a"
                         }
                         m.action.command = gccNewCommand("ar", "crs")
                 default:

@@ -127,7 +127,9 @@ type androidsdkGenR struct{
         r string // "r" holds the R.java file path
 }
 func (ic *androidsdkGenR) targets() (targets []string, check func() bool) {
-        targets = append(targets, ic.r)
+        if ic.r != "" {
+                targets = []string{ ic.r }
+        }
         check = func() bool {
                 return ic.r == ""
         }
@@ -275,7 +277,7 @@ func (ic *androidsdkGenApk) execute(targets []string, prequisites []string) bool
         if ic.res != "" { args = append(args, "-S", ic.res) }
         if ic.assets != "" { args = append(args, "-A", ic.assets) }
         if *flag_v || *flag_V {
-                fmt.Printf("smart: compile resources `%v'...\n", targets)
+                fmt.Printf("smart: resources in %v...\n", targets)
         }
         if !c.run("package resources", args...) {
                 errorf(0, "pack classes: %v", targets)
@@ -283,7 +285,7 @@ func (ic *androidsdkGenApk) execute(targets []string, prequisites []string) bool
 
         args = []string{ "add", "-k", filepath.Join(ic.out, "unsigned.apk"), filepath.Join(ic.out, "classes.dex") }
         if *flag_v || *flag_V {
-                fmt.Printf("smart: pack classes `%v'...\n", targets)
+                fmt.Printf("smart: classes in %v...\n", targets)
         }
         if !c.run("package dex file", args...) {
                 errorf(0, "pack classes: %v", targets)
@@ -310,12 +312,11 @@ func (ic *androidsdkGenApk) execute(targets []string, prequisites []string) bool
         args = append(args, filepath.Join(ic.out, "signed.apk"), "cert")
 
         if *flag_v || *flag_V {
-                fmt.Printf("smart: signing `%v'...\n", targets)
+                fmt.Printf("smart: signing %v...\n", targets)
         }
 
         c = &execCommand{ name:"jarsigner", slient:true/*androidsdkSlientSome*/, }
         if !c.run("sign package", args...) {
-                //fmt.Printf("error: %v\n", e)
                 os.Remove(filepath.Join(ic.out, "signed.apk"))
                 return false
         }

@@ -168,27 +168,29 @@ type inmemCommand interface {
 
 // An action represents a action to be performed while generating a required target.
 type action struct {
-        target string
+        targets []string
         prequisites []*action
         command command
 }
 
-func (a *action) getPrequisites() (l []string) {
-        for _, p := range a.prequisites { l = append(l, p.target) }
-        return
-}
+//func (a *action) getPrequisites() (l []string) {
+//        for _, p := range a.prequisites { l = append(l, p.target) }
+//        return
+//}
 
-func (a *action) update() (updated bool) {
+func (a *action) update() (updated bool, updatedTargets []string) {
+        isInmem := false
         var targets []string
         var check func() bool
         if a.command != nil {
-                if i, ok := a.command.(inmemCommand); ok {
-                        targets, check = i.targets()
+                if c, ok := a.command.(inmemCommand); ok {
+                        targets, check = c.targets()
+                        isInmem = true
                 }
         }
 
-        if 0 == len(targets) {
-                targets = strings.Split(a.target, " ")
+        if !isInmem {
+                targets = append(targets, a.targets...)
         }
 
         var missingTargets, outdatedTargets []int
@@ -206,20 +208,20 @@ func (a *action) update() (updated bool) {
                 panic("internal unmatched arrayes") //errorf(-1, "internal")
         }
 
-        //fmt.Printf("action.update: %v, %v, %v\n", a.target, a.getPrequisites(), a.command)
-
         updatedPreNum := 0
+        prequisites := []string{}
         for _, p := range a.prequisites {
-                if p.update() {
+                if u, ptars := p.update(); u {
+                        prequisites = append(prequisites, ptars...)
                         updatedPreNum++
-                } else if _, ok := p.command.(inmemCommand); ok {
-                        //...
+                } else if pc, ok := p.command.(inmemCommand); ok {
+                        s, _ := pc.targets()
+                        prequisites = append(prequisites, s...)
                 } else {
-                        ps := strings.Split(p.target, " ")
-                        for _, pt := range ps {
+                        prequisites = append(prequisites, p.targets...)
+                        for _, pt := range p.targets {
                                 if fi, err := os.Stat(pt); err != nil {
                                         errorf(0, "`%v' not found", pt)
-                                        return
                                 } else {
                                         for n, i := range fis {
                                                 if i != nil && i.ModTime().Before(fi.ModTime()) {
@@ -232,7 +234,7 @@ func (a *action) update() (updated bool) {
         }
 
         if 0 < updatedPreNum || (check != nil && check()) {
-                updated = a.updateForcibly(targets, fis)
+                updated, updatedTargets = a.updateForcibly(targets, fis, prequisites)
         } else {
                 var rr []int
                 var request []string
@@ -250,15 +252,15 @@ func (a *action) update() (updated bool) {
                 }
 
                 if 0 < len(request) {
-                        updated = a.updateForcibly(request, requestfis)
+                        updated, updatedTargets = a.updateForcibly(request, requestfis, prequisites)
                 }
         }
         return
 }
 
-func (a *action) updateForcibly(targets []string, fis []os.FileInfo) (updated bool) {
+func (a *action) updateForcibly(targets []string, tarfis []os.FileInfo, prequisites []string) (updated bool, updatedTargets []string) {
         if a.command == nil {
-                for n, i := range fis {
+                for n, i := range tarfis {
                         if i == nil {
                                 errorf(0, "no `%s'\n", targets[n])
                         }
@@ -266,36 +268,35 @@ func (a *action) updateForcibly(targets []string, fis []os.FileInfo) (updated bo
                 return
         }
 
-        var pres []string
-        for _, p := range a.prequisites {
-                if pc, ok := p.command.(inmemCommand); ok {
-                        s, _ := pc.targets()
-                        pres = append(pres, s...)
-                } else {
-                        pres = append(pres, p.target)
-                }
-        }
-        updated = a.command.execute(targets, pres)
+        updated = a.command.execute(targets, prequisites)
 
         if updated {
-                if _, ok := a.command.(inmemCommand); ok {
-                        // ...
-                } else if _, e := os.Stat(a.target); e != nil {
-                        updated = false
-                        errorf(0, "`%s' not built", a.target)
+                var check func() bool
+                if c, ok := a.command.(inmemCommand); ok {
+                        updatedTargets, check = c.targets()
+                        updated = check()
+                } else {
+                        for _, t := range a.targets {
+                                if fi, e := os.Stat(t); e != nil || fi == nil {
+                                        updated = false
+                                        errorf(0, "`%s' not built", t)
+                                } else {
+                                        updatedTargets = append(updatedTargets, t)
+                                }
+                        }
                 }
         }
         return
 }
 
 func (a *action) clean() {
-        errorf(0, "TODO: clean `%s'\n", a.target)
+        errorf(0, "TODO: clean `%v'\n", a.targets)
 }
 
 func newAction(target string, c command, pre ...*action) *action {
         a := &action{
         command: c,
-        target: target,
+        targets: []string{ target },
         prequisites: pre,
         }
         return a
@@ -324,7 +325,7 @@ func (m *module) update() {
                 return
         }
 
-        if updated := m.action.update(); !updated {
+        if updated, _ := m.action.update(); !updated {
                 fmt.Printf("smart: noting done for `%v'\n", m.name)
         }
 }
