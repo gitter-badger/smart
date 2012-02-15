@@ -31,8 +31,8 @@ func internalModule(p *parser, args []string) string {
         var toolset toolset
         if ts, ok := toolsets[toolsetName]; !ok {
                 p.lineno -= 1; p.colno = p.prevColno + 1
-                panic(p.newError(0, fmt.Sprintf("toolset \"%s\" not existed", toolset)))
-                if ts == nil { panic(p.newError(0, "internal fatal error")) }
+                errorf(0, fmt.Sprintf("toolset \"%s\" not existed", toolset))
+                if ts == nil { errorf(0, "internal fatal error") }
                 // TODO: send arguments to toolset
         } else {
                 toolset = ts.toolset
@@ -53,7 +53,7 @@ func internalModule(p *parser, args []string) string {
         } else if (m.toolset != nil && toolsetName != "") && (m.kind != "" || kind != "") {
                 p.lineno -= 1; p.colno = p.prevColno + 1
                 fmt.Printf("%v: previous module declaration `%v'\n", &(m.location), m.name)
-                panic(p.newError(0, fmt.Sprintf("module already been defined as \"%v, $v\"", m.toolset, m.kind)))
+                errorf(0, fmt.Sprintf("module already been defined as \"%v, $v\"", m.toolset, m.kind))
         }
 
         if m.toolset == nil && m.kind == "" {
@@ -69,7 +69,7 @@ func internalModule(p *parser, args []string) string {
 func internalBuild(p *parser, args []string) string {
         var m *module
         if m = p.module; m == nil {
-                panic(p.newError(0, "no module defined"))
+                errorf(0, "no module defined")
         }
 
         var buildUsing func(mod *module) int
@@ -81,7 +81,8 @@ func internalBuild(p *parser, args []string) string {
                         } else if l := len(u.using); 0 < l {
                                 if l != buildUsing(u) { ok = false }
                         }
-                        if ok && u.toolset.buildModule(p, args) {
+                        if ok && (u.built || u.toolset.buildModule(p, args)) {
+                                u.built = true
                                 num += 1
                         } else {
                                 fmt.Printf("%v:%v:%v: dependency `%v' not built\n", p.file, p.lineno-1, p.prevColno+1, u.name)
@@ -91,26 +92,28 @@ func internalBuild(p *parser, args []string) string {
         }
 
         if buildUsing(m) != len(m.using) {
-                panic(p.newError(0, "not all dependencies built for `%v'", m.name))
+                errorf(0, "not all dependencies built for `%v'", m.name)
         }
 
         if m.toolset == nil {
-                panic(p.newError(0, "no toolset for `%v'", m.name))
+                errorf(0, "no toolset for `%v'", m.name)
         }
 
         if *flag_v {
                 fmt.Printf("smart: build `%v'\n", m.name)
         }
 
-        if !m.toolset.buildModule(p, args) {
-                panic(p.newError(0, "failed building `%v' via `%v'", m.name, m.toolset))
+        if !(m.built || m.toolset.buildModule(p, args)) {
+                errorf(0, "failed building `%v' via `%v'", m.name, m.toolset)
+        } else {
+                m.built = true
         }
         return ""
 }
 
 func internalUse(p *parser, args []string) string {
         if m := p.module; m == nil {
-                panic(p.newError(0, "no module defined"))
+                errorf(0, "no module defined")
         }
 
         for _, a := range args {

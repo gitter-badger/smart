@@ -23,7 +23,7 @@ type _gcc struct {
 func (gcc *_gcc) setupModule(p *parser, args []string) bool {
         var m *module
         if m = p.module; m == nil {
-                p.stepLineBack(); panic(p.newError(0, "no module"))
+                p.stepLineBack(); errorf(0, "no module")
         }
 
         if m.action == nil {
@@ -45,7 +45,7 @@ func (gcc *_gcc) setupModule(p *parser, args []string) bool {
                         }
                         m.action.command = gccNewCommand("ar", "crs")
                 default:
-                        p.stepLineBack(); panic(p.newError(0, fmt.Sprintf("unknown type `%v'", m.kind)))
+                        p.stepLineBack(); errorf(0, fmt.Sprintf("unknown type `%v'", m.kind))
                 }
         }
         return true
@@ -54,22 +54,22 @@ func (gcc *_gcc) setupModule(p *parser, args []string) bool {
 func (gcc *_gcc) buildModule(p *parser, args []string) bool {
         var m *module
         if m = p.module; m == nil {
-                p.stepLineBack(); panic(p.newError(0, "no module"))
+                p.stepLineBack(); errorf(0, "no module")
         }
 
         if m.action == nil {
-                p.stepLineBack(); panic(p.newError(0, "no action for `%v'", p.module.name))
+                p.stepLineBack(); errorf(0, "no action for `%v'", p.module.name)
                 return false
         }
 
         if m.action.command == nil {
-                p.stepLineBack(); panic(p.newError(0, "no command for `%v'", p.module.name))
+                p.stepLineBack(); errorf(0, "no command for `%v'", p.module.name)
                 return false
         }
 
         var ld *gccCommand
         if l, ok := m.action.command.(*gccCommand); !ok {
-                p.stepLineBack(); panic(p.newError(0, "internal: wrong module command"))
+                p.stepLineBack(); errorf(0, "internal: wrong module command")
         } else {
                 ld = l
         }
@@ -86,7 +86,7 @@ func (gcc *_gcc) buildModule(p *parser, args []string) bool {
                 }
 
                 if fr == nil {
-                        panic(p.newError(0, fmt.Sprintf("unknown source `%v'", src)))
+                        errorf(0, fmt.Sprintf("unknown source `%v'", src))
                 }
 
                 switch fr.name {
@@ -144,8 +144,9 @@ func gccNewCommand(name string, args ...string) *gccCommand {
         }
 }
 
-func (c *gccCommand) execute(target string, prequisites []string) bool {
+func (c *gccCommand) execute(targets []string, prequisites []string) bool {
         var args []string
+        var target = targets[0]
 
         if c.name == "ar" {
                 args = append(c.args, target)

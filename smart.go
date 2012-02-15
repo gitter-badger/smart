@@ -10,6 +10,7 @@ import (
         "path/filepath"
         "regexp"
         "strings"
+        "sort"
 )
 
 var toolsets = map[string]*toolsetStub{}
@@ -31,6 +32,22 @@ var (
         flag_T = flag.String("T", "", "traverse")
         flag_V = flag.Bool("V", false, "print command verbolly")
 )
+
+type smarterror struct {
+        number int
+        message string
+}
+
+func (e *smarterror) String() string {
+        return fmt.Sprintf("%v (%v)", e.message, e.number)
+}
+
+func errorf(num int, f string, a ...interface{}) {
+        panic(&smarterror{
+        number: num,
+        message: fmt.Sprintf(f, a...),
+        })
+}
 
 // An toolset represents a toolchain like gcc or utilities.
 type toolset interface {
@@ -77,7 +94,7 @@ func registerToolset(name string, ts toolset) {
 
 // A command executed by an action while updating a target.
 type command interface {
-        execute(target string, prequisites []string) bool
+        execute(targets []string, prequisites []string) bool
 }
 
 type execCommand struct {
@@ -107,8 +124,7 @@ func (c *execCommand) run(target string, args ...string) bool {
                 if c.cmd != nil {
                         updated = c.cmd()
                 } else {
-                        // TODO: should panic smart error
-                        fmt.Printf("%v: %v\n", c.name, target)
+                        errorf(0, "can't update `%v' (%v)", target, c.name)
                         return false
                 }
         } else {
@@ -132,8 +148,9 @@ func (c *execCommand) run(target string, args ...string) bool {
                 if err := cmd.Run(); err == nil {
                         updated = true
                 } else {
-                        fmt.Printf("smart:0: %s(%v):\n", c.name, err)
+                        fmt.Printf("smart:0: %s (%v):\n", c.name, err)
                         fmt.Printf("%v\n", buf.String())
+                        errorf(0, "%v", err)
                 }
 
                 if c.postcall != nil {
@@ -145,8 +162,8 @@ func (c *execCommand) run(target string, args ...string) bool {
 }
 
 type inmemCommand interface {
-        target() string
-        needsUpdate() bool
+        command
+        targets() (names []string, updateChecker func() bool)
 }
 
 // An action represents a action to be performed while generating a required target.
@@ -162,75 +179,117 @@ func (a *action) getPrequisites() (l []string) {
 }
 
 func (a *action) update() (updated bool) {
-        var im inmemCommand
+        var targets []string
+        var check func() bool
         if a.command != nil {
                 if i, ok := a.command.(inmemCommand); ok {
-                        im = i
+                        targets, check = i.targets()
                 }
         }
 
-        fi, err := os.Stat(a.target)
-        if err != nil {
-                fi = nil
+        if 0 == len(targets) {
+                targets = strings.Split(a.target, " ")
+        }
+
+        var missingTargets, outdatedTargets []int
+        var fis []os.FileInfo
+        for n, s := range targets {
+                if i, _ := os.Stat(s); i != nil {
+                        fis = append(fis, i)
+                } else {
+                        fis = append(fis, nil)
+                        missingTargets = append(missingTargets, n)
+                }
+        }
+
+        if len(fis) != len(targets) {
+                panic("internal unmatched arrayes") //errorf(-1, "internal")
         }
 
         //fmt.Printf("action.update: %v, %v, %v\n", a.target, a.getPrequisites(), a.command)
 
-        updatedPreNum, outdatedNum := 0, 0
+        updatedPreNum := 0
         for _, p := range a.prequisites {
                 if p.update() {
                         updatedPreNum++
-                        outdatedNum++
                 } else if _, ok := p.command.(inmemCommand); ok {
                         //...
                 } else {
-                        pfi, err := os.Stat(p.target)
-                        if err != nil {
-                                fmt.Printf("smart:0: `%v' not found\n", p.target)
-                                return // continue
-                        }
-                        if fi == nil || fi.ModTime().Before(pfi.ModTime()) {
-                                outdatedNum++
+                        ps := strings.Split(p.target, " ")
+                        for _, pt := range ps {
+                                if fi, err := os.Stat(pt); err != nil {
+                                        errorf(0, "`%v' not found", pt)
+                                        return
+                                } else {
+                                        for n, i := range fis {
+                                                if i != nil && i.ModTime().Before(fi.ModTime()) {
+                                                        outdatedTargets = append(outdatedTargets, n)
+                                                }
+                                        }
+                                }
                         }
                 }
         }
 
-        if fi == nil || 0 < updatedPreNum || 0 < outdatedNum || (im != nil && im.needsUpdate()) {
-                updated = a.updateForcibly(fi)
+        if 0 < updatedPreNum || (check != nil && check()) {
+                updated = a.updateForcibly(targets, fis)
+        } else {
+                var rr []int
+                var request []string
+                var requestfis []os.FileInfo
+
+                rr = append(rr, missingTargets...)
+                rr = append(rr, outdatedTargets...)
+                sort.Ints(rr)
+
+                for n, _ := range rr {
+                        if n == 0 || rr[n-1] != rr[n] {
+                                request = append(request, targets[rr[n]])
+                                requestfis = append(requestfis, fis[rr[n]])
+                        }
+                }
+
+                if 0 < len(request) {
+                        updated = a.updateForcibly(request, requestfis)
+                }
         }
         return
 }
 
-func (a *action) updateForcibly(fi os.FileInfo) (updated bool) {
-        if a.command == nil && fi == nil {
-                fmt.Printf("smart: no sense for `%s'\n", a.target)
-                // TODO: should panic a smart error here
+func (a *action) updateForcibly(targets []string, fis []os.FileInfo) (updated bool) {
+        if a.command == nil {
+                for n, i := range fis {
+                        if i == nil {
+                                errorf(0, "no `%s'\n", targets[n])
+                        }
+                }
                 return
         }
 
         var pres []string
         for _, p := range a.prequisites {
                 if pc, ok := p.command.(inmemCommand); ok {
-                        pres = append(pres, strings.Split(pc.target(), " ")...)
+                        s, _ := pc.targets()
+                        pres = append(pres, s...)
                 } else {
                         pres = append(pres, p.target)
                 }
         }
-        updated = a.command.execute(a.target, pres)
+        updated = a.command.execute(targets, pres)
 
         if updated {
                 if _, ok := a.command.(inmemCommand); ok {
                         // ...
                 } else if _, e := os.Stat(a.target); e != nil {
-                        fmt.Printf("smart:0: `%s' not built\n", a.target)
                         updated = false
+                        errorf(0, "`%s' not built", a.target)
                 }
         }
         return
 }
 
 func (a *action) clean() {
-        fmt.Printf("smart: TODO: clean `%s'\n", a.target)
+        errorf(0, "TODO: clean `%s'\n", a.target)
 }
 
 func newAction(target string, c command, pre ...*action) *action {
@@ -252,6 +311,7 @@ type module struct {
         action *action // action for building this module
         variables map[string]*variable
         using, usedBy []*module
+        built bool // marked as 'true' if module is built
 }
 
 var modules = map[string]*module{}
@@ -265,7 +325,7 @@ func (m *module) update() {
         }
 
         if updated := m.action.update(); !updated {
-                fmt.Printf("smart: Noting done for module `%v'\n", m.name)
+                fmt.Printf("smart: noting done for `%v'\n", m.name)
         }
 }
 
@@ -295,7 +355,7 @@ type traverseCallback func(dname string, fi os.FileInfo) bool
 func traverse(d string, fun traverseCallback) (err error) {
         fd, err := os.Open(d)
         if err != nil {
-                fmt.Printf("error: Open: %v, %v\n", err, d)
+                errorf(0, "open: %v, %v\n", err, d)
                 return
         }
 
@@ -315,7 +375,7 @@ func traverse(d string, fun traverseCallback) (err error) {
 
                 fi, err = os.Stat(dname)
                 if err != nil {
-                        fmt.Printf("error: Stat: %v\n", dname)
+                        errorf(0, "stat: %v\n", dname)
                         return
                 }
 
@@ -325,7 +385,7 @@ func traverse(d string, fun traverseCallback) (err error) {
 
                 if fi.IsDir() {
                         if err = traverse(dname, fun); err != nil {
-                                fmt.Printf("error: traverse: %v\n", dname)
+                                errorf(0, "traverse: %v\n", dname)
                                 return
                         }
                         continue
@@ -391,7 +451,7 @@ func processFile(dname string, fi os.FileInfo) bool {
 
         if fi.Name() == ".smart" {
                 if err := parse(dname); err != nil {
-                        fmt.Printf("smart:0: open `%v', %v\n", dname, err)
+                        errorf(0, "parse: `%v', %v\n", dname, err)
                         return false
                 }
         }
@@ -407,6 +467,16 @@ func processFile(dname string, fi os.FileInfo) bool {
 }
 
 func run(vars map[string]string, cmds []string) {
+        defer func() {
+                if e := recover(); e != nil {
+                        if se, ok := e.(*smarterror); ok {
+                                fmt.Printf("smart:%v: %v\n", se.number, se)
+                        } else {
+                                panic(e)
+                        }
+                }
+        }()
+
         var d string
         if d = *flag_C; d == "" { d = "." }
 

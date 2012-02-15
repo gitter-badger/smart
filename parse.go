@@ -30,17 +30,6 @@ type variable struct {
         loc location
 }
 
-type parseError struct {
-        level int
-        message string
-        lineno int
-        colno int
-}
-
-func (e *parseError) String() string {
-        return fmt.Sprintf("%v (%v)", e.message, e.level)
-}
-
 type parser struct {
         module *module
         file string
@@ -86,8 +75,8 @@ func (p *parser) getModuleSourceActions(func f(a *action)) (sources []*action) {
 }
 */
 
-func (p *parser) newError(l int, f string, a ...interface{}) *parseError {
-        return &parseError{ l, fmt.Sprintf(f, a...), p.lineno, p.colno }
+func (p *parser) location() location {
+        return location{ &p.file, p.lineno, p.colno }
 }
 
 func (p *parser) stepLine() {
@@ -104,7 +93,7 @@ func (p *parser) stepCol() {
 }
 
 func (p *parser) push(w string) {
-        if 5000 < len(p.stack) { panic(p.newError(-1, "stack overflow")) }
+        if 5000 < len(p.stack) { errorf(-1, "stack overflow") }
         p.stack = append(p.stack, w)
 }
 
@@ -119,7 +108,7 @@ func (p *parser) pop() (w string) {
 func (p *parser) getRune() (r rune, rs int, err error) {
         r, rs, err = p.in.ReadRune()
         if err != nil { return }
-        if rs == 0 { panic(p.newError(-2, "zero reading")) }
+        if rs == 0 { errorf(-2, "zero reading") }
         if r == '\n' { p.stepLine() } else { p.stepCol() }
         p.rune = r
         return
@@ -127,7 +116,7 @@ func (p *parser) getRune() (r rune, rs int, err error) {
 
 func (p *parser) ungetRune() (err error) {
         if p.lineno == 1 && p.colno <= 1 { return }
-        if err = p.in.UnreadRune(); err != nil { panic(p.newError(0, fmt.Sprintf("%v", err))) }
+        if err = p.in.UnreadRune(); err != nil { errorf(0, fmt.Sprintf("%v", err)) }
         if p.rune == '\n' {
                 p.lineno, p.colno = p.lineno-1, p.prevColno
         } else {
@@ -267,7 +256,7 @@ func (p *parser) parse() (err error) {
                 if _, err = p.skipRune(); err != nil { break parse_loop }
 
                 if w = strings.TrimSpace(w); w == "" {
-                        p.stepCol(); panic(p.newError(0, fmt.Sprintf("illegal: %v", w)))
+                        p.stepCol(); errorf(0, fmt.Sprintf("illegal: %v", w))
                 }
 
                 w = p.expand(w)
@@ -281,7 +270,7 @@ func (p *parser) parse() (err error) {
                 if del == '\n' {
                         if w = strings.TrimSpace(w); w != "" {
                                 p.colno -= utf8.RuneCount([]byte(w)) + 1
-                                panic(p.newError(0, fmt.Sprintf("illegal: %v", w)))
+                                errorf(0, fmt.Sprintf("illegal: %v", w))
                         }
                 }
                 
@@ -291,13 +280,13 @@ func (p *parser) parse() (err error) {
                 switch del {
                 case '=': //print("parse: "+w+" = "+s+"\n")
                         if w == "" {
-                                panic(p.newError(0, fmt.Sprintf("illegal: %v", w)))
+                                errorf(0, fmt.Sprintf("illegal: %v", w))
                         }
                         p.setVariable(w, s)
 
                 case ':': //print("parse: "+w+" : "+s+"\n")
                         if w == "" {
-                                panic(p.newError(0, fmt.Sprintf("illegal: %v", w)))
+                                errorf(0, fmt.Sprintf("illegal: %v", w))
                         }
 
                         switch rr {
@@ -311,7 +300,7 @@ func (p *parser) parse() (err error) {
 
                 default:
                         if w != "" {
-                                panic(p.newError(0, fmt.Sprintf("illegal: %v", w)))
+                                errorf(0, fmt.Sprintf("illegal: %v", w))
                         }
                 }
         }
@@ -324,7 +313,7 @@ func (p *parser) expand(str string) string {
         var exp func(s []byte) (out string, l int)
         var getRune = func(s []byte) (r rune, l int) {
                 if r, l = utf8.DecodeRune(s); r == utf8.RuneError || l <= 0 {
-                        panic(p.newError(1, "bad UTF8 encoding"))
+                        errorf(1, "bad UTF8 encoding")
                 }
                 return
         }
@@ -371,7 +360,7 @@ func (p *parser) expand(str string) string {
                                         //fmt.Printf("inner: %v, %v, %v, %v\n", string(s), ll, ss, rs)
                                         continue
                                 } else {
-                                        panic(p.newError(1, string(s)))
+                                        errorf(1, string(s))
                                 }
                         case '(': t.WriteRune(r); parentheses = append(parentheses, ')')
                         case '{': t.WriteRune(r); parentheses = append(parentheses, '}')
@@ -406,7 +395,7 @@ func (p *parser) expand(str string) string {
                 s = s[l:]
                 if r == '$' {
                         if ss, ll := exp(s); ll <= 0 {
-                                panic(p.newError(0, "bad variable"))
+                                errorf(0, "bad variable")
                         } else {
                                 s = s[ll:]
                                 buf.WriteString(ss)
@@ -466,9 +455,7 @@ func (p *parser) setVariable(name, value string) (v *variable) {
         }
         v.name = name
         v.value = value
-        v.loc.file = &p.file
-        v.loc.lineno = p.lineno
-        v.loc.colno = p.colno
+        v.loc = p.location()
 
         //fmt.Printf("%v %s = %s\n", &v.loc, name, value)
         return
@@ -482,23 +469,24 @@ func parse(conf string) (err error) {
                 return
         }
 
+        p := &parser{
+                file: conf,
+                in: bufio.NewReader(f),
+                variables: make(map[string]*variable, 128),
+        }
+
         defer func() {
                 f.Close()
 
                 if e := recover(); e != nil {
-                        if pe, ok := e.(*parseError); ok {
-                                fmt.Printf("%s:%v:%v: %v\n", conf, pe.lineno, pe.colno, pe)
+                        if se, ok := e.(*smarterror); ok {
+                                fmt.Printf("%s:%v:%v: %v\n", conf, p.lineno, p.colno, se)
                         } else {
                                 panic(e)
                         }
                 }
         }()
 
-        p := &parser{
-                file: conf,
-                in: bufio.NewReader(f),
-                variables: make(map[string]*variable, 128),
-        }
         if err = p.parse(); err != nil {
                 return
         }
