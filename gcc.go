@@ -57,9 +57,19 @@ func (gcc *_gcc) buildModule(p *parser, args []string) bool {
                 p.stepLineBack(); panic(p.newError(0, "no module"))
         }
 
+        if m.action == nil {
+                p.stepLineBack(); panic(p.newError(0, "no action for `%v'", p.module.name))
+                return false
+        }
+
+        if m.action.command == nil {
+                p.stepLineBack(); panic(p.newError(0, "no command for `%v'", p.module.name))
+                return false
+        }
+
         var ld *gccCommand
         if l, ok := m.action.command.(*gccCommand); !ok {
-                p.stepLineBack(); panic(p.newError(0, fmt.Sprintf("internal: wrong module command")))
+                p.stepLineBack(); panic(p.newError(0, "internal: wrong module command"))
         } else {
                 ld = l
         }

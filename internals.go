@@ -50,37 +50,61 @@ func internalModule(p *parser, args []string) string {
                         variables: make(map[string]*variable, 128),
                 }
                 modules[m.name] = m
-        } else {
-                if 0 < len(m.usedBy) && m.variables == nil && m.toolset == nil && m.kind == "" {
-                        m.toolset = toolset
-                        m.kind = kind
-                        m.dir = filepath.Dir(p.file)
-                        m.location = location{ &p.file, p.lineno-1, p.prevColno+1 }
-                        m.variables = make(map[string]*variable, 128)
-                } else if toolsetName != "" || kind != "" && 0 == len(m.usedBy) {
-                        p.lineno -= 1; p.colno = p.prevColno + 1
-                        fmt.Printf("%v: previous module declaration \"%s\"", &(m.location), m.name)
-                        panic(p.newError(0, fmt.Sprintf("module already been defined as \"%v, $v\"", m.toolset, m.kind)))
-                }
+        } else if (m.toolset != nil && toolsetName != "") && (m.kind != "" || kind != "") {
+                p.lineno -= 1; p.colno = p.prevColno + 1
+                fmt.Printf("%v: previous module declaration `%v'\n", &(m.location), m.name)
+                panic(p.newError(0, fmt.Sprintf("module already been defined as \"%v, $v\"", m.toolset, m.kind)))
         }
-                
+
+        if m.toolset == nil && m.kind == "" {
+                m.toolset = toolset
+                m.kind = kind
+        }
 
         p.setModule(m)
-
-        if !has {
-                toolset.setupModule(p, args[3:])
-        }
+        toolset.setupModule(p, args[3:])
         return ""
 }
 
 func internalBuild(p *parser, args []string) string {
-        if m := p.module; m == nil {
+        var m *module
+        if m = p.module; m == nil {
                 panic(p.newError(0, "no module defined"))
         }
 
-        fmt.Printf("smart: build `%v'\n", p.module.name)
+        var buildUsing func(mod *module) int
+        buildUsing = func(mod *module) (num int) {
+                for _, u := range mod.using {
+                        ok := true
+                        if u.toolset == nil {
+                                ok = false
+                        } else if l := len(u.using); 0 < l {
+                                if l != buildUsing(u) { ok = false }
+                        }
+                        if ok && u.toolset.buildModule(p, args) {
+                                num += 1
+                        } else {
+                                fmt.Printf("%v:%v:%v: dependency `%v' not built\n", p.file, p.lineno-1, p.prevColno+1, u.name)
+                        }
+                }
+                return
+        }
 
-        p.module.build(p, args)
+        if buildUsing(m) != len(m.using) {
+                panic(p.newError(0, "not all dependencies built for `%v'", m.name))
+        }
+
+        if m.toolset == nil {
+                panic(p.newError(0, "no toolset for `%v'", m.name))
+        }
+
+        if *flag_v {
+                fmt.Printf("smart: build `%v'\n", m.name)
+        }
+
+        if !m.toolset.buildModule(p, args) {
+                panic(p.newError(0, "failed building `%v' via `%v'", m.name, m.toolset))
+        }
         return ""
 }
 
@@ -93,9 +117,16 @@ func internalUse(p *parser, args []string) string {
                 a = strings.TrimSpace(a)
                 if m, ok := modules[a]; ok {
                         p.module.using = append(p.module.using, m)
+                        m.usedBy = append(m.usedBy, p.module)
                 } else {
-                        //panic(p.newError(0, "module `%v' not found", a))
-                        m = &module{ name: a, usedBy: []*module{ p.module } }
+                        m = &module{
+                        name: a,
+                        dir: filepath.Dir(p.file),
+                        location: location{ &p.file, p.lineno, p.colno },
+                        variables: make(map[string]*variable, 128),
+                        usedBy: []*module{ p.module },
+                        }
+                        p.module.using = append(p.module.using, m)
                         modules[a] = m
                 }
         }

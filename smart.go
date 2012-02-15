@@ -2,7 +2,6 @@ package smart
 
 import (
         "bytes"
-        "errors"
         "flag"
         "fmt"
         "io"
@@ -267,16 +266,6 @@ func (m *module) update() {
 
         if updated := m.action.update(); !updated {
                 fmt.Printf("smart: Noting done for module `%v'\n", m.name)
-        }
-}
-
-func (m *module) build(p *parser, args []string) {
-        if m.toolset == nil {
-                panic(errors.New("nil toolset"))
-        }
-        if !m.toolset.buildModule(p, args) {
-                //fmt.Printf("error: buildModule\n")
-                return
         }
 }
 
