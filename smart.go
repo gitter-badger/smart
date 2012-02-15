@@ -163,7 +163,7 @@ func (c *execCommand) run(target string, args ...string) bool {
 
 type inmemCommand interface {
         command
-        targets() (names []string, updateChecker func() bool)
+        targets(prequisites []*action) (names []string, updateChecker func() bool)
 }
 
 // An action represents a action to be performed while generating a required target.
@@ -173,18 +173,13 @@ type action struct {
         command command
 }
 
-//func (a *action) getPrequisites() (l []string) {
-//        for _, p := range a.prequisites { l = append(l, p.target) }
-//        return
-//}
-
 func (a *action) update() (updated bool, updatedTargets []string) {
         isInmem := false
         var targets []string
         var check func() bool
         if a.command != nil {
                 if c, ok := a.command.(inmemCommand); ok {
-                        targets, check = c.targets()
+                        targets, check = c.targets(a.prequisites)
                         isInmem = true
                 }
         }
@@ -215,7 +210,7 @@ func (a *action) update() (updated bool, updatedTargets []string) {
                         prequisites = append(prequisites, ptars...)
                         updatedPreNum++
                 } else if pc, ok := p.command.(inmemCommand); ok {
-                        s, _ := pc.targets()
+                        s, _ := pc.targets(p.prequisites)
                         prequisites = append(prequisites, s...)
                 } else {
                         prequisites = append(prequisites, p.targets...)
@@ -273,12 +268,11 @@ func (a *action) updateForcibly(targets []string, tarfis []os.FileInfo, prequisi
         if updated {
                 var check func() bool
                 if c, ok := a.command.(inmemCommand); ok {
-                        updatedTargets, check = c.targets()
+                        updatedTargets, check = c.targets(a.prequisites)
                         updated = check()
                 } else {
                         for _, t := range a.targets {
                                 if fi, e := os.Stat(t); e != nil || fi == nil {
-                                        updated = false
                                         errorf(0, "`%s' not built", t)
                                 } else {
                                         updatedTargets = append(updatedTargets, t)
@@ -356,7 +350,7 @@ type traverseCallback func(dname string, fi os.FileInfo) bool
 func traverse(d string, fun traverseCallback) (err error) {
         fd, err := os.Open(d)
         if err != nil {
-                errorf(0, "open: %v, %v\n", err, d)
+                //errorf(0, "open: %v, %v\n", err, d)
                 return
         }
 
@@ -376,7 +370,7 @@ func traverse(d string, fun traverseCallback) (err error) {
 
                 fi, err = os.Stat(dname)
                 if err != nil {
-                        errorf(0, "stat: %v\n", dname)
+                        //errorf(0, "stat: %v\n", dname)
                         return
                 }
 
@@ -386,7 +380,7 @@ func traverse(d string, fun traverseCallback) (err error) {
 
                 if fi.IsDir() {
                         if err = traverse(dname, fun); err != nil {
-                                errorf(0, "traverse: %v\n", dname)
+                                //errorf(0, "traverse: %v\n", dname)
                                 return
                         }
                         continue

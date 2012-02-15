@@ -126,13 +126,34 @@ type androidsdkGenR struct{
         out, d, res, assets string
         r string // "r" holds the R.java file path
 }
-func (ic *androidsdkGenR) targets() (targets []string, check func() bool) {
+func (ic *androidsdkGenR) targets(prequisites []*action) (targets []string, check func() bool) {
         if ic.r != "" {
                 targets = []string{ ic.r }
                 check = func() bool { return ic.r == "" }
         } else if ic.r = findFile(filepath.Join(ic.out, "res"), `R\.java$`); ic.r != "" {
-                // TODO: compare R.java with all resources
-                check = func() bool { return ic.r == "" }
+                rfi, _ := os.Stat(ic.r)
+
+                newerCount, resources := 0, []string{}
+                traverse(filepath.Join(ic.d, "res"), func(fn string, fi os.FileInfo) bool {
+                        if !strings.HasSuffix(fn, "~") && !fi.IsDir() {
+                                resources = append(resources, fn)
+                                if rfi == nil || rfi.ModTime().Before(fi.ModTime()) {
+                                        newerCount += 1
+                                }
+                        }
+                        return true
+                })
+                traverse(filepath.Join(ic.d, "assets"), func(fn string, fi os.FileInfo) bool {
+                        if !strings.HasSuffix(fn, "~") && !fi.IsDir() {
+                                resources = append(resources, fn)
+                                if rfi == nil || rfi.ModTime().Before(fi.ModTime()) {
+                                        newerCount += 1
+                                }
+                        }
+                        return true
+                })
+                //fmt.Printf("resources: %v, %v\n", newerCount, resources)
+                check = func() bool { return ic.r == "" || 0 < newerCount }
         }
         return
 }
@@ -158,9 +179,12 @@ func (ic *androidsdkGenR) execute(targets []string, prequisites []string) bool {
         mkdir: outRes,
         path: filepath.Join(androidsdk, "platform-tools", "aapt"),
         }
+        if *flag_v || *flag_V {
+                if ic.res != "" { fmt.Printf("smart: resources `%v'...\n", ic.res) }
+                if ic.assets != "" { fmt.Printf("smart: assets `%v'...\n", ic.assets) }
+        }
         if !c.run("resources", args...) {
                 errorf(0, "resources: %v", outRes)
-                return false
         }
 
         if ic.r = findFile(outRes, `R\.java$`); ic.r != "" {
@@ -176,15 +200,31 @@ type androidsdkGenClasses struct{
         out, d, sourcepath string
         classpath, classes []string // holds the *.class file
 }
-func (ic *androidsdkGenClasses) targets() (targets []string, check func() bool) {
-        if len(ic.classes) != 0 {
-                targets = ic.classes
-                check = func() bool { return len(ic.classes) == 0 }
-        } else if classes, e := findFiles(filepath.Join(ic.out, "classes"), `\.class$`, -1); e != nil {
-                // TODO: compare classes with all Java sources
-                targets = classes
-                check = func() bool { return len(classes) == 0 }
+func (ic *androidsdkGenClasses) targets(prequisites []*action) (targets []string, check func() bool) {
+        newerCount := 0
+        traverse(filepath.Join(ic.out, "classes"), func(fn string, fi os.FileInfo) bool {
+                if strings.HasSuffix(fn, ".class") && !fi.IsDir() {
+                        for _, p := range prequisites {
+                                var jfi os.FileInfo
+                                if rc, ok := p.command.(*androidsdkGenR); ok {
+                                        jfi, _ = os.Stat(rc.r)
+                                } else {
+                                        jfi, _ = os.Stat(p.targets[0])
+                                }
+                                if jfi != nil && fi.ModTime().Before(jfi.ModTime()) {
+                                        //fmt.Printf("classes: %v, %v\n", jfi.Name(), fi.Name())
+                                        newerCount += 1
+                                }
+                        }
+                        targets = append(targets, fn)
+                }
+                return true
+        })
+        if 0 < newerCount {
+                fmt.Printf("TODO: update: %v, %v\n", newerCount, targets)
+                targets = []string{}
         }
+        check = func() bool { return len(targets) == 0 || 0 < newerCount }
         return
 }
 func (ic *androidsdkGenClasses) execute(targets []string, prequisites []string) bool {
@@ -245,7 +285,7 @@ func androidsdkCreateEmptyPackage(name string) bool {
 type androidsdkGenApk struct {
         out, d, res, assets, apk string
 }
-func (ic *androidsdkGenApk) targets() (targets []string, check func() bool) {
+func (ic *androidsdkGenApk) targets(prequisites []*action) (targets []string, check func() bool) {
         targets = []string{ ic.apk }
         return
 }
@@ -346,7 +386,7 @@ func (ic *androidsdkGenApk) execute(targets []string, prequisites []string) bool
 type androidsdkGenJar struct {
         out, d, res, assets, jar string
 }
-func (ic *androidsdkGenJar) targets() (targets []string, check func() bool) {
+func (ic *androidsdkGenJar) targets(prequisites []*action) (targets []string, check func() bool) {
         targets = []string{ ic.jar }
         return
 }
