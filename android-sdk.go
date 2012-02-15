@@ -139,6 +139,9 @@ func (ic *androidsdkGenR) targets() (targets []string, check func() bool) {
 func (ic *androidsdkGenR) execute(targets []string, prequisites []string) bool {
         ic.r = ""
 
+        outRes := filepath.Join(ic.out, "res")
+        os.RemoveAll(outRes)
+
         args := []string{
                 "package", "-m",
                 "-J", filepath.Join(ic.out, "res"),
@@ -152,15 +155,18 @@ func (ic *androidsdkGenR) execute(targets []string, prequisites []string) bool {
 
         c := &execCommand{
         name: "aapt", slient: androidsdkSlientSome,
-        mkdir: filepath.Join(ic.out, "res"),
+        mkdir: outRes,
         path: filepath.Join(androidsdk, "platform-tools", "aapt"),
         }
         if !c.run("resources", args...) {
+                errorf(0, "resources: %v", outRes)
                 return false
         }
 
-        if ic.r = findFile(filepath.Join(ic.out, "res"), `R\.java$`); ic.r != "" {
+        if ic.r = findFile(outRes, `R\.java$`); ic.r != "" {
                 return true
+        } else {
+                errorf(0, "resources: R.java not found")
         }
 
         return false
