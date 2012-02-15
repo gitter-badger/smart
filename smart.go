@@ -262,7 +262,7 @@ func (a *action) updateForcibly(targets []string, tarfis []os.FileInfo, prequisi
         if a.command == nil {
                 for n, i := range tarfis {
                         if i == nil {
-                                errorf(0, "no `%s'\n", targets[n])
+                                errorf(0, "`%s' not found", targets[n])
                         }
                 }
                 return

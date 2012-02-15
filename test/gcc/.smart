@@ -8,6 +8,7 @@ this.includes = \
 
 $(info sources $(this.sources))
 $(info includes $(this.includes))
+$(info includes $(this.includes))
 
 a = a
 i = i

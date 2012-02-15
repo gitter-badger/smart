@@ -129,9 +129,10 @@ type androidsdkGenR struct{
 func (ic *androidsdkGenR) targets() (targets []string, check func() bool) {
         if ic.r != "" {
                 targets = []string{ ic.r }
-        }
-        check = func() bool {
-                return ic.r == ""
+                check = func() bool { return ic.r == "" }
+        } else if ic.r = findFile(filepath.Join(ic.out, "res"), `R\.java$`); ic.r != "" {
+                // TODO: compare R.java with all resources
+                check = func() bool { return ic.r == "" }
         }
         return
 }
@@ -170,9 +171,13 @@ type androidsdkGenClasses struct{
         classpath, classes []string // holds the *.class file
 }
 func (ic *androidsdkGenClasses) targets() (targets []string, check func() bool) {
-        targets = ic.classes
-        check = func() bool {
-                return 0 == len(ic.classes)
+        if len(ic.classes) != 0 {
+                targets = ic.classes
+                check = func() bool { return len(ic.classes) == 0 }
+        } else if classes, e := findFiles(filepath.Join(ic.out, "classes"), `\.class$`, -1); e != nil {
+                // TODO: compare classes with all Java sources
+                targets = classes
+                check = func() bool { return len(classes) == 0 }
         }
         return
 }
@@ -182,6 +187,9 @@ func (ic *androidsdkGenClasses) execute(targets []string, prequisites []string) 
                 classpath += ":" + strings.Join(ic.classpath, ":")
         }
 
+        outClasses := filepath.Join(ic.out, "classes")
+        os.RemoveAll(outClasses)
+
         args := []string {
                 "-d", filepath.Join(ic.out, "classes"),
                 "-sourcepath", ic.sourcepath,
@@ -189,14 +197,15 @@ func (ic *androidsdkGenClasses) execute(targets []string, prequisites []string) 
         }
 
         args = append(args, prequisites...)
-        c := &execCommand{ name:"javac", mkdir:filepath.Join(ic.out, "classes"), }
+        c := &execCommand{ name:"javac", mkdir:outClasses, }
         if !c.run("classes", args...) {
+                errorf(0, "classes: %v", outClasses)
                 return false
         }
 
-        var e error
-        ic.classes, e = findFiles(filepath.Join(ic.out, "classes"), `\.class$`, -1)
-        if e != nil {
+        if classes, e := findFiles(outClasses, `\.class$`, -1); e == nil {
+                ic.classes = classes
+        } else {
                 errorf(0, "classes: %v", e)
         }
 
