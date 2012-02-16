@@ -37,10 +37,19 @@ func (ndk *_androidndk) setupModule(p *parser, args []string) bool {
         }
 
         var m = p.module
+        var ld *gccCommand
         if c, ok := m.action.command.(*gccCommand); !ok {
                 errorf(0, "not a gcc command")
         } else {
-                c.path = filepath.Join(ndk.toolchainBin(), "arm-linux-androideabi-ld")
+                ld = c
+        }
+
+        bin := ndk.toolchainBin()
+        switch ld.name {
+        case "ld":
+                ld.path = filepath.Join(bin, "arm-linux-androideabi-ld")
+        case "ar":
+                ld.path = filepath.Join(bin, "arm-linux-androideabi-ar")
         }
         return true
 }
