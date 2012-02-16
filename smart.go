@@ -161,9 +161,38 @@ func (c *execCommand) run(target string, args ...string) bool {
         return updated
 }
 
-type inmemCommand interface {
+type incommand interface {
         command
         targets(prequisites []*action) (names []string, needsUpdate bool)
+}
+
+func computeInterTargets(d, sre string, prequisites []*action) (targets []string, outdates int, outdateMap map[int]int) {
+        re := regexp.MustCompile(sre)
+        outdateMap = map[int]int{}
+        traverse(d, func(fn string, fi os.FileInfo) bool {
+                if !re.MatchString(fn) { return true }
+                var i int;
+                i, targets = len(targets), append(targets, fn)
+                outdateMap[i] = 0
+                for _, p := range prequisites {
+                        if pc, ok := p.command.(incommand); ok {
+                                if _, nu := pc.targets(p.prequisites); nu {
+                                        outdateMap[i] += 1
+                                }
+                        } else {
+                                for _, t := range p.targets {
+                                        if pfi, _ := os.Stat(t); pfi == nil {
+                                                errorf(0, "`%v' not found", t)
+                                        } else if fi.ModTime().Before(pfi.ModTime()) {
+                                                outdateMap[i] += 1
+                                        }
+                                }
+                        }
+                }
+                outdates += outdateMap[i]
+                return true
+        })
+        return
 }
 
 // An action represents a action to be performed while generating a required target.
@@ -174,17 +203,17 @@ type action struct {
 }
 
 func (a *action) update() (updated bool, updatedTargets []string) {
-        isInmem := false
         var targets []string
-        var needsUpdate bool
+        var targetsNeedUpdate bool
+        var isIncommand bool
         if a.command != nil {
-                if c, ok := a.command.(inmemCommand); ok {
-                        targets, needsUpdate = c.targets(a.prequisites)
-                        isInmem = true
+                if c, ok := a.command.(incommand); ok {
+                        targets, targetsNeedUpdate = c.targets(a.prequisites)
+                        isIncommand = true
                 }
         }
 
-        if !isInmem {
+        if !isIncommand {
                 targets = append(targets, a.targets...)
         }
 
@@ -206,12 +235,13 @@ func (a *action) update() (updated bool, updatedTargets []string) {
         updatedPreNum := 0
         prequisites := []string{}
         for _, p := range a.prequisites {
-                if u, ptars := p.update(); u {
-                        prequisites = append(prequisites, ptars...)
+                if u, pres := p.update(); u {
+                        prequisites = append(prequisites, pres...)
                         updatedPreNum++
-                } else if pc, ok := p.command.(inmemCommand); ok {
-                        s, _ := pc.targets(p.prequisites)
-                        prequisites = append(prequisites, s...)
+                } else if pc, ok := p.command.(incommand); ok {
+                        pres, nu := pc.targets(p.prequisites)
+                        if nu { errorf(0, "requiring updating %v for %v", pres, targets) }
+                        prequisites = append(prequisites, pres...)
                 } else {
                         prequisites = append(prequisites, p.targets...)
                         for _, pt := range p.targets {
@@ -228,7 +258,7 @@ func (a *action) update() (updated bool, updatedTargets []string) {
                 }
         }
 
-        if 0 < updatedPreNum || needsUpdate {
+        if 0 < updatedPreNum || targetsNeedUpdate {
                 updated, updatedTargets = a.updateForcibly(targets, fis, prequisites)
         } else {
                 var rr []int
@@ -266,10 +296,10 @@ func (a *action) updateForcibly(targets []string, tarfis []os.FileInfo, prequisi
         updated = a.command.execute(targets, prequisites)
 
         if updated {
-                var needsUpdate bool
-                if c, ok := a.command.(inmemCommand); ok {
-                        updatedTargets, needsUpdate = c.targets(a.prequisites)
-                        updated = !needsUpdate
+                var targetsNeedUpdate bool
+                if c, ok := a.command.(incommand); ok {
+                        updatedTargets, targetsNeedUpdate = c.targets(a.prequisites)
+                        updated = !targetsNeedUpdate
                 } else {
                         for _, t := range a.targets {
                                 if fi, e := os.Stat(t); e != nil || fi == nil {
@@ -296,7 +326,7 @@ func newAction(target string, c command, pre ...*action) *action {
         return a
 }
 
-func newInmemAction(target string, c inmemCommand, pre ...*action) *action {
+func newInAction(target string, c incommand, pre ...*action) *action {
         return newAction(target, c, pre...)
 }
 
