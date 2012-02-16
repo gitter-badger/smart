@@ -163,7 +163,7 @@ func (c *execCommand) run(target string, args ...string) bool {
 
 type inmemCommand interface {
         command
-        targets(prequisites []*action) (names []string, updateChecker func() bool)
+        targets(prequisites []*action) (names []string, needsUpdate bool)
 }
 
 // An action represents a action to be performed while generating a required target.
@@ -176,10 +176,10 @@ type action struct {
 func (a *action) update() (updated bool, updatedTargets []string) {
         isInmem := false
         var targets []string
-        var check func() bool
+        var needsUpdate bool
         if a.command != nil {
                 if c, ok := a.command.(inmemCommand); ok {
-                        targets, check = c.targets(a.prequisites)
+                        targets, needsUpdate = c.targets(a.prequisites)
                         isInmem = true
                 }
         }
@@ -228,7 +228,7 @@ func (a *action) update() (updated bool, updatedTargets []string) {
                 }
         }
 
-        if 0 < updatedPreNum || (check != nil && check()) {
+        if 0 < updatedPreNum || needsUpdate {
                 updated, updatedTargets = a.updateForcibly(targets, fis, prequisites)
         } else {
                 var rr []int
@@ -266,10 +266,10 @@ func (a *action) updateForcibly(targets []string, tarfis []os.FileInfo, prequisi
         updated = a.command.execute(targets, prequisites)
 
         if updated {
-                var check func() bool
+                var needsUpdate bool
                 if c, ok := a.command.(inmemCommand); ok {
-                        updatedTargets, check = c.targets(a.prequisites)
-                        updated = check()
+                        updatedTargets, needsUpdate = c.targets(a.prequisites)
+                        updated = !needsUpdate
                 } else {
                         for _, t := range a.targets {
                                 if fi, e := os.Stat(t); e != nil || fi == nil {
@@ -294,6 +294,10 @@ func newAction(target string, c command, pre ...*action) *action {
         prequisites: pre,
         }
         return a
+}
+
+func newInmemAction(target string, c inmemCommand, pre ...*action) *action {
+        return newAction(target, c, pre...)
 }
 
 type module struct {

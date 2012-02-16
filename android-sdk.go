@@ -57,15 +57,10 @@ func (sdk *_androidsdk) buildModule(p *parser, args []string) bool {
                 p.stepLineBack(); errorf(0, "no module")
         }
 
-        switch m.kind {
-        case "apk": m.action = newAction(m.name+".apk", nil)
-        case "jar": m.action = newAction(m.name+".jar", nil)
-        default: p.stepLineBack(); errorf(0, "unknown module type `%v'", m.kind)
-        }
-
         d := filepath.Dir(p.file)
         out := filepath.Join("out", m.name)
 
+        var prequisites []*action
         var a *action
         var hasRes, hasAssets, hasSrc bool
         if fi, err := os.Stat(filepath.Join(d, "src")); err == nil && fi.IsDir() { hasSrc = true }
@@ -75,7 +70,7 @@ func (sdk *_androidsdk) buildModule(p *parser, args []string) bool {
                 c := &androidsdkGenR{ out:out, d:d }
                 if hasRes { c.res = filepath.Join(d, "res") }
                 if hasAssets { c.assets = filepath.Join(d, "assets") }
-                a = newAction("R.java", c)
+                a = newInmemAction("R.java", c)
         }
 
         if hasSrc {
@@ -98,12 +93,12 @@ func (sdk *_androidsdk) buildModule(p *parser, args []string) bool {
 
                         for _, src := range sources { ps = append(ps, newAction(src, nil)) }
                         c := &androidsdkGenClasses{ out:out, d:d, sourcepath:filepath.Join(d, "src"), classpath:classpath, }
-                        a = newAction("*.class", c, ps...)
+                        a = newInmemAction("*.class", c, ps...)
                 }
         }
 
         if a != nil {
-                m.action.prequisites = append(m.action.prequisites, a)
+                prequisites = append(prequisites, a)
         }
 
         switch m.kind {
@@ -111,13 +106,15 @@ func (sdk *_androidsdk) buildModule(p *parser, args []string) bool {
                 c := &androidsdkGenApk{ out:out, d:d, apk:filepath.Join(out, m.name+".apk") }
                 if hasRes { c.res = filepath.Join(d, "res") }
                 if hasAssets { c.assets = filepath.Join(d, "assets") }
-                m.action.command = c
+                m.action = newInmemAction(m.name+".apk", c, prequisites...)
         case "jar":
                 c := &androidsdkGenJar{ out:out, d:d, jar:filepath.Join(out, m.name+".jar") }
                 if hasRes { c.res = filepath.Join(d, "res") }
                 if hasAssets { c.assets = filepath.Join(d, "assets") }
                 p.setVariable("this.export.jar", c.jar)
-                m.action.command = c
+                m.action = newInmemAction(m.name+".jar", c, prequisites...)
+        default:
+                p.stepLineBack(); errorf(0, "unknown module type `%v'", m.kind)
         }
         return true
 }
@@ -126,10 +123,10 @@ type androidsdkGenR struct{
         out, d, res, assets string
         r string // "r" holds the R.java file path
 }
-func (ic *androidsdkGenR) targets(prequisites []*action) (targets []string, check func() bool) {
+func (ic *androidsdkGenR) targets(prequisites []*action) (targets []string, needsUpdate bool) {
         if ic.r != "" {
                 targets = []string{ ic.r }
-                check = func() bool { return ic.r == "" }
+                needsUpdate = false
         } else if ic.r = findFile(filepath.Join(ic.out, "res"), `R\.java$`); ic.r != "" {
                 rfi, _ := os.Stat(ic.r)
 
@@ -152,8 +149,9 @@ func (ic *androidsdkGenR) targets(prequisites []*action) (targets []string, chec
                         }
                         return true
                 })
+
                 //fmt.Printf("resources: %v, %v\n", newerCount, resources)
-                check = func() bool { return ic.r == "" || 0 < newerCount }
+                needsUpdate = ic.r == "" || 0 < newerCount
         }
         return
 }
@@ -200,7 +198,7 @@ type androidsdkGenClasses struct{
         out, d, sourcepath string
         classpath, classes []string // holds the *.class file
 }
-func (ic *androidsdkGenClasses) targets(prequisites []*action) (targets []string, check func() bool) {
+func (ic *androidsdkGenClasses) targets(prequisites []*action) (targets []string, needsUpdate bool) {
         newerCount := 0
         traverse(filepath.Join(ic.out, "classes"), func(fn string, fi os.FileInfo) bool {
                 if strings.HasSuffix(fn, ".class") && !fi.IsDir() {
@@ -224,7 +222,7 @@ func (ic *androidsdkGenClasses) targets(prequisites []*action) (targets []string
                 fmt.Printf("TODO: update: %v, %v\n", newerCount, targets)
                 targets = []string{}
         }
-        check = func() bool { return len(targets) == 0 || 0 < newerCount }
+        needsUpdate = len(targets) == 0 || 0 < newerCount
         return
 }
 func (ic *androidsdkGenClasses) execute(targets []string, prequisites []string) bool {
@@ -285,8 +283,9 @@ func androidsdkCreateEmptyPackage(name string) bool {
 type androidsdkGenApk struct {
         out, d, res, assets, apk string
 }
-func (ic *androidsdkGenApk) targets(prequisites []*action) (targets []string, check func() bool) {
+func (ic *androidsdkGenApk) targets(prequisites []*action) (targets []string, needsUpdate bool) {
         targets = []string{ ic.apk }
+        needsUpdate = ic.apk == ""
         return
 }
 func (ic *androidsdkGenApk) execute(targets []string, prequisites []string) bool {
@@ -386,8 +385,9 @@ func (ic *androidsdkGenApk) execute(targets []string, prequisites []string) bool
 type androidsdkGenJar struct {
         out, d, res, assets, jar string
 }
-func (ic *androidsdkGenJar) targets(prequisites []*action) (targets []string, check func() bool) {
+func (ic *androidsdkGenJar) targets(prequisites []*action) (targets []string, needsUpdate bool) {
         targets = []string{ ic.jar }
+        needsUpdate = ic.jar == ""
         return
 }
 func (ic *androidsdkGenJar) execute(targets []string, prequisites []string) bool {
