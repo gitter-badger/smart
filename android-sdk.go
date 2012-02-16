@@ -189,19 +189,11 @@ func (ic *androidsdkGenR) execute(targets []string, prequisites []string) bool {
 type androidsdkGenClasses struct{
         *androidsdkGen
         sourcepath string
-        classpath, classes []string // holds the *.class file
+        classpath []string // holds the *.class file
         outdates int
 }
 func (ic *androidsdkGenClasses) targets(prequisites []*action) (targets []string, needsUpdate bool) {
-        if 0 < len(ic.classes) {
-                targets = ic.classes
-                needsUpdate = 0 < ic.outdates
-                return
-        }
-
         targets, outdates, _ := computeInterTargets(filepath.Join(ic.out, "classes"), `\.class$`, prequisites)
-        ic.classes = targets
-
         needsUpdate = len(targets) == 0 || 0 < outdates
         return
 }
@@ -227,13 +219,15 @@ func (ic *androidsdkGenClasses) execute(targets []string, prequisites []string) 
                 return false
         }
 
+        /*
         if classes, e := findFiles(outClasses, `\.class$`, -1); e == nil {
-                ic.classes = classes
         } else {
                 errorf(0, "classes: %v", e)
         }
-
         return 0 < len(ic.classes)
+        */
+
+        return true
 }
 
 func androidsdkCreateEmptyPackage(name string) bool {
