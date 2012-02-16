@@ -1,14 +1,14 @@
 # -*- makefile -*-
-$(module foo, gcc, exe)
+#$(module foo, gcc, exe)
 
-this = no effect, but a warning
-this.sources = foo.c
-this.includes = \
-  .\
+#this = no effect, but a warning
+#this.sources = foo.c
+#this.includes = \
+#  .\
 
-$(info sources $(this.sources))
-$(info includes $(this.includes))
-$(info includes $(this.includes))
+#$(info sources $(this.sources))
+#$(info includes $(this.includes))
+#$(info includes $(this.includes))
 
 a = a
 i = i
@@ -19,13 +19,13 @@ a$$a = foo
 汉字 = 之音
 foo := $(a$$a)
 
-$(use $(a$$a)_$(sh$ared), $(stat$ic)) # output:
+#$(use $(a$$a)_$(sh$ared), $(a$$a)_$(stat$ic)) # output:
 
 $(info xxx-(use $(sh$ared),$(stat$ic))-$(a$$a)-xxx) # output: xxx-(use shared static)-foo-xxx
 $(info $(中文 $(汉字))) # output: 天籁
 $(info $(中文) $(汉字)) # output: 天籁 之音
 
-$(build)
+#$(build)
 
 foo = foo #bar
 bar = "foo # bar"

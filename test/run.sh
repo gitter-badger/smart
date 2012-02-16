@@ -68,8 +68,5 @@ checkfile() {
     }
 }
 
-#$smart -a toolset=gcc && ./a.out
-$smart toolset=gcc && ./foo
-#cd android-sdk && ../$smart
-
+$smart -V
 check .

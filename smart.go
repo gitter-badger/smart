@@ -214,6 +214,7 @@ func (a *action) update() (updated bool, updatedTargets []string) {
         }
 
         if !isIncommand {
+                //fmt.Printf("targets: %v\n", a.targets)
                 targets = append(targets, a.targets...)
         }
 
@@ -258,6 +259,15 @@ func (a *action) update() (updated bool, updatedTargets []string) {
                 }
         }
 
+        if a.command == nil {
+                for n, i := range fis {
+                        if i == nil {
+                                errorf(0, "`%s' not found", targets[n])
+                        }
+                }
+                return
+        }
+
         if 0 < updatedPreNum || targetsNeedUpdate {
                 updated, updatedTargets = a.updateForcibly(targets, fis, prequisites)
         } else {
@@ -276,23 +286,16 @@ func (a *action) update() (updated bool, updatedTargets []string) {
                         }
                 }
 
+                //fmt.Printf("targets: %v, %v, %v, %v\n", targets, request, len(a.prequisites), prequisites)
                 if 0 < len(request) {
                         updated, updatedTargets = a.updateForcibly(request, requestfis, prequisites)
                 }
         }
+
         return
 }
 
 func (a *action) updateForcibly(targets []string, tarfis []os.FileInfo, prequisites []string) (updated bool, updatedTargets []string) {
-        if a.command == nil {
-                for n, i := range tarfis {
-                        if i == nil {
-                                errorf(0, "`%s' not found", targets[n])
-                        }
-                }
-                return
-        }
-
         updated = a.command.execute(targets, prequisites)
 
         if updated {

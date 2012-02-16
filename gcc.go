@@ -4,6 +4,7 @@ import (
         "fmt"
         "os"
         "strings"
+        "path/filepath"
 )
 
 func init() {
@@ -17,7 +18,6 @@ var gccSourcePatterns = []*filerule{
 }
 
 type _gcc struct {
-        a *action
 }
 
 func (gcc *_gcc) setupModule(p *parser, args []string) bool {
@@ -26,39 +26,44 @@ func (gcc *_gcc) setupModule(p *parser, args []string) bool {
                 p.stepLineBack(); errorf(0, "no module")
         }
 
-        if m.action == nil {
-                m.action = newAction(m.name, nil)
-                switch m.kind {
-                case "exe":
-                        m.action.command = gccNewCommand("ld")
-                case "shared":
-                        if !strings.HasSuffix(m.action.targets[0], ".so") {
-                                m.action.targets[0] = m.action.targets[0] + ".so"
-                        }
-                        m.action.command = gccNewCommand("ld", "-shared")
-                case "static":
-                        if !strings.HasPrefix(m.action.targets[0], "lib") {
-                                m.action.targets[0] = "lib" + m.action.targets[0]
-                        }
-                        if !strings.HasSuffix(m.action.targets[0], ".a") {
-                                m.action.targets[0] = m.action.targets[0] + ".a"
-                        }
-                        m.action.command = gccNewCommand("ar", "crs")
-                default:
-                        p.stepLineBack(); errorf(0, fmt.Sprintf("unknown type `%v'", m.kind))
-                }
+        out := "out"
+
+        if m.action != nil {
+                errorf(0, "module `%v' already has a action", m.name)
+                return true
         }
+
+        var c *gccCommand
+        var name = m.name
+        switch m.kind {
+        case "exe":
+                c = gccNewCommand("ld")
+        case "shared":
+                if !strings.HasSuffix(name, ".so") { name = name + ".so" }
+                c = gccNewCommand("ld", "-shared")
+        case "static":
+                if !strings.HasPrefix(name, "lib") { name = "lib" + name }
+                if !strings.HasSuffix(name, ".a") { name = name + ".a" }
+                c = gccNewCommand("ar", "crs")
+        default:
+                p.stepLineBack(); errorf(0, fmt.Sprintf("unknown type `%v'", m.kind))
+        }
+
+        c.mkdir = filepath.Join(out, m.name)
+        m.action = newAction(filepath.Join(out, m.name, name), c)
         return true
 }
 
 func (gcc *_gcc) buildModule(p *parser, args []string) bool {
         var m *module
         if m = p.module; m == nil {
-                p.stepLineBack(); errorf(0, "no module")
+                p.stepLineBack();
+                errorf(0, "no module")
         }
 
         if m.action == nil {
-                p.stepLineBack(); errorf(0, "no action for `%v'", p.module.name)
+                //p.stepLineBack();
+                errorf(0, "no action for `%v'", p.module.name)
                 return false
         }
 
@@ -75,6 +80,10 @@ func (gcc *_gcc) buildModule(p *parser, args []string) bool {
         }
 
         sources := p.getModuleSources()
+        if len(sources) == 0 {
+                p.stepLineBack(); errorf(0, "no sources for `%v'", p.module.name)
+        }
+
         for _, src := range sources {
                 a, asrc := newAction(src + ".o", nil), newAction(src, nil)
 
@@ -102,34 +111,9 @@ func (gcc *_gcc) buildModule(p *parser, args []string) bool {
                 m.action.prequisites = append(m.action.prequisites, a)
         }
 
+        //fmt.Printf("module: %v, %v, %v\n", m.name, m.action.targets, len(m.action.prequisites))
+
         return m.action != nil
-}
-
-func (gcc *_gcc) processFile(dname string, fi os.FileInfo) {
-        fr := matchFile(fi, gccSourcePatterns)
-        if fr == nil {
-                return
-        }
-
-        if gcc.a == nil {
-                gcc.a = newAction("a.out", nil)
-                gcc.a.command = gccNewCommand("ld")
-        }
-
-        ld := gcc.a.command.(*gccCommand)
-
-        a, asrc := newAction(dname + ".o", nil), newAction(dname, nil)
-        switch fr.name {
-        case "c":
-                a.command = gccNewCommand("gcc", "-c")
-                if ld.name == "ld" { ld.name = "gcc" }
-        case "c++":
-                a.command = gccNewCommand("g++", "-c")
-                if ld.name != "g++" { ld.name = "g++" }
-        }
-
-        a.prequisites = append(a.prequisites, asrc)
-        gcc.a.prequisites = append(gcc.a.prequisites, a)
 }
 
 type gccCommand struct {
@@ -154,9 +138,6 @@ func (c *gccCommand) execute(targets []string, prequisites []string) bool {
                 args = append([]string{ "-o", target, }, c.args...)
         }
 
-        for _, p := range prequisites {
-                //print("gcc: TODO: "+c.name+", "+target+", "+p+"\n")
-                args = append(args, p)
-        }
+        args = append(args, prequisites...)
         return c.run(target, args...)
 }

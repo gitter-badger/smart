@@ -1,5 +1,5 @@
 # -*- makefile -*-
-$(module static, gcc, static)
+$(module foo_static, gcc, static)
 
 this.sources := foo.c
 
