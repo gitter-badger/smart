@@ -1,0 +1,7 @@
+# -*- makefile-gmake -*-
+# ABI=armeabi PLATFORM=android-9
+$(module foo_androidndk_so, android-ndk, shared)
+
+this.sources := na.c
+
+$(build)

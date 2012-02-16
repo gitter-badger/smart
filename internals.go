@@ -31,7 +31,7 @@ func internalModule(p *parser, args []string) string {
         var toolset toolset
         if ts, ok := toolsets[toolsetName]; !ok {
                 p.lineno -= 1; p.colno = p.prevColno + 1
-                errorf(0, fmt.Sprintf("toolset \"%s\" not existed", toolset))
+                errorf(0, "toolset `%v' unknown", toolsetName)
                 if ts == nil { errorf(0, "internal fatal error") }
                 // TODO: send arguments to toolset
         } else {
@@ -104,7 +104,7 @@ func internalBuild(p *parser, args []string) string {
         }
 
         if !(m.built || m.toolset.buildModule(p, args)) {
-                errorf(0, "failed building `%v' via `%v'", m.name, m.toolset)
+                p.stepLineBack(); errorf(0, "failed building `%v' via `%v'", m.name, m.toolset)
         } else {
                 m.built = true
         }

@@ -1,4 +1,5 @@
 # -*- makefile -*-
+# PLATFORM=android-10
 $(module foo_androidsdk_apk, android-sdk, apk)
 
 $(info java $(this.sources))
