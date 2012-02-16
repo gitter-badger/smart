@@ -24,7 +24,7 @@ func init() {
                 androidsdk = filepath.Dir(filepath.Dir(c))
         } else {
                 if androidsdk = os.Getenv("ANDROIDSDK"); androidsdk == "" {
-                        fmt.Printf("error: %v\n", e)
+                        fmt.Printf("can't locate Android SDK: %v\n", e)
                 }
         }
 }
