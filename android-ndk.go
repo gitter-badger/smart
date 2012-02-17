@@ -26,9 +26,9 @@ type _androidndk struct {
         _gcc
 }
 
-func (ndk *_androidndk) toolchainBin() string {
+func (ndk *_androidndk) toolchain() string {
         toolchain := "arm-linux-androideabi-4.4.3"
-        return filepath.Join(androidndk, "toolchains", toolchain, "prebuilt/linux-x86/bin")
+        return filepath.Join(androidndk, "toolchains", toolchain, "prebuilt/linux-x86")
 }
 
 func (ndk *_androidndk) setupModule(p *parser, args []string) bool {
@@ -44,7 +44,7 @@ func (ndk *_androidndk) setupModule(p *parser, args []string) bool {
                 ld = c
         }
 
-        bin := ndk.toolchainBin()
+        bin := filepath.Join(ndk.toolchain(), "bin")
         switch ld.name {
         case "ld":
                 ld.path = filepath.Join(bin, "arm-linux-androideabi-ld")
@@ -67,7 +67,7 @@ func (ndk *_androidndk) buildModule(p *parser, args []string) bool {
                 ld = l
         }
 
-        bin := ndk.toolchainBin()
+        bin := filepath.Join(ndk.toolchain(), "bin")
         switch ld.name {
         case "gcc":
                 ld.path = filepath.Join(bin, "arm-linux-androideabi-gcc")
