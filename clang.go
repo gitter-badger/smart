@@ -11,7 +11,7 @@ func init() {
 type _clang struct {
 }
 
-func (clang *_clang) setupModule(p *parser, args []string) bool {
+func (clang *_clang) setupModule(p *parser, args []string, vars map[string]string) bool {
         return true
 }
 

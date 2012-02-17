@@ -12,6 +12,7 @@ func init() {
 }
 
 var gccSourcePatterns = []*filerule{
+        { "asm", ^os.ModeType, `\.(s|S)$` },
         { "c", ^os.ModeType, `\.(c)$` },
         { "c++", ^os.ModeType, `\.(cpp|cxx|cc|CC|C)$` },
         { "header", ^os.ModeType, `\.(h)$` },
@@ -20,7 +21,7 @@ var gccSourcePatterns = []*filerule{
 type _gcc struct {
 }
 
-func (gcc *_gcc) setupModule(p *parser, args []string) bool {
+func (gcc *_gcc) setupModule(p *parser, args []string, vars map[string]string) bool {
         var m *module
         if m = p.module; m == nil {
                 p.stepLineBack(); errorf(0, "no module")
@@ -84,6 +85,18 @@ func (gcc *_gcc) buildModule(p *parser, args []string) bool {
                 p.stepLineBack(); errorf(0, "no sources for `%v'", p.module.name)
         }
 
+        ls := func(name, prefix string) (l []string) {
+                for _, s := range strings.Split(p.call(name), " ") {
+                        if strings.HasPrefix(s, prefix) { s = s[len(prefix):] }
+                        if s == "" { continue }
+                        l = append(l, prefix, s)
+                }
+                return
+        }
+        includes := ls("this.includes", "-I")
+        libdirs := ls("this.libdirs", "-L")
+        libs := ls("this.libs", "-l")
+
         for _, src := range sources {
                 a, asrc := newAction(src + ".o", nil), newAction(src, nil)
 
@@ -98,16 +111,19 @@ func (gcc *_gcc) buildModule(p *parser, args []string) bool {
                         errorf(0, fmt.Sprintf("unknown source `%v'", src))
                 }
 
+                var c *gccCommand
                 switch fr.name {
+                case "asm":
+                        c = gccNewCommand("as", "-c")
                 case "c":
-                        a.command = gccNewCommand("gcc", "-c")
+                        c = gccNewCommand("gcc", "-c")
                         if ld.name == "ld" { ld.name = "gcc" }
                 case "c++":
-                        a.command = gccNewCommand("g++", "-c")
+                        c = gccNewCommand("g++", "-c")
                         if ld.name != "g++" && ld.name != "ar" { ld.name = "g++" }
                 }
-
-                a.prequisites = append(a.prequisites, asrc)
+                c.args, c.libdirs, c.libs = append(c.args, includes...), libdirs, libs
+                a.command, a.prequisites = c, append(a.prequisites, asrc)
                 m.action.prequisites = append(m.action.prequisites, a)
         }
 
@@ -119,12 +135,13 @@ func (gcc *_gcc) buildModule(p *parser, args []string) bool {
 type gccCommand struct {
         execCommand
         args []string
+        libdirs, libs []string
 }
 
 func gccNewCommand(name string, args ...string) *gccCommand {
         return &gccCommand{
                 execCommand{ name: name, },
-                args,
+                args, []string{}, []string{},
         }
 }
 
@@ -132,12 +149,15 @@ func (c *gccCommand) execute(targets []string, prequisites []string) bool {
         var args []string
         var target = targets[0]
 
-        if c.name == "ar" {
+        if c.name == "ar" || strings.HasSuffix(c.name, "-ar") {
                 args = append(c.args, target)
         } else {
                 args = append([]string{ "-o", target, }, c.args...)
         }
 
         args = append(args, prequisites...)
+        if 0 < len(c.libs) {
+                args = append(args, append(c.libdirs, c.libs...)...)
+        }
         return c.run(target, args...)
 }

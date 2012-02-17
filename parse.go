@@ -76,8 +76,8 @@ func (p *parser) getModuleSourceActions(func f(a *action)) (sources []*action) {
 }
 */
 
-func (p *parser) location() location {
-        return location{ &p.file, p.lineno, p.colno }
+func (p *parser) location() *location {
+        return &location{ &p.file, p.lineno, p.colno }
 }
 
 func (p *parser) stepLine() {
@@ -464,7 +464,7 @@ func (p *parser) setVariable(name, value string) (v *variable) {
         
         v.name = name
         v.value = value
-        v.loc = p.location()
+        v.loc = *p.location()
 
         //fmt.Printf("%v %s = %s\n", &v.loc, name, value)
         return

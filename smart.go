@@ -9,6 +9,7 @@ import (
         "os/exec"
         "path/filepath"
         "regexp"
+        "runtime"
         "strings"
         "sort"
 )
@@ -51,38 +52,14 @@ func errorf(num int, f string, a ...interface{}) {
 
 // An toolset represents a toolchain like gcc or utilities.
 type toolset interface {
-        setupModule(p *parser, args []string) bool
+        setupModule(p *parser, args []string, vars map[string]string) bool
         buildModule(p *parser, args []string) bool
-        /*
-        processFile(dname string, fi os.FileInfo)
-        updateAll()
-        cleanAll()
-        */
 }
 
 type toolsetStub struct {
         name string
         toolset toolset
 }
-
-/*
-func (stub *toolsetStub) processFile(dname string, fi os.FileInfo) {
-        stub.toolset.processFile(dname, fi)
-}
-
-func (stub *toolsetStub) auto(cmds []string) {
-        for _, cmd := range cmds {
-                switch cmd {
-                case "update":
-                        stub.toolset.updateAll()
-                case "clean":
-                        stub.toolset.cleanAll()
-                default:
-                        fmt.Printf("smart:0: unknown command '%v'\n", cmd)
-                }
-        }
-}
-*/
 
 func registerToolset(name string, ts toolset) {
         if _, has := toolsets[name]; has {
@@ -106,6 +83,7 @@ type execCommand struct {
         precall func() bool
         postcall func(*bytes.Buffer)
         cmd func() bool
+        ia32 bool
 }
 
 func (c *execCommand) run(target string, args ...string) bool {
@@ -145,12 +123,25 @@ func (c *execCommand) run(target string, args ...string) bool {
                         return false
                 }
 
+                ia32Command := func() {
+                        switch runtime.GOARCH {
+                        case "amd64":
+                                cmd = exec.Command("linux32", append([]string{ cmd.Path }, args...)...)
+                                cmd.Stdout, cmd.Stderr = &buf, &buf
+                                //fmt.Printf("%v\n", strings.Join(cmd.Args, " "))
+                        }
+                }
+
+                if c.ia32 && runtime.GOOS == "linux" {
+                        ia32Command()
+                }
+
                 if err := cmd.Run(); err == nil {
                         updated = true
                 } else {
-                        fmt.Printf("smart:0: %s (%v):\n", c.name, err)
+                        fmt.Printf("smart:0: %v:\n", err)
                         fmt.Printf("%v\n", buf.String())
-                        errorf(0, "%v", err)
+                        errorf(0, "failed executing command \"%v\"", c.name)
                 }
 
                 if c.postcall != nil {

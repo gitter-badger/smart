@@ -62,7 +62,19 @@ func internalModule(p *parser, args []string) string {
         }
 
         p.setModule(m)
-        toolset.setupModule(p, args[3:])
+
+        // parsed arguments in forms like "PLATFORM=android-9"
+        var vars = map[string]string{}
+        for _, a := range args[3:] {
+                a = strings.TrimSpace(a)
+                i := strings.Index(a, "=")
+                switch {
+                case 0 < i:
+                        vars[a[0:i]] = strings.TrimSpace(a[i+1:])
+                }
+        }
+
+        toolset.setupModule(p, args[3:], vars)
         return ""
 }
 
