@@ -51,7 +51,7 @@ func (sdk *_androidsdk) setupModule(p *parser, args []string) bool {
         return true
 }
 
-func androidsdkGetResources(ds ...string) (as []*action) {
+func (sdk *_androidsdk) getResources(ds ...string) (as []*action) {
         for _, d := range ds {
                 traverse(d, func(fn string, fi os.FileInfo) bool {
                         if !strings.HasSuffix(fn, "~") && !fi.IsDir() {
@@ -81,7 +81,7 @@ func (sdk *_androidsdk) buildModule(p *parser, args []string) bool {
         if hasAssets { gen.assets = filepath.Join(gen.d, "assets") }
         if hasRes || hasAssets {
                 c := &androidsdkGenR{ androidsdkGen:gen }
-                a = newInAction("R.java", c, androidsdkGetResources(gen.res, gen.assets)...)
+                a = newInAction("R.java", c, sdk.getResources(gen.res, gen.assets)...)
         }
 
         if hasSrc {
