@@ -12,7 +12,6 @@ import (
 )
 
 var androidsdk = "/android-sdk-linux_x86"
-var androidPlatform = "android-10"
 var androidsdkSlientSome = false
 
 func init() {
@@ -32,7 +31,7 @@ func init() {
 type _androidsdk struct {
 }
 
-func (sdk *_androidsdk) setupModule(p *parser, args []string) bool {
+func (sdk *_androidsdk) setupModule(p *parser, args []string, vars map[string]string) bool {
         var m *module
         if m = p.module; m == nil {
                 p.stepLineBack(); errorf(0, "no module")
@@ -46,8 +45,13 @@ func (sdk *_androidsdk) setupModule(p *parser, args []string) bool {
                 p.stepLineBack(); errorf(0, fmt.Sprintf("can't find Java sources in `%v'", d))
         }
 
-        v := p.setVariable("this.sources", strings.Join(sources, " "))
-        v.loc = location{file:v.loc.file, lineno:p.lineno-1, colno:p.prevColno+1 }
+        var platform string
+        if s, ok := vars["PLATFORM"]; ok { platform = s } else { platform = "android-10" }
+
+        var v *variable
+        loc := location{ file:&(p.file), lineno:p.lineno-1, colno:p.prevColno+1 }
+        v = p.setVariable("this.platform", platform); v.loc = loc
+        v = p.setVariable("this.sources", strings.Join(sources, " ")); v.loc = loc
         return true
 }
 
@@ -70,6 +74,11 @@ func (sdk *_androidsdk) buildModule(p *parser, args []string) bool {
         }
 
         gen := &androidsdkGen{ out:filepath.Join("out", m.name), d:filepath.Dir(p.file) }
+        if v := strings.TrimSpace(p.call("this.platform")); v != "" {
+                gen.platform = v
+        } else {
+                errorf(0, "unkown platform for `%v'", m.name)
+        }
 
         var prequisites []*action
         var a *action
@@ -127,7 +136,7 @@ func (sdk *_androidsdk) buildModule(p *parser, args []string) bool {
 }
 
 type androidsdkGen struct{
-        out, d, res, assets string
+        platform, out, d, res, assets string
 }
 type androidsdkGenR struct{
         *androidsdkGen
@@ -157,7 +166,7 @@ func (ic *androidsdkGenR) execute(targets []string, prequisites []string) bool {
                 "package", "-m",
                 "-J", filepath.Join(ic.out, "res"),
                 "-M", filepath.Join(ic.d, "AndroidManifest.xml"),
-                "-I", filepath.Join(androidsdk, "platforms", androidPlatform, "android.jar"),
+                "-I", filepath.Join(androidsdk, "platforms", ic.platform, "android.jar"),
         }
 
         if ic.res != "" { args = append(args, "-S", ic.res) }
@@ -198,7 +207,7 @@ func (ic *androidsdkGenClasses) targets(prequisites []*action) (targets []string
         return
 }
 func (ic *androidsdkGenClasses) execute(targets []string, prequisites []string) bool {
-        classpath := filepath.Join(androidsdk, "platforms", androidPlatform, "android.jar")
+        classpath := filepath.Join(androidsdk, "platforms", ic.platform, "android.jar")
         if 0 < len(ic.classpath) {
                 classpath += ":" + strings.Join(ic.classpath, ":")
         }
@@ -323,7 +332,7 @@ func (ic *androidsdkGenApk) execute(targets []string, prequisites []string) bool
 
         args = []string{ "package", "-u",
                 "-M", filepath.Join(ic.d, "AndroidManifest.xml"),
-                "-I", filepath.Join(androidsdk, "platforms", androidPlatform, "android.jar"),
+                "-I", filepath.Join(androidsdk, "platforms", ic.platform, "android.jar"),
         }
         if ic.res != "" { args = append(args, "-S", ic.res) }
         if ic.assets != "" { args = append(args, "-A", ic.assets) }
@@ -390,7 +399,7 @@ func (ic *androidsdkGenJar) execute(targets []string, prequisites []string) bool
 
         args := []string{ "package", "-u",
                 "-M", filepath.Join(ic.d, "AndroidManifest.xml"),
-                "-I", filepath.Join(androidsdk, "platforms", androidPlatform, "android.jar"),
+                "-I", filepath.Join(androidsdk, "platforms", ic.platform, "android.jar"),
         }
         if ic.res != "" { args = append(args, "-S", ic.res) }
         if ic.assets != "" { args = append(args, "-A", ic.assets) }
