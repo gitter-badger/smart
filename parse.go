@@ -334,7 +334,7 @@ func (p *parser) expand(str string) string {
                 var t bytes.Buffer
                 if rr == 0 {
                         t.WriteRune(r)
-                        out = p.call(t.String(), args)
+                        out = p.call(t.String(), args...)
                         return
                 }
 
@@ -378,7 +378,7 @@ func (p *parser) expand(str string) string {
                                         t.Reset()
                                 }
                                 //fmt.Printf("expcall: %v, %v, %v, %v\n", name, string(s[0:rs]), string(s[rs:]), rs)
-                                out, l = p.call(name, args), l + rs
+                                out, l = p.call(name, args...), l + rs
                                 return /* do not "break" */
                         }
 
@@ -408,7 +408,7 @@ func (p *parser) expand(str string) string {
         return buf.String()
 }
 
-func (p *parser) call(name string, args []string) string {
+func (p *parser) call(name string, args ...string) string {
         //fmt.Printf("call: %v %v\n", name, args)
 
         if f, ok := internals[name]; ok {
