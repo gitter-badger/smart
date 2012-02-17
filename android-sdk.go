@@ -73,12 +73,12 @@ func (sdk *_androidsdk) buildModule(p *parser, args []string) bool {
                 p.stepLineBack(); errorf(0, "no module")
         }
 
-        gen := &androidsdkGen{ out:filepath.Join("out", m.name), d:filepath.Dir(p.file) }
-        if v := strings.TrimSpace(p.call("this.platform")); v != "" {
-                gen.platform = v
-        } else {
+        platform := strings.TrimSpace(p.call("this.platform"))
+        if platform == "" {
                 errorf(0, "unkown platform for `%v'", m.name)
         }
+
+        gen := &androidsdkGen{ platform:platform, out:filepath.Join("out", m.name), d:filepath.Dir(p.file) }
 
         var prequisites []*action
         var a *action
