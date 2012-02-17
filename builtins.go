@@ -6,19 +6,19 @@ import (
         "strings"
 )
 
-var internals = map[string]func(p *parser, args []string) string {
-        "info": internalInfo,
-        "module": internalModule,
-        "build": internalBuild,
-        "use": internalUse,
+var builtins = map[string]func(p *parser, args []string) string {
+        "info": builtinInfo,
+        "module": builtinModule,
+        "build": builtinBuild,
+        "use": builtinUse,
 }
 
-func internalInfo(p *parser, args []string) string {
+func builtinInfo(p *parser, args []string) string {
         fmt.Printf("%v\n", strings.Join(args, " "))
         return ""
 }
 
-func internalModule(p *parser, args []string) string {
+func builtinModule(p *parser, args []string) string {
         var name, toolsetName, kind string
         if 0 < len(args) { name = strings.TrimSpace(args[0]) }
         if 1 < len(args) { toolsetName = strings.TrimSpace(args[1]) }
@@ -32,7 +32,7 @@ func internalModule(p *parser, args []string) string {
         if ts, ok := toolsets[toolsetName]; !ok {
                 p.lineno -= 1; p.colno = p.prevColno + 1
                 errorf(0, "toolset `%v' unknown", toolsetName)
-                if ts == nil { errorf(0, "internal fatal error") }
+                if ts == nil { errorf(0, "builtin fatal error") }
                 // TODO: send arguments to toolset
         } else {
                 toolset = ts.toolset
@@ -78,7 +78,7 @@ func internalModule(p *parser, args []string) string {
         return ""
 }
 
-func internalBuild(p *parser, args []string) string {
+func builtinBuild(p *parser, args []string) string {
         var m *module
         if m = p.module; m == nil {
                 errorf(0, "no module defined")
@@ -123,7 +123,7 @@ func internalBuild(p *parser, args []string) string {
         return ""
 }
 
-func internalUse(p *parser, args []string) string {
+func builtinUse(p *parser, args []string) string {
         if m := p.module; m == nil {
                 errorf(0, "no module defined")
         }

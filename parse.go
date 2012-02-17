@@ -397,7 +397,7 @@ func (p *parser) expand(str string) string {
 func (p *parser) call(name string, args ...string) string {
         //fmt.Printf("call: %v %v\n", name, args)
 
-        if f, ok := internals[name]; ok {
+        if f, ok := builtins[name]; ok {
                 // All arguments should be expended.
                 for i, _ := range args { args[i] = p.expand(args[i]) }
                 return f(p, args)
