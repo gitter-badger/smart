@@ -238,7 +238,6 @@ parse_loop: for {
                 if _, err = p.skipSpace(false); err != nil { break }
 
                 if w, del, err = p.getLine("=:\n"); err != nil && err != io.EOF { break }
-                if _, err = p.skipRune(del); err != nil { break parse_loop }
 
                 if w = strings.TrimSpace(w); w == "" {
                         p.stepCol(); errorf(0, fmt.Sprintf("illegal: %v", w))
@@ -246,22 +245,25 @@ parse_loop: for {
 
                 w = p.expand(w)
 
+                // if it's the new line, we stop here
+                if del == '\n' {
+                        if w = strings.TrimSpace(w); w != "" {
+                                p.colno -= utf8.RuneCount([]byte(w)) + 1
+                                errorf(0, fmt.Sprintf("illegal: '%v'", w))
+                        }
+                        continue
+                }
+
+                // skip the delimiter
+                if _, err = p.skipRune(del); err != nil { break parse_loop }
+
                 var rr rune
                 if rr, _, err = p.getRune(); err != nil { break } else {
                         if strings.IndexRune("=:", rr) == -1 { p.ungetRune() }
                 }
 
-                // check this before skipSpace to avoid skipping the comment
-                if del == '\n' {
-                        if w = strings.TrimSpace(w); w != "" {
-                                p.colno -= utf8.RuneCount([]byte(w)) + 1
-                                errorf(0, fmt.Sprintf("illegal: %v", w))
-                        }
-                        s = ""
-                } else {
-                        if _, err = p.skipSpace(true); err != nil && err != io.EOF { break }
-                        if s, _, err = p.getLine("\n"); err != nil && err != io.EOF { break }
-                }
+                if _, err = p.skipSpace(true); err != nil && err != io.EOF { break }
+                if s, _, err = p.getLine("\n"); err != nil && err != io.EOF { break }
 
                 switch del {
                 case '=': //print("parse: "+w+" = "+s+"\n")

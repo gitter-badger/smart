@@ -30,7 +30,7 @@ func builtinModule(p *parser, args []string) string {
 
         var toolset toolset
         if ts, ok := toolsets[toolsetName]; !ok {
-                p.lineno -= 1; p.colno = p.prevColno + 1
+                //p.lineno -= 1; p.colno = p.prevColno + 1
                 errorf(0, "toolset `%v' unknown", toolsetName)
                 if ts == nil { errorf(0, "builtin fatal error") }
                 // TODO: send arguments to toolset
@@ -42,16 +42,16 @@ func builtinModule(p *parser, args []string) string {
         var has bool
         if m, has = modules[name]; !has {
                 m = &module{
-                        name: name,
-                        toolset: toolset,
-                        kind: kind,
-                        dir: filepath.Dir(p.file),
-                        location: location{ &p.file, p.lineno-1, p.prevColno+1 },
-                        variables: make(map[string]*variable, 128),
+                name: name,
+                toolset: toolset,
+                kind: kind,
+                dir: filepath.Dir(p.file),
+                location: *p.location(),
+                variables: make(map[string]*variable, 128),
                 }
                 modules[m.name] = m
         } else if (m.toolset != nil && toolsetName != "") && (m.kind != "" || kind != "") {
-                p.lineno -= 1; p.colno = p.prevColno + 1
+                //p.lineno -= 1; p.colno = p.prevColno + 1
                 fmt.Printf("%v: previous module declaration `%v'\n", &(m.location), m.name)
                 errorf(0, fmt.Sprintf("module already been defined as \"%v, $v\"", m.toolset, m.kind))
         }
@@ -97,7 +97,7 @@ func builtinBuild(p *parser, args []string) string {
                                 u.built = true
                                 num += 1
                         } else {
-                                fmt.Printf("%v:%v:%v: dependency `%v' not built\n", p.file, p.lineno-1, p.prevColno+1, u.name)
+                                fmt.Printf("%v: dependency `%v' not built\n", p.location(), u.name)
                         }
                 }
                 return
@@ -137,7 +137,7 @@ func builtinUse(p *parser, args []string) string {
                         m = &module{
                         name: a,
                         dir: filepath.Dir(p.file),
-                        location: location{ &p.file, p.lineno, p.colno },
+                        location: *p.location(),
                         variables: make(map[string]*variable, 128),
                         usedBy: []*module{ p.module },
                         }
