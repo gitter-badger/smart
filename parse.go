@@ -28,6 +28,7 @@ type variable struct {
         name string
         value string
         loc location
+        readonly bool
 }
 
 type parser struct {
@@ -434,8 +435,10 @@ func (p *parser) call(name string, args ...string) string {
 }
 
 func (p *parser) setVariable(name, value string) (v *variable) {
+        loc := location{ file:&(p.file), lineno:p.lineno, colno:p.colno+1 }
+
         if name == "this" {
-                fmt.Printf("%s:%v:%v:warning: ignore attempts on \"this\"\n", p.file, p.lineno, p.colno+1)
+                fmt.Printf("%v:warning: ignore attempts on \"this\"\n", &loc)
                 return
         }
 
@@ -444,7 +447,7 @@ func (p *parser) setVariable(name, value string) (v *variable) {
                 vars = p.module.variables
         }
         if vars == nil {
-                fmt.Printf("%s:%v:%v:warning: no \"this\" module\n", p.file, p.lineno, p.colno+1)
+                fmt.Printf("%v:warning: no \"this\" module\n", &loc)
                 return
         }
 
@@ -453,6 +456,12 @@ func (p *parser) setVariable(name, value string) (v *variable) {
                 v = &variable{}
                 vars[name] = v
         }
+
+        if v.readonly {
+                fmt.Printf("%v:warning: `%v' is readonly\n", &loc, name)
+                return
+        }
+        
         v.name = name
         v.value = value
         v.loc = p.location()
