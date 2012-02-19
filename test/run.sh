@@ -2,10 +2,10 @@
 set -e
 
 out="./out"
-smart="../smart"
+smart="$(dir $PWD)/smart"
 
 [[ -f ../smart.go && -f ../main.go && -f ../build.sh ]] || {
-    echo $BASH_SCRIPT:$LINENO "not in test subdir"
+    echo $BASH_SOURCE:$LINENO "not in test subdir"
     exit -1
 }
 
@@ -19,19 +19,48 @@ needs_build() {
 }
 
 enter() {
-    local D=$1
-    cd $D && echo "smart: Entering directory \`$D'"
+    cd $1 && echo "smart: Entering directory \`$1'"
 }
 
 leave() {
-    local D=$1
-    cd - > /dev/null && echo "smart: Leaving directory \`$D'"
+    cd - > /dev/null && echo "smart: Leaving directory \`$1'"
 }
 
 needs_build || {
     enter ..
-    ./build.sh
+    #./build.sh
     leave ..
+}
+
+run() {
+    local D=$1
+    local e=""
+    local f
+    for f in $D/* $D/.* ; do
+        case $f in
+            */.|*/..|*/out|*/src|*/res|./run.sh)
+                #echo "ignore: $f"
+                ;;
+            */.smart)
+                #echo $*/.smart
+                ;;
+            */run.sh)
+                enter $*
+                (. run.sh) || e="$BASH_SOURCE:$LINENO: failed '$f'"
+                leave $*
+                if [[ "x${e}x" != "xx" ]]; then
+                    echo $e
+                fi
+                ;;
+            *)
+                [[ -d $f ]] && {
+                    #enter $f
+                    #leave $f
+                    run $f
+                }
+                ;;
+        esac
+    done
 }
 
 check() {
@@ -68,5 +97,6 @@ checkfile() {
     }
 }
 
-$smart -V
+PATH="$(dirname $PWD):${PATH##*/smart-build/bin}"
+run .
 check .
