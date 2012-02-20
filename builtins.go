@@ -7,10 +7,19 @@ import (
 )
 
 var builtins = map[string]func(p *parser, args []string) string {
+        "dir": builtinDir,
         "info": builtinInfo,
         "module": builtinModule,
         "build": builtinBuild,
         "use": builtinUse,
+}
+
+func builtinDir(p *parser, args []string) string {
+        var ds []string
+        for _, a := range args {
+                ds = append(ds, filepath.Dir(a))
+        }
+        return strings.Join(ds, " ")
 }
 
 func builtinInfo(p *parser, args []string) string {
@@ -50,6 +59,7 @@ func builtinModule(p *parser, args []string) string {
                 variables: make(map[string]*variable, 128),
                 }
                 modules[m.name] = m
+                moduleOrderList = append(moduleOrderList, m)
         } else if (m.toolset != nil && toolsetName != "") && (m.kind != "" || kind != "") {
                 //p.lineno -= 1; p.colno = p.prevColno + 1
                 fmt.Printf("%v: previous module declaration `%v'\n", &(m.location), m.name)
@@ -103,20 +113,27 @@ func builtinBuild(p *parser, args []string) string {
                 return
         }
 
-        if buildUsing(m) != len(m.using) {
-                //errorf(0, "not all dependencies built for `%v'", m.name)
-        }
-
         if m.toolset == nil {
                 errorf(0, "no toolset for `%v'", m.name)
         }
 
-        if *flag_v {
+        if buildUsing(m) != len(m.using) {
+                //errorf(0, "not all dependencies built for `%v'", m.name)
+
+                // not all dependencies built, pend it to the back in the build list
+                moduleBuildList = append(moduleBuildList, pendedBuild{m, p, args})
+                if *flag_v || *flag_V {
+                        fmt.Printf("smart: build `%v' (pended)\n", m.name)
+                }
+                return ""
+        }
+
+        if *flag_v || *flag_V {
                 fmt.Printf("smart: build `%v'\n", m.name)
         }
 
         if !(m.built || m.toolset.buildModule(p, args)) {
-                p.stepLineBack(); errorf(0, "failed building `%v' via `%v'", m.name, m.toolset)
+                errorf(0, "failed building `%v' via `%v'", m.name, m.toolset)
         } else {
                 m.built = true
         }
@@ -128,11 +145,16 @@ func builtinUse(p *parser, args []string) string {
                 errorf(0, "no module defined")
         }
 
+        if p.module.toolset == nil {
+                errorf(0, "no toolset for `%v'", p.module.name)
+        }
+
         for _, a := range args {
                 a = strings.TrimSpace(a)
                 if m, ok := modules[a]; ok {
                         p.module.using = append(p.module.using, m)
                         m.usedBy = append(m.usedBy, p.module)
+                        p.module.toolset.useModule(p, m)
                 } else {
                         m = &module{
                         name: a,
@@ -143,6 +165,7 @@ func builtinUse(p *parser, args []string) string {
                         }
                         p.module.using = append(p.module.using, m)
                         modules[a] = m
+                        p.module.toolset.useModule(p, m)
                 }
         }
         return ""

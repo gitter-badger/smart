@@ -57,7 +57,7 @@ run() {
                 fi
                 leave $*
                 if [[ "x${e}x" != "xx" ]]; then
-                    echo "----------"
+                    #echo "----------"
                     echo $e
                 fi
                 ;;
@@ -90,7 +90,7 @@ check() {
                 rm -f temp.txt
                 leave $*
                 if [[ "x${e}x" != "xx" ]]; then
-                    echo "----------"
+                    #echo "----------"
                     echo $e
                 fi
                 ;;

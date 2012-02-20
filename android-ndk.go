@@ -54,26 +54,25 @@ type _androidndk struct {
         _gcc
         root string
         toolchainByAbi map[string]string
+        modules map[string]*module
 }
 
-func (ndk *_androidndk) addToolchain(d string) bool {
-        toolchain := filepath.Base(d)
-        if toolchain == "" {
-                fmt.Printf("error: toolchain: %v\n", d)
-                return false
-        }
-
-        fn := filepath.Join(d, "config.mk")
+func (ndk *_androidndk) parseFile(fn string, vars map[string]string) (p *parser, err error) {
         f , err := os.Open(fn)
         if err != nil {
-                fmt.Printf("error: toolchain: %v\n", err)
-                return false
+                return
         }
 
-        p := &parser{
+        p = &parser{
                 file: fn,
                 in: bufio.NewReader(f),
                 variables: make(map[string]*variable, 128),
+        }
+
+        if vars != nil {
+                for n, v := range vars {
+                        p.setVariable(n, v)
+                }
         }
 
         defer func() {
@@ -89,6 +88,23 @@ func (ndk *_androidndk) addToolchain(d string) bool {
         }()
 
         if err = p.parse(); err != nil {
+                return
+        }
+
+        return
+}
+
+func (ndk *_androidndk) addToolchain(d string) bool {
+        toolchain := filepath.Base(d)
+        if toolchain == "" {
+                fmt.Printf("error: toolchain: %v\n", d)
+                return false
+        }
+
+        fn := filepath.Join(d, "config.mk")
+        p, err := ndk.parseFile(fn, nil)
+        if err != nil {
+                fmt.Printf("error: toolchain: %v\n", err)
                 return false
         }
 
@@ -130,6 +146,10 @@ func (ndk *_androidndk) setupModule(p *parser, args []string, vars map[string]st
         }
 
         var m = p.module
+        if _, ok := ndk.modules[p.module.name]; ok {
+                //errorf(0, "module `%v' already defined in $ANDROIDNDK/sources", m.name)
+        }
+
         var ld *gccCommand
         if c, ok := m.action.command.(*gccCommand); !ok {
                 errorf(0, "not a gcc command")
@@ -206,4 +226,47 @@ func (ndk *_androidndk) buildModule(p *parser, args []string) bool {
         }
         setCommands(m.action)
         return true
+}
+
+func (ndk *_androidndk) loadModule(fn, ndksrc, subdir string) (ok bool) {
+        p, err := ndk.parseFile(fn, map[string]string{
+                "my-dir": filepath.Join(ndksrc, subdir),
+        })
+        if err != nil {
+                errorf(0, "failed to load module resident in $ANDROIDNDK/sources/%v", subdir)
+        }
+
+        fmt.Printf("ndk: %v, %v\n", subdir, p.call("LOCAL_PATH"))
+        return false
+}
+
+func (ndk *_androidndk) loadModules() (ok bool) {
+        ndksrc := filepath.Join(ndk.root, "sources")
+        err := traverse(ndksrc, func(fn string, fi os.FileInfo) bool {
+                if !fi.IsDir() && fi.Name() == "Android.mk" {
+                        if ok = ndk.loadModule(fn, ndksrc, filepath.Dir(fn[len(ndksrc)+1:])); !ok {
+                                //return false
+                        }
+                }
+                return true
+        })
+        if err != nil {
+                return false
+        }
+        return ok
+}
+
+func (ndk *_androidndk) useModule(p *parser, m *module) bool {
+        if !(m.toolset == nil && m.kind == "") {
+                //errorf(0, "no toolset for `%v'", p.module.name)
+                return false
+        }
+
+        if ndk.modules == nil && !ndk.loadModules() {
+                errorf(0, "failed to load modules resident in $ANDROIDNDK/sources")
+        }
+
+        fmt.Printf("use: %v by %v\n", m.name, p.module.name)
+
+        return false
 }

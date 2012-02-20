@@ -139,6 +139,10 @@ func (gcc *_gcc) buildModule(p *parser, args []string) bool {
         return m.action != nil
 }
 
+func (gcc *_gcc) useModule(p *parser, m *module) bool {
+        return false
+}
+
 type gccCommand struct {
         execCommand
         args []string

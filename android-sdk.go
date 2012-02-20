@@ -135,6 +135,10 @@ func (sdk *_androidsdk) buildModule(p *parser, args []string) bool {
         return true
 }
 
+func (sdk *_androidsdk) useModule(p *parser, m *module) bool {
+        return false
+}
+
 type androidsdkGen struct{
         platform, out, d, res, assets string
 }

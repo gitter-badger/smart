@@ -54,6 +54,7 @@ func errorf(num int, f string, a ...interface{}) {
 type toolset interface {
         setupModule(p *parser, args []string, vars map[string]string) bool
         buildModule(p *parser, args []string) bool
+        useModule(p *parser, m *module) bool
 }
 
 type toolsetStub struct {
@@ -361,7 +362,15 @@ type module struct {
         built bool // marked as 'true' if module is built
 }
 
+type pendedBuild struct {
+        m *module
+        p *parser
+        args []string
+}
+
 var modules = map[string]*module{}
+var moduleOrderList []*module
+var moduleBuildList []pendedBuild
 
 func (m *module) update() {
         //fmt.Printf("update: module: %v\n", m.name)
@@ -542,7 +551,19 @@ func run(vars map[string]string, cmds []string) {
                 // ...
         }
 
-        for _, m := range modules {
+        var mb = map[string]bool{}
+        for 0 < len(moduleBuildList) {
+                i := &moduleBuildList[0]
+                moduleBuildList = moduleBuildList[1:]
+
+                if v, ok := mb[i.m.name]; ok && v { continue }
+                fmt.Printf("smart: rebuild `%v'\n", i.m.name)
+                i.p.module = i.m
+                builtinBuild(i.p, i.args)
+                mb[i.m.name] = true
+        }
+
+        for _, m := range moduleOrderList {
                 m.update()
         }
 }
