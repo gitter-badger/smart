@@ -49,8 +49,18 @@ run() {
                 #echo "$BASH_SOURCE:$LINENO:info: $*/run.sh"
                 enter $*
                 rm -rf out
-                (. run.sh) || e="$BASH_SOURCE:$LINENO: failed '$f'"
+                if !(. run.sh); then
+                    e="$BASH_SOURCE:$LINENO: failed '$f'"
+                fi
                 if [[ "x${e}x" == "xx" ]]; then
+                    if [[ -f temp.txt && -f expect.txt ]]; then
+                        if ! diff=$(diff temp.txt expect.txt); then
+                            echo ".smart:1: unexpected 'smart' output"
+                            echo "========== DIFF begin ========== ($*)"
+                            echo "$diff"
+                            echo "========== DIFF end ============ ($*)"
+                        fi
+                    fi
                     if [[ -f temp.txt && ! -f check.sh ]]; then
                         rm -f temp.txt
                     fi
@@ -134,4 +144,5 @@ start() {
 
 #start .
 #start ./gcc/exe
-start ./android-ndk/shared
+#start ./android-ndk/shared
+start ./grammar
