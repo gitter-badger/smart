@@ -1,0 +1,2 @@
+There should be no errors for this makefile.
+This is another included makefile
