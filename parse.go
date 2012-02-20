@@ -1,13 +1,13 @@
 package smart
 
 import (
-        "bufio"
         "bytes"
         //"errors"
         "fmt"
         "unicode"
         "unicode/utf8"
         "io"
+        "io/ioutil"
         "os"
         "path/filepath"
         //"reflect"
@@ -34,7 +34,8 @@ type variable struct {
 type parser struct {
         module *module
         file string
-        in *bufio.Reader //io.RuneReader
+        s []byte // the content of the file
+        pos int // the current read position
         buf bytes.Buffer // token or word or line accumulator
         stack []string // token stack
         rune rune
@@ -107,22 +108,33 @@ func (p *parser) pop() (w string) {
 }
 
 func (p *parser) getRune() (r rune, rs int, err error) {
-        r, rs, err = p.in.ReadRune()
-        if err != nil { return }
-        if rs == 0 { errorf(-2, "zero reading") }
-        if r == '\n' { p.stepLine() } else { p.stepCol() }
+        r, rs = utf8.DecodeRune(p.s[p.pos:])
+        switch {
+        case rs == 0:
+                errorf(-2, "zero reading")
+        case r == utf8.RuneError:
+                errorf(-2, "bad UTF8 encoding")
+        case r == '\n':
+                p.stepLine()
+        default:
+                p.stepCol()
+        }
         p.rune = r
+        p.pos += rs
         return
 }
 
 func (p *parser) ungetRune() (err error) {
-        if p.lineno == 1 && p.colno <= 1 { return }
-        if err = p.in.UnreadRune(); err != nil { errorf(0, fmt.Sprintf("%v", err)) }
+        if p.pos == 0 { errorf(0, "try to go to the front of beginning") }
+        if p.rune == 0 { errorf(0, "wrong invocation of ungetRune") }
+        //if p.lineno == 1 && p.colno <= 1 { return }
         if p.rune == '\n' {
                 p.lineno, p.colno = p.lineno-1, p.prevColno
         } else {
                 p.colno--
         }
+        p.pos -= utf8.RuneLen(p.rune)
+        p.rune = 0
         return
 }
 
@@ -186,6 +198,7 @@ func (p *parser) skipSpace(inline bool) (bytes int, err error) {
 // getLine read a sequence of rune until delimeters
 func (p *parser) getLine(delimeters string) (s string, del rune, err error) {
         var r rune
+        var sur []rune
         p.buf.Reset()
 main_loop: for {
                 if r, _, err = p.getRune(); err != nil { break }
@@ -216,6 +229,13 @@ main_loop: for {
                                 }
                         }
                         p.ungetRune(); del = '\n'; break main_loop
+                case strings.IndexRune(")}", r) != -1:
+                        if len(sur) == 0 { p.buf.WriteRune(r); break }
+                        if sur[0] == r {
+                                
+                        }
+                case r == '$':
+                        
                 case strings.IndexRune(delimeters, r) != -1:
                         p.ungetRune(); del = r; break main_loop
                 default:
@@ -467,23 +487,32 @@ func (p *parser) setVariable(name, value string) (v *variable) {
         return
 }
 
-func parse(conf string) (err error) {
+func newParser(fn string) (p *parser, err error) {
         var f *os.File
 
-        f, err = os.Open(conf)
+        f, err = os.Open(fn)
         if err != nil {
                 return
         }
 
-        p := &parser{
-                file: conf,
-                in: bufio.NewReader(f),
-                variables: make(map[string]*variable, 128),
+        s, err := ioutil.ReadAll(f)
+        if err != nil {
+                return
         }
 
-        defer func() {
-                f.Close()
+        p = &parser{
+        file: fn, s: s, pos: 0, 
+        variables: make(map[string]*variable, 128),
+        }
 
+        defer f.Close()
+        return
+}
+
+func parse(conf string) (p *parser, err error) {
+        p, err = newParser(conf)
+
+        defer func() {
                 if e := recover(); e != nil {
                         if se, ok := e.(*smarterror); ok {
                                 fmt.Printf("%s:%v:%v: %v\n", conf, p.lineno, p.colno, se)

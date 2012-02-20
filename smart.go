@@ -506,7 +506,7 @@ func processFile(dname string, fi os.FileInfo) bool {
         }
 
         if fi.Name() == ".smart" {
-                if err := parse(dname); err != nil {
+                if _, err := parse(dname); err != nil {
                         errorf(0, "parse: `%v', %v\n", dname, err)
                         return false
                 }

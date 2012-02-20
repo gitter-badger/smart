@@ -1,7 +1,6 @@
 package smart
 
 import (
-        "bufio"
         "fmt"
         "os"
         "os/exec"
@@ -58,16 +57,7 @@ type _androidndk struct {
 }
 
 func (ndk *_androidndk) parseFile(fn string, vars map[string]string) (p *parser, err error) {
-        f , err := os.Open(fn)
-        if err != nil {
-                return
-        }
-
-        p = &parser{
-                file: fn,
-                in: bufio.NewReader(f),
-                variables: make(map[string]*variable, 128),
-        }
+        p , err = newParser(fn)
 
         if vars != nil {
                 for n, v := range vars {
@@ -76,8 +66,6 @@ func (ndk *_androidndk) parseFile(fn string, vars map[string]string) (p *parser,
         }
 
         defer func() {
-                f.Close()
-
                 if e := recover(); e != nil {
                         if se, ok := e.(*smarterror); ok {
                                 fmt.Printf("%v: %v\n", p.location(), se)

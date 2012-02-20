@@ -145,4 +145,4 @@ start() {
 #start .
 #start ./gcc/exe
 #start ./android-ndk/shared
-start ./grammar
+start ./grammar/misc
