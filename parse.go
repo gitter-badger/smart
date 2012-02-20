@@ -108,10 +108,13 @@ func (p *parser) pop() (w string) {
 }
 
 func (p *parser) getRune() (r rune, rs int, err error) {
+        if len(p.s) == p.pos { err = io.EOF; return }
+        if len(p.s) < p.pos { errorf(-2, "over reading (at %v)", p.pos) }
+
         r, rs = utf8.DecodeRune(p.s[p.pos:])
         switch {
         case rs == 0:
-                errorf(-2, "zero reading")
+                errorf(-2, "zero reading (at %v)", p.pos)
         case r == utf8.RuneError:
                 errorf(-2, "bad UTF8 encoding")
         case r == '\n':

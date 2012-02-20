@@ -133,7 +133,7 @@ checkfile() {
 
 start() {
     local D=$1
-    PATH="$(dirname $PWD):${PATH##*/smart-build/bin}"
+    PATH="$(dirname $PWD):/store/open/android-ndk-r7:${PATH##*/smart-build/bin}"
     echo "$BASH_SOURCE:$LINENO:info: =================================================="
     echo "$BASH_SOURCE:$LINENO:info: RUN test cases..."
     run $D
