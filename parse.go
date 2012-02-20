@@ -398,36 +398,36 @@ func (p *parser) expand(str string) string {
 
 func (p *parser) call(name string, args ...string) string {
         //fmt.Printf("call: %v %v\n", name, args)
-        if name == "call" {
+        vars := p.variables
+
+        switch {
+        default:
+                if f, ok := builtins[name]; ok {
+                        // All arguments should be expended.
+                        for i, _ := range args { args[i] = p.expand(args[i]) }
+                        return f(p, args)
+                }
+        case name == "call":
                 if 0 < len(args) {
                         return p.call(args[0], args[1:]...)
                 }
                 return ""
-        }
-
-        if f, ok := builtins[name]; ok {
-                // All arguments should be expended.
-                for i, _ := range args { args[i] = p.expand(args[i]) }
-                return f(p, args)
-        }
-
-        if name == "this" {
+        case name == "this":
                 if p.module != nil {
                         return p.module.name
                 } else {
                         return ""
                 }
-        }
-
-        vars := p.variables
-        if strings.HasPrefix(name, "this.") && p.module != nil {
+        case strings.HasPrefix(name, "this.") && p.module != nil:
                 vars = p.module.variables
         }
+
         if vars != nil {
                 if v, ok := vars[name]; ok {
                         return v.value
                 }
         }
+
         return ""
 }
 
