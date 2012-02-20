@@ -3,3 +3,4 @@
 *.so
 ./foo
 out
+temp.txt

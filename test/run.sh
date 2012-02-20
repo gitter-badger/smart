@@ -2,6 +2,7 @@
 set -e
 
 out="./out"
+exe=""
 smart="$(dir $PWD)/smart"
 
 [[ -f ../smart.go && -f ../main.go && -f ../build.sh ]] || {
@@ -34,30 +35,37 @@ needs_build || {
 
 run() {
     local D=$1
-    local e=""
     local f
     for f in $D/* $D/.* ; do
+        local e=""
         case $f in
             */.|*/..|*/out|*/src|*/res|./run.sh)
-                #echo "ignore: $f"
+                #echo "$BASH_SOURCE:$LINENO:info: ignore $f"
                 ;;
             */.smart)
-                #echo $*/.smart
+                #echo "$BASH_SOURCE:$LINENO:info: $*/.smart"
                 ;;
             */run.sh)
+                #echo "$BASH_SOURCE:$LINENO:info: $*/run.sh"
                 enter $*
+                rm -rf out
                 (. run.sh) || e="$BASH_SOURCE:$LINENO: failed '$f'"
+                if [[ "x${e}x" == "xx" ]]; then
+                    if [[ -f temp.txt && ! -f check.sh ]]; then
+                        rm -f temp.txt
+                    fi
+                fi
                 leave $*
                 if [[ "x${e}x" != "xx" ]]; then
+                    echo "----------"
                     echo $e
                 fi
                 ;;
             *)
-                [[ -d $f ]] && {
-                    #enter $f
-                    #leave $f
+                if [[ -d $f ]]; then
+                    #echo "$BASH_SOURCE:$LINENO:info: $f"
                     run $f
-                }
+                fi
                 ;;
         esac
     done
@@ -65,10 +73,26 @@ run() {
 
 check() {
     local D=$1
+    local f
     for f in $D/* ; do
+        local e=""
         case $f in
-            *check.sh)
-                . $f #$(. $f)
+            */check.sh)
+                enter $*
+                (. check.sh) || e="$BASH_SOURCE:$LINENO: failed '$f'"
+                if [[ "x${e}x" != "xx" ]]; then
+                    if [[ -f temp.txt ]]; then
+                        echo "========== smart output begins ========== ($*)"
+                        cat temp.txt
+                        echo "========== smart output ends ============ ($*)"
+                    fi
+                fi
+                rm -f temp.txt
+                leave $*
+                if [[ "x${e}x" != "xx" ]]; then
+                    echo "----------"
+                    echo $e
+                fi
                 ;;
             *)
                 [[ -d $f ]] && {
@@ -82,21 +106,25 @@ check() {
 checkdir() {
     local L=$1
     local D=$2
-    [[ -d $D ]] || {
+    if ! [[ -d $D ]]; then
         echo "$L: $D not found"
-        #exit -1
-    }
+        return 1
+    fi
 }
 
 checkfile() {
     local L=$1
     local F=$2
-    [[ -f $F ]] || {
+    if ! [[ -f $F ]]; then
         echo "$L: $F not found"
-        #exit -1
-    }
+        return 1
+    fi
 }
 
 PATH="$(dirname $PWD):${PATH##*/smart-build/bin}"
+echo "$BASH_SOURCE:$LINENO:info: =================================================="
+echo "$BASH_SOURCE:$LINENO:info: RUN test cases..."
 run .
+echo "$BASH_SOURCE:$LINENO:info: =================================================="
+echo "$BASH_SOURCE:$LINENO:info: CHECK test cases..."
 check .

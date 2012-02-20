@@ -35,5 +35,5 @@ $(info "$(foo)") # outputs: "foo "
 $(info "$(bar)") # outputs: ""foo "
 $(info "$(baz)") # outputs: "'foo "
 
-#$(use $(sh$ared),$(stat$ic)-$(a$$a))should-emit-error # output: gcc/.smart:34:37: illegal: should-emit-error (0)
-#$(use $(sh$ared),$(stat$ic)-$(a$$a))error
+$(use $(sh$ared),$(stat$ic)-$(a$$a))should-emit-error # output: gcc/.smart:34:37: illegal: should-emit-error (0)
+$(use $(sh$ared),$(stat$ic)-$(a$$a))error # never get to this line
