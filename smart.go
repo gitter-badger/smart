@@ -324,6 +324,30 @@ func newInAction(target string, c incommand, pre ...*action) *action {
         return newAction(target, c, pre...)
 }
 
+func drawSourceTransformActions(sources []string, namecommand func(src string) (string, command)) []*action {
+        var inters []*action
+        if namecommand == nil {
+                errorf(-1, "can't draw source rules (%v)", namecommand)
+        }
+
+        for _, src := range sources {
+                aname, c := namecommand(src)
+                if aname == "" { continue }
+                if aname == src {
+                        errorf(-1, "no intermediate name for `%v'", src)
+                }
+
+                if c == nil {
+                        errorf(0, "no command for `%v'", src)
+                }
+
+                asrc := newAction(src, nil)
+                a := newAction(aname, c, asrc)
+                inters = append(inters, a)
+        }
+        return inters
+}
+
 type module struct {
         dir string
         location location // where does it defined

@@ -29,7 +29,7 @@ leave() {
 
 needs_build || {
     enter ..
-    #./build.sh
+    ./build.sh
     leave ..
 }
 
@@ -121,10 +121,17 @@ checkfile() {
     fi
 }
 
-PATH="$(dirname $PWD):${PATH##*/smart-build/bin}"
-echo "$BASH_SOURCE:$LINENO:info: =================================================="
-echo "$BASH_SOURCE:$LINENO:info: RUN test cases..."
-run .
-echo "$BASH_SOURCE:$LINENO:info: =================================================="
-echo "$BASH_SOURCE:$LINENO:info: CHECK test cases..."
-check .
+start() {
+    local D=$1
+    PATH="$(dirname $PWD):${PATH##*/smart-build/bin}"
+    echo "$BASH_SOURCE:$LINENO:info: =================================================="
+    echo "$BASH_SOURCE:$LINENO:info: RUN test cases..."
+    run $D
+    echo "$BASH_SOURCE:$LINENO:info: =================================================="
+    echo "$BASH_SOURCE:$LINENO:info: CHECK test cases..."
+    check $D
+}
+
+#start .
+#start ./gcc/exe
+start ./android-ndk/shared

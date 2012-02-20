@@ -104,7 +104,7 @@ func builtinBuild(p *parser, args []string) string {
         }
 
         if buildUsing(m) != len(m.using) {
-                errorf(0, "not all dependencies built for `%v'", m.name)
+                //errorf(0, "not all dependencies built for `%v'", m.name)
         }
 
         if m.toolset == nil {

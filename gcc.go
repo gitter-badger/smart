@@ -58,7 +58,7 @@ func (gcc *_gcc) setupModule(p *parser, args []string, vars map[string]string) b
 func (gcc *_gcc) buildModule(p *parser, args []string) bool {
         var m *module
         if m = p.module; m == nil {
-                p.stepLineBack();
+                //p.stepLineBack();
                 errorf(0, "no module")
         }
 
@@ -69,7 +69,8 @@ func (gcc *_gcc) buildModule(p *parser, args []string) bool {
         }
 
         if m.action.command == nil {
-                p.stepLineBack(); errorf(0, "no command for `%v'", p.module.name)
+                //p.stepLineBack();
+                errorf(0, "no command for `%v'", p.module.name)
                 return false
         }
 
@@ -97,9 +98,15 @@ func (gcc *_gcc) buildModule(p *parser, args []string) bool {
         libdirs := ls("this.libdirs", "-L")
         libs := ls("this.libs", "-l")
 
-        for _, src := range sources {
-                a, asrc := newAction(src + ".o", nil), newAction(src, nil)
+        cmdAs := gccNewCommand("as", "-c")
+        cmdGcc := gccNewCommand("gcc", "-c")
+        cmdGxx := gccNewCommand("g++", "-c")
 
+        for _, c := range []*gccCommand{cmdAs, cmdGcc, cmdGxx} {
+                c.args, c.libdirs, c.libs = append(c.args, includes...), libdirs, libs
+        }
+
+        as := drawSourceTransformActions(sources, func(src string) (name string, c command) {
                 var fr *filerule
                 if fi, err := os.Stat(src); err != nil {
                         fr = matchFileName(src, gccSourcePatterns)
@@ -108,24 +115,24 @@ func (gcc *_gcc) buildModule(p *parser, args []string) bool {
                 }
 
                 if fr == nil {
-                        errorf(0, fmt.Sprintf("unknown source `%v'", src))
+                        errorf(0, "unknown source `%v'", src)
+                }
+                
+                switch fr.name {
+                case "asm": c = cmdAs
+                case "c":   c = cmdGcc
+                        if ld.name == "ld" { ld.name = "gcc" }
+                case "c++": c = cmdGxx
+                        if ld.name != "g++" && ld.name != "ar" { ld.name = "g++" }
+                default:
+                        errorf(0, "unknown language for source `%v'", src)
                 }
 
-                var c *gccCommand
-                switch fr.name {
-                case "asm":
-                        c = gccNewCommand("as", "-c")
-                case "c":
-                        c = gccNewCommand("gcc", "-c")
-                        if ld.name == "ld" { ld.name = "gcc" }
-                case "c++":
-                        c = gccNewCommand("g++", "-c")
-                        if ld.name != "g++" && ld.name != "ar" { ld.name = "g++" }
-                }
-                c.args, c.libdirs, c.libs = append(c.args, includes...), libdirs, libs
-                a.command, a.prequisites = c, append(a.prequisites, asrc)
-                m.action.prequisites = append(m.action.prequisites, a)
-        }
+                name = src + ".o"
+                return
+        })
+
+        m.action.prequisites = append(m.action.prequisites, as...)
 
         //fmt.Printf("module: %v, %v, %v\n", m.name, m.action.targets, len(m.action.prequisites))
 
