@@ -398,6 +398,12 @@ func (p *parser) expand(str string) string {
 
 func (p *parser) call(name string, args ...string) string {
         //fmt.Printf("call: %v %v\n", name, args)
+        if name == "call" {
+                if 0 < len(args) {
+                        return p.call(args[0], args[1:]...)
+                }
+                return ""
+        }
 
         if f, ok := builtins[name]; ok {
                 // All arguments should be expended.
