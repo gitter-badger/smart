@@ -36,9 +36,10 @@ type parser struct {
         file string
         s []byte // the content of the file
         pos int // the current read position
-        buf bytes.Buffer // token or word or line accumulator
+        rune rune // the rune last time returned by getRune
+        runeLen int // the size in bytes of the rune last returned by getRune
+        line bytes.Buffer // line accumulator
         stack []string // token stack
-        rune rune
         lineno int
         colno, prevColno int
         variables map[string]*variable
@@ -72,7 +73,6 @@ func (p *parser) getModuleSourceActions(func f(a *action)) (sources []*action) {
         sources := p.getModuleSources()
         for _, src := range sources {
                 asrc := newAction(src)
-                
         }
 }
 */
@@ -81,17 +81,8 @@ func (p *parser) location() *location {
         return &location{ &p.file, p.lineno, p.colno }
 }
 
-func (p *parser) stepLine() {
-        p.lineno++
-        p.prevColno, p.colno = p.colno, 0
-}
-
 func (p *parser) stepLineBack() {
         p.lineno, p.colno = p.lineno-1, p.prevColno+1
-}
-
-func (p *parser) stepCol() {
-        p.colno++
 }
 
 func (p *parser) push(w string) {
@@ -107,50 +98,56 @@ func (p *parser) pop() (w string) {
         return
 }
 
-func (p *parser) getRune() (r rune, rs int, err error) {
+func (p *parser) getRune() (r rune, err error) {
         if len(p.s) == p.pos { err = io.EOF; return }
         if len(p.s) < p.pos { errorf(-2, "over reading (at %v)", p.pos) }
 
-        r, rs = utf8.DecodeRune(p.s[p.pos:])
+        p.rune, p.runeLen = utf8.DecodeRune(p.s[p.pos:])
         switch {
-        case rs == 0:
+        case p.rune == 0:
                 errorf(-2, "zero reading (at %v)", p.pos)
-        case r == utf8.RuneError:
+        case p.rune == utf8.RuneError:
                 errorf(-2, "bad UTF8 encoding")
-        case r == '\n':
-                p.stepLine()
+        case p.rune == '\n':
+                p.lineno, p.prevColno, p.colno = p.lineno+1, p.colno, 0
+        case p.runeLen > 1:
+                p.colno += 2
         default:
-                p.stepCol()
+                p.colno += 1
         }
-        p.rune = r
-        p.pos += rs
+        r, p.pos = p.rune, p.pos + p.runeLen
         return
 }
 
 func (p *parser) ungetRune() (err error) {
-        if p.pos == 0 { errorf(0, "try to go to the front of beginning") }
-        if p.rune == 0 { errorf(0, "wrong invocation of ungetRune") }
-        //if p.lineno == 1 && p.colno <= 1 { return }
+        switch {
+        case p.rune == 0:
+                errorf(0, "wrong invocation of ungetRune")
+        case p.pos == 0:
+                errorf(0, "get to the beginning of the bytes")
+        case p.pos < 0:
+                errorf(0, "get to the front of beginning of the bytes")
+                //case p.lineno == 1 && p.colno <= 1: return
+        }
         if p.rune == '\n' {
-                p.lineno, p.colno = p.lineno-1, p.prevColno
+                p.lineno, p.colno, p.prevColno = p.lineno-1, p.prevColno, 0
         } else {
                 p.colno--
         }
-        p.pos -= utf8.RuneLen(p.rune)
-        p.rune = 0
+        // assert(utf8.RuneLen(p.rune) == p.runeLen)
+        p.pos, p.rune, p.runeLen = p.pos-p.runeLen, 0, 0
         return
 }
 
-func (p *parser) skip(shouldSkip func(r rune) bool) (bytes int, err error) {
+func (p *parser) skip(shouldSkip func(r rune) bool) (err error) {
         var r rune
-        var rs int
         for {
-                r, rs, err = p.getRune()
+                r, err = p.getRune()
                 if err != nil {
                         return
                 }
                 if shouldSkip(r) {
-                        bytes += rs;
+                        //bytes += rs;
                 } else {
                         p.ungetRune(); break
                 }
@@ -158,10 +155,10 @@ func (p *parser) skip(shouldSkip func(r rune) bool) (bytes int, err error) {
         return
 }
 
-func (p *parser) skipRune(r rune) (bytes int, err error) {
-        if v, b, e := p.getRune(); e == nil {
+func (p *parser) skipRune(r rune) (err error) {
+        if v, e := p.getRune(); e == nil {
                 if r == 0 || v == r {
-                        bytes = b
+                        //bytes = b
                         return
                 } else {
                         p.ungetRune()
@@ -173,18 +170,16 @@ func (p *parser) skipRune(r rune) (bytes int, err error) {
         return
 }
 
-func (p *parser) skipSpace(inline bool) (bytes int, err error) {
-        sz, e := p.skip(func(r rune) bool {
+func (p *parser) skipSpace(inline bool) (err error) {
+        e := p.skip(func(r rune) bool {
                 if r == '#' {
                         for {
-                                var rs int
-                                if r, rs, err = p.getRune(); err != nil {
+                                if r, err = p.getRune(); err != nil {
                                         return false
                                 }
                                 if r == '\n' {
                                         err = p.ungetRune(); break
                                 }
-                                bytes += rs
                         }
                         return true
                 }
@@ -193,7 +188,6 @@ func (p *parser) skipSpace(inline bool) (bytes int, err error) {
                 }
                 return unicode.IsSpace(r)
         })
-        bytes += sz
         if err == nil && e != nil { err = e }
         return
 }
@@ -202,16 +196,16 @@ func (p *parser) skipSpace(inline bool) (bytes int, err error) {
 func (p *parser) getLine(delimeters string) (s string, del rune, err error) {
         var r rune
         var sur []rune
-        p.buf.Reset()
+        p.line.Reset()
 main_loop: for {
-                if r, _, err = p.getRune(); err != nil { break }
+                if r, err = p.getRune(); err != nil { break }
                 switch {
                 case r == '\\':
-                        rr, _, e := p.getRune()
+                        rr, e := p.getRune()
                         if e != nil { err = e; break main_loop }
                         if rr == '\n' { // line continual by "\\\n"
                                 for {
-                                        if rr, _, e = p.getRune(); e != nil { err = e; break main_loop }
+                                        if rr, e = p.getRune(); e != nil { err = e; break main_loop }
                                         if rr == '\n' { p.ungetRune(); del = rr; break main_loop }
                                         if !unicode.IsSpace(rr) { err = p.ungetRune(); break }
                                 }
@@ -220,33 +214,34 @@ main_loop: for {
                                 p.ungetRune()
                         }
                 case r == '#':
-                        //var b bytes.Buffer
                         for {
-                                if rr, _, e := p.getRune(); e != nil {
+                                if rr, e := p.getRune(); e != nil {
                                         err = e; break main_loop
                                 } else if rr == '\n' {
-                                        //fmt.Printf("comment: %v\n", &b)
                                         break
-                                } else {
-                                        //b.WriteRune(rr)
                                 }
                         }
                         p.ungetRune(); del = '\n'; break main_loop
-                case strings.IndexRune(")}", r) != -1:
-                        if len(sur) == 0 { p.buf.WriteRune(r); break }
-                        if sur[0] == r {
-                                
-                        }
                 case r == '$':
-                        
-                case strings.IndexRune(delimeters, r) != -1:
+                        p.line.WriteRune(r)
+                        if r, err = p.getRune(); err != nil { break main_loop }
+                        switch r {
+                        case '(': sur = append(sur, ')')
+                        case '{': sur = append(sur, '}')
+                        }
+                        p.line.WriteRune(r)
+                case len(sur) > 0 && strings.IndexRune(")}", r) != -1:
+                        surl := len(sur)
+                        if sur[surl-1] == r { sur = sur[0:surl-1] }
+                        p.line.WriteRune(r)
+                case len(sur) == 0 && strings.IndexRune(delimeters, r) != -1:
                         p.ungetRune(); del = r; break main_loop
                 default:
-                        p.buf.WriteRune(r)
+                        p.line.WriteRune(r)
                 }
         }
         if err == nil || err == io.EOF {
-                s, err = p.buf.String(), nil
+                s, err = p.line.String(), nil
         }
         //fmt.Printf("s: %v\n", p.buf.String())
         return
@@ -258,12 +253,12 @@ func (p *parser) parse() (err error) {
         var w, s string
         var del rune
 parse_loop: for {
-                if _, err = p.skipSpace(false); err != nil { break }
+                if err = p.skipSpace(false); err != nil { break }
 
                 if w, del, err = p.getLine("=:\n"); err != nil && err != io.EOF { break }
 
                 if w = strings.TrimSpace(w); w == "" {
-                        p.stepCol(); errorf(0, fmt.Sprintf("illegal: %v", w))
+                        errorf(0, fmt.Sprintf("illegal: %v", w))
                 }
 
                 w = p.expand(w)
@@ -278,14 +273,14 @@ parse_loop: for {
                 }
 
                 // skip the delimiter
-                if _, err = p.skipRune(del); err != nil { break parse_loop }
+                if err = p.skipRune(del); err != nil { break parse_loop }
 
                 var rr rune
-                if rr, _, err = p.getRune(); err != nil { break } else {
+                if rr, err = p.getRune(); err != nil { break } else {
                         if strings.IndexRune("=:", rr) == -1 { p.ungetRune() }
                 }
 
-                if _, err = p.skipSpace(true); err != nil && err != io.EOF { break }
+                if err = p.skipSpace(true); err != nil && err != io.EOF { break }
                 if s, _, err = p.getLine("\n"); err != nil && err != io.EOF { break }
 
                 switch del {

@@ -10,4 +10,4 @@ xxx-(use shared static)-foo-xxx
 ""foo "
 "'foo "
 foo: bar
-.smart:38:112: no module defined (0)
+.smart:40:112: no module defined (0)
