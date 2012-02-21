@@ -24,7 +24,7 @@ type _gcc struct {
 func (gcc *_gcc) setupModule(p *parser, args []string, vars map[string]string) bool {
         var m *module
         if m = p.module; m == nil {
-                p.stepLineBack(); errorf(0, "no module")
+                errorf(0, "no module")
         }
 
         out := "out"
@@ -47,7 +47,7 @@ func (gcc *_gcc) setupModule(p *parser, args []string, vars map[string]string) b
                 if !strings.HasSuffix(name, ".a") { name = name + ".a" }
                 c = gccNewCommand("ar", "crs")
         default:
-                p.stepLineBack(); errorf(0, fmt.Sprintf("unknown type `%v'", m.kind))
+                errorf(0, fmt.Sprintf("unknown type `%v'", m.kind))
         }
 
         c.mkdir = filepath.Join(out, m.name)
@@ -76,14 +76,14 @@ func (gcc *_gcc) buildModule(p *parser, args []string) bool {
 
         var ld *gccCommand
         if l, ok := m.action.command.(*gccCommand); !ok {
-                p.stepLineBack(); errorf(0, "internal: wrong module command")
+                errorf(0, "internal: wrong module command")
         } else {
                 ld = l
         }
 
         sources := p.getModuleSources()
         if len(sources) == 0 {
-                p.stepLineBack(); errorf(0, "no sources for `%v'", p.module.name)
+                errorf(0, "no sources for `%v'", p.module.name)
         }
 
         ls := func(name, prefix string) (l []string) {

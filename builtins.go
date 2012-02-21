@@ -54,8 +54,8 @@ func builtinModule(p *parser, args []string) string {
                 name: name,
                 toolset: toolset,
                 kind: kind,
-                dir: filepath.Dir(p.file),
-                location: *p.location(),
+                dir: filepath.Dir(p.l.file),
+                location: *p.l.location(),
                 variables: make(map[string]*variable, 128),
                 }
                 modules[m.name] = m
@@ -107,7 +107,7 @@ func builtinBuild(p *parser, args []string) string {
                                 u.built = true
                                 num += 1
                         } else {
-                                fmt.Printf("%v: dependency `%v' not built\n", p.location(), u.name)
+                                fmt.Printf("%v: dependency `%v' not built\n", p.l.location(), u.name)
                         }
                 }
                 return
@@ -158,8 +158,8 @@ func builtinUse(p *parser, args []string) string {
                 } else {
                         m = &module{
                         name: a,
-                        dir: filepath.Dir(p.file),
-                        location: *p.location(),
+                        dir: filepath.Dir(p.l.file),
+                        location: *p.l.location(),
                         variables: make(map[string]*variable, 128),
                         usedBy: []*module{ p.module },
                         }

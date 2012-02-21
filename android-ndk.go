@@ -72,7 +72,7 @@ func (ndk *_androidndk) parseFile(fn string, vars map[string]string) (p *parser,
         defer func() {
                 if e := recover(); e != nil {
                         if se, ok := e.(*smarterror); ok {
-                                fmt.Printf("%v: %v\n", p.location(), se)
+                                fmt.Printf("%v: %v\n", p.l.location(), se)
                         } else {
                                 panic(e)
                         }
@@ -171,11 +171,11 @@ func (ndk *_androidndk) setupModule(p *parser, args []string, vars map[string]st
         libdirs := filepath.Join(ndk.root, "platforms", platform, arch, "usr/lib")
 
         var v *variable
-        loc := location{ file:&(p.file), lineno:p.lineno-1, colno:p.prevColno+1 }
-        v = p.setVariable("this.abi", abi); v.loc = loc
-        v = p.setVariable("this.platform", platform); v.loc = loc
-        v = p.setVariable("this.includes", includes); v.loc = loc
-        v = p.setVariable("this.libdirs", libdirs); v.loc = loc
+        loc := p.l.location()
+        v = p.setVariable("this.abi", abi); v.loc = *loc
+        v = p.setVariable("this.platform", platform); v.loc = *loc
+        v = p.setVariable("this.includes", includes); v.loc = *loc
+        v = p.setVariable("this.libdirs", libdirs); v.loc = *loc
         return true
 }
 
@@ -201,7 +201,7 @@ func (ndk *_androidndk) buildModule(p *parser, args []string) bool {
                 for _, pre := range a.prequisites {
                         if pre.command == nil { continue }
                         if c, ok := pre.command.(*gccCommand); !ok {
-                                fmt.Printf("%v: wrong command `%v'\n", p.location(), pre.command)
+                                fmt.Printf("%v: wrong command `%v'\n", p.l.location(), pre.command)
                                 continue
                         } else {
                                 switch c.name {

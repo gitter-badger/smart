@@ -6,7 +6,6 @@ import (
         "fmt"
         "unicode"
         "unicode/utf8"
-        "io"
         "io/ioutil"
         "os"
         "path/filepath"
@@ -31,17 +30,282 @@ type variable struct {
         readonly bool
 }
 
-type parser struct {
-        module *module
+type nodeType int
+
+const (
+        node_comment nodeType = iota
+        node_continual
+        node_spaces
+        node_text
+        node_assign
+        node_rule
+        node_double_colon_rule
+        node_call
+        node_call_arg
+)
+
+var nodeTypeNames = []string {
+node_comment: "comment",
+node_continual: "continual",
+node_spaces: "spaces",
+node_text: "text",
+node_assign: "assign",
+node_rule: "rule",
+node_double_colon_rule: "double-colon rule",
+node_call: "call",
+node_call_arg: "arg",
+}
+
+func (k nodeType) String() string {
+        return nodeTypeNames[int(k)]
+}
+
+type node struct {
+        kind nodeType
+        root *node
+        children []*node
+        pos, end, lineno, colno int
+}
+
+type lex struct {
         file string
         s []byte // the content of the file
         pos int // the current read position
+        start int // begins of the current node
+        lnod *node // the end position of the last node
         rune rune // the rune last time returned by getRune
         runeLen int // the size in bytes of the rune last returned by getRune
+        lineno, colno, prevColno int
+        nodes, list, stack []*node // top level parsed node, and temporary parse list, and stack
+}
+
+func (l *lex) location() *location {
+        return &location{ &l.file, l.lineno, l.colno }
+}
+
+func (l *lex) peekRune() (r rune) {
+        if l.pos < len(l.s) {
+                r, _ = utf8.DecodeRune(l.s[l.pos:])
+        }
+        return
+}
+
+func (l *lex) getRune() (r rune) {
+        if len(l.s) == l.pos { r = 0; return }
+        if len(l.s) < l.pos { errorf(-2, "over reading (at %v)", l.pos) }
+
+        l.rune, l.runeLen = utf8.DecodeRune(l.s[l.pos:])
+        r, l.pos = l.rune, l.pos+l.runeLen
+        switch {
+        //case l.rune == 0:
+        //        errorf(-2, "zero reading (at %v)", l.pos)
+        case l.rune == utf8.RuneError:
+                errorf(-2, "bad UTF8 encoding")
+        case l.rune == '\n':
+                l.lineno, l.prevColno, l.colno = l.lineno+1, l.colno, 0
+        case l.runeLen > 1:
+                l.colno += 2
+        default:
+                l.colno += 1
+        }
+        return
+}
+
+func (l *lex) ungetRune() {
+        switch {
+        case l.rune == 0:
+                errorf(0, "wrong invocation of ungetRune")
+        case l.pos == 0:
+                errorf(0, "get to the beginning of the bytes")
+        case l.pos < 0:
+                errorf(0, "get to the front of beginning of the bytes")
+                //case l.lineno == 1 && l.colno <= 1: return
+        }
+        if l.rune == '\n' {
+                l.lineno, l.colno, l.prevColno = l.lineno-1, l.prevColno, 0
+        } else {
+                l.colno--
+        }
+        // assert(utf8.RuneLen(l.rune) == l.runeLen)
+        l.pos, l.rune, l.runeLen = l.pos-l.runeLen, 0, 0
+        return
+}
+
+func (l *lex) skip(shouldSkip func(r rune) bool) (err error) {
+        var r rune
+        for {
+                if r = l.getRune(); r == 0 {
+                        return
+                }
+                if shouldSkip(r) {
+                        //bytes += rs;
+                } else {
+                        l.ungetRune(); break
+                }
+        }
+        return
+}
+
+func (l *lex) skipRune(r rune) (err error) {
+        if v := l.getRune(); r == 0 || v == r {
+                return
+        } else {
+                l.ungetRune()
+                errorf(0, "not rune '%v' (%v)", r, v)
+        }
+        return
+}
+
+func (l *lex) skipSpace(inline bool) (err error) {
+        e := l.skip(func(r rune) bool {
+                if r == '#' {
+                        for {
+                                if r = l.getRune(); r == 0 {
+                                        return false
+                                }
+                                if r == '\n' {
+                                        l.ungetRune(); break
+                                }
+                        }
+                        return true
+                }
+                if inline {
+                        return r != '\n' && unicode.IsSpace(r)
+                }
+                return unicode.IsSpace(r)
+        })
+        if err == nil && e != nil { err = e }
+        return
+}
+
+func (l *lex) new(t nodeType, off int) *node {
+        pos := l.pos + off
+        n := &node{ kind:t, pos:pos, end:l.pos, lineno:l.lineno, colno:l.colno }
+        l.lnod = n
+        return n
+}
+
+func (l *lex) parseComment() *node {
+        var r rune
+        n := l.new(node_comment, -1)
+        for {
+                for r != '\n' { if r = l.getRune(); r == 0 { break } }
+                if r == '\n' && l.peekRune() == '#' { r = l.getRune(); continue }
+                break
+        }
+        n.end = l.pos
+        return n
+}
+
+func (l *lex) parseAssign(off int) *node {
+        var r rune
+        n := l.new(node_assign, off)
+        n.children = append(n.children, l.list...)
+        l.list = l.list[0:0]
+        for {
+                if r = l.getRune(); r == 0 || r == '\n' || r == '#' { break }
+        }
+        n.end = l.pos
+        return n
+}
+
+func (l *lex) parseDoubleColonRule() *node {
+        n := l.new(node_double_colon_rule, -2)
+        fmt.Printf("%v:%v: '%v'\n", l.file, n.lineno, n.kind)
+        return n
+}
+
+func (l *lex) parseRule() *node {
+        n := l.new(node_rule, -1)
+        fmt.Printf("%v:%v: '%v'\n", l.file, n.lineno, n.kind)
+        return n
+}
+
+func (l *lex) parseCall() *node {
+        n := l.new(node_call, -1)
+        rr := l.getRune()
+        switch rr {
+        case 0: errorf(0, "unexpected end of file: '%v'", string(l.s[n.pos:l.pos]))
+        case '(': rr = ')'
+        case '}': rr = '}'
+        default: n.end = l.pos; return n
+        }
+        for {
+                if r := l.getRune(); r == 0 {
+                        errorf(0, "unexpected end of file: '%v'", string(l.s[n.pos:l.pos]))
+                } else if r == '$' {
+                        n.children = append(n.children, l.parseCall())
+                } else if r == rr {
+                        break
+                }
+        }
+        n.end = l.pos
+        return n
+}
+
+func (l *lex) parseAny() *node {
+main_loop:
+        for {
+                var r rune
+                if r = l.getRune(); r == 0 { break main_loop }
+                switch {
+                case r == '#': return l.parseComment()
+                case r == '\\':
+                        switch l.getRune() {
+                        case 0: break main_loop
+                        case '\n': l.new(node_continual, -2)
+                        default: l.ungetRune()
+                        }
+                case r == ':':
+                        switch l.getRune() {
+                        case '0': break main_loop
+                        case '=': return l.parseAssign(-2)
+                        case ':': return l.parseDoubleColonRule()
+                        default:  l.ungetRune(); return l.parseRule()
+                        }
+                case r == '=':
+                        return l.parseAssign(-1)
+                case r == '$':
+                        return l.parseCall()
+                case r == '\n':
+                        l.nodes, l.list = append(l.nodes, l.list...), l.list[0:0]
+                case r != '\n' && unicode.IsSpace(r):
+                        n := l.new(node_spaces, -1)
+                        for {
+                                if r = l.getRune(); r == 0 { break main_loop }
+                                if !unicode.IsSpace(r) { l.ungetRune(); break }
+                        }
+                        //n.end, l.list = l.pos, append(l.list, n)
+                        n.end = l.pos; return n
+                default:
+                        n := l.new(node_text, -1)
+                        for {
+                                if r = l.getRune(); r == 0 { break main_loop }
+                                if strings.IndexRune(" $:=", r) != -1 { l.ungetRune(); break }
+                        }
+                        //n.end, l.list = l.pos, append(l.list, n)
+                        n.end = l.pos; return n
+                }
+        }
+        return nil
+}
+
+func (l *lex) parse() {
+        l.lineno, l.colno = 1, 0
+        for {
+                if n := l.parseAny(); n == nil {
+                        break
+                } else {
+                        l.list = append(l.list, n)
+                }
+        }
+        return
+}
+
+type parser struct {
+        l lex
+        module *module
         line bytes.Buffer // line accumulator
-        stack []string // token stack
-        lineno int
-        colno, prevColno int
         variables map[string]*variable
 }
 
@@ -57,7 +321,7 @@ func (p *parser) getModuleSources() (sources []string) {
         }
 
         if s, ok := p.module.variables["this.sources"]; ok {
-                dir := filepath.Dir(p.file)
+                dir := filepath.Dir(p.l.file)
                 str := p.expand(s.value)
                 sources = strings.Split(str, " ")
                 for i, _ := range sources {
@@ -65,252 +329,6 @@ func (p *parser) getModuleSources() (sources []string) {
                         sources[i] = filepath.Join(dir, sources[i])
                 }
         }
-        return
-}
-
-/*
-func (p *parser) getModuleSourceActions(func f(a *action)) (sources []*action) {
-        sources := p.getModuleSources()
-        for _, src := range sources {
-                asrc := newAction(src)
-        }
-}
-*/
-
-func (p *parser) location() *location {
-        return &location{ &p.file, p.lineno, p.colno }
-}
-
-func (p *parser) stepLineBack() {
-        p.lineno, p.colno = p.lineno-1, p.prevColno+1
-}
-
-func (p *parser) push(w string) {
-        if 5000 < len(p.stack) { errorf(-1, "stack overflow") }
-        p.stack = append(p.stack, w)
-}
-
-func (p *parser) pop() (w string) {
-        if len(p.stack) == 0 { return }
-        top := len(p.stack)-1
-        w = p.stack[top]
-        p.stack = p.stack[0:top]
-        return
-}
-
-func (p *parser) getRune() (r rune, err error) {
-        if len(p.s) == p.pos { err = io.EOF; return }
-        if len(p.s) < p.pos { errorf(-2, "over reading (at %v)", p.pos) }
-
-        p.rune, p.runeLen = utf8.DecodeRune(p.s[p.pos:])
-        switch {
-        case p.rune == 0:
-                errorf(-2, "zero reading (at %v)", p.pos)
-        case p.rune == utf8.RuneError:
-                errorf(-2, "bad UTF8 encoding")
-        case p.rune == '\n':
-                p.lineno, p.prevColno, p.colno = p.lineno+1, p.colno, 0
-        case p.runeLen > 1:
-                p.colno += 2
-        default:
-                p.colno += 1
-        }
-        r, p.pos = p.rune, p.pos + p.runeLen
-        return
-}
-
-func (p *parser) ungetRune() (err error) {
-        switch {
-        case p.rune == 0:
-                errorf(0, "wrong invocation of ungetRune")
-        case p.pos == 0:
-                errorf(0, "get to the beginning of the bytes")
-        case p.pos < 0:
-                errorf(0, "get to the front of beginning of the bytes")
-                //case p.lineno == 1 && p.colno <= 1: return
-        }
-        if p.rune == '\n' {
-                p.lineno, p.colno, p.prevColno = p.lineno-1, p.prevColno, 0
-        } else {
-                p.colno--
-        }
-        // assert(utf8.RuneLen(p.rune) == p.runeLen)
-        p.pos, p.rune, p.runeLen = p.pos-p.runeLen, 0, 0
-        return
-}
-
-func (p *parser) skip(shouldSkip func(r rune) bool) (err error) {
-        var r rune
-        for {
-                r, err = p.getRune()
-                if err != nil {
-                        return
-                }
-                if shouldSkip(r) {
-                        //bytes += rs;
-                } else {
-                        p.ungetRune(); break
-                }
-        }
-        return
-}
-
-func (p *parser) skipRune(r rune) (err error) {
-        if v, e := p.getRune(); e == nil {
-                if r == 0 || v == r {
-                        //bytes = b
-                        return
-                } else {
-                        p.ungetRune()
-                        errorf(0, "not rune '%v' (%v)", r, v)
-                }
-        } else {
-                err = e
-        }
-        return
-}
-
-func (p *parser) skipSpace(inline bool) (err error) {
-        e := p.skip(func(r rune) bool {
-                if r == '#' {
-                        for {
-                                if r, err = p.getRune(); err != nil {
-                                        return false
-                                }
-                                if r == '\n' {
-                                        err = p.ungetRune(); break
-                                }
-                        }
-                        return true
-                }
-                if inline {
-                        return r != '\n' && unicode.IsSpace(r)
-                }
-                return unicode.IsSpace(r)
-        })
-        if err == nil && e != nil { err = e }
-        return
-}
-
-// getLine read a sequence of rune until delimeters
-func (p *parser) getLine(delimeters string) (s string, del rune, err error) {
-        var r rune
-        var sur []rune
-        p.line.Reset()
-main_loop: for {
-                if r, err = p.getRune(); err != nil { break }
-                switch {
-                case r == '\\':
-                        rr, e := p.getRune()
-                        if e != nil { err = e; break main_loop }
-                        if rr == '\n' { // line continual by "\\\n"
-                                for {
-                                        if rr, e = p.getRune(); e != nil { err = e; break main_loop }
-                                        if rr == '\n' { p.ungetRune(); del = rr; break main_loop }
-                                        if !unicode.IsSpace(rr) { err = p.ungetRune(); break }
-                                }
-                                r = ' ' // replace '\\' with a space
-                        } else {
-                                p.ungetRune()
-                        }
-                case r == '#':
-                        for {
-                                if rr, e := p.getRune(); e != nil {
-                                        err = e; break main_loop
-                                } else if rr == '\n' {
-                                        break
-                                }
-                        }
-                        p.ungetRune(); del = '\n'; break main_loop
-                case r == '$':
-                        p.line.WriteRune(r)
-                        if r, err = p.getRune(); err != nil { break main_loop }
-                        switch r {
-                        case '(': sur = append(sur, ')')
-                        case '{': sur = append(sur, '}')
-                        }
-                        p.line.WriteRune(r)
-                case len(sur) > 0 && strings.IndexRune(")}", r) != -1:
-                        surl := len(sur)
-                        if sur[surl-1] == r { sur = sur[0:surl-1] }
-                        p.line.WriteRune(r)
-                case len(sur) == 0 && strings.IndexRune(delimeters, r) != -1:
-                        p.ungetRune(); del = r; break main_loop
-                default:
-                        p.line.WriteRune(r)
-                }
-        }
-        if err == nil || err == io.EOF {
-                s, err = p.line.String(), nil
-        }
-        //fmt.Printf("s: %v\n", p.buf.String())
-        return
-}
-
-func (p *parser) parse() (err error) {
-        p.lineno, p.colno = 1, 0
-
-        var w, s string
-        var del rune
-parse_loop: for {
-                if err = p.skipSpace(false); err != nil { break }
-
-                if w, del, err = p.getLine("=:\n"); err != nil && err != io.EOF { break }
-
-                if w = strings.TrimSpace(w); w == "" {
-                        errorf(0, fmt.Sprintf("illegal: %v", w))
-                }
-
-                w = p.expand(w)
-
-                // if it's the new line, we stop here
-                if del == '\n' {
-                        if w = strings.TrimSpace(w); w != "" {
-                                p.colno -= utf8.RuneCount([]byte(w)) + 1
-                                errorf(0, fmt.Sprintf("illegal: '%v'", w))
-                        }
-                        continue
-                }
-
-                // skip the delimiter
-                if err = p.skipRune(del); err != nil { break parse_loop }
-
-                var rr rune
-                if rr, err = p.getRune(); err != nil { break } else {
-                        if strings.IndexRune("=:", rr) == -1 { p.ungetRune() }
-                }
-
-                if err = p.skipSpace(true); err != nil && err != io.EOF { break }
-                if s, _, err = p.getLine("\n"); err != nil && err != io.EOF { break }
-
-                switch del {
-                case '=': //print("parse: "+w+" = "+s+"\n")
-                        if w == "" {
-                                errorf(0, fmt.Sprintf("illegal: %v", w))
-                        }
-                        p.setVariable(w, s)
-
-                case ':': //print("parse: "+w+" : "+s+"\n")
-                        if w == "" {
-                                errorf(0, fmt.Sprintf("illegal: %v", w))
-                        }
-
-                        switch rr {
-                        case '=':
-                                p.setVariable(w, p.expand(s))
-                        case ':':
-                                fmt.Printf("TODO: %v :: %v\n", w, s)
-                        default:
-                                fmt.Printf("TODO: %v : %v\n", w, s)
-                        }
-
-                default:
-                        if w != "" {
-                                errorf(0, fmt.Sprintf("illegal: %v", w))
-                        }
-                }
-        }
-        if err == io.EOF { err = nil }
         return
 }
 
@@ -450,7 +468,8 @@ func (p *parser) call(name string, args ...string) string {
 }
 
 func (p *parser) setVariable(name, value string) (v *variable) {
-        loc := location{ file:&(p.file), lineno:p.lineno, colno:p.colno+1 }
+        //loc := location{ file:&(p.file), lineno:p.lineno, colno:p.colno+1 }
+        loc := p.l.location()
 
         if name == "this" {
                 fmt.Printf("%v:warning: ignore attempts on \"this\"\n", &loc)
@@ -479,9 +498,19 @@ func (p *parser) setVariable(name, value string) (v *variable) {
         
         v.name = name
         v.value = value
-        v.loc = *p.location()
+        v.loc = *p.l.location()
 
         //fmt.Printf("%v: '%s' = '%s'\n", &v.loc, name, value)
+        return
+}
+
+func (p *parser) parse() (err error) {
+        p.l.parse()
+
+        for _, n := range p.l.nodes {
+                //fmt.Printf("%v:%v:%v: %v, %v\n", p.l.file, n.lineno, n.colno, n.kind, string(p.l.s[n.pos:n.end]), n.children)
+                fmt.Printf("%v:%v:%v: %v, %v children\n", p.l.file, n.lineno, n.colno, n.kind, len(n.children))
+        }
         return
 }
 
@@ -493,17 +522,18 @@ func newParser(fn string) (p *parser, err error) {
                 return
         }
 
+        defer f.Close()
+
         s, err := ioutil.ReadAll(f)
         if err != nil {
                 return
         }
 
         p = &parser{
-        file: fn, s: s, pos: 0, 
+        l: lex{ file: fn, s: s, pos: 0, },
         variables: make(map[string]*variable, 128),
         }
 
-        defer f.Close()
         return
 }
 
@@ -513,7 +543,7 @@ func parse(conf string) (p *parser, err error) {
         defer func() {
                 if e := recover(); e != nil {
                         if se, ok := e.(*smarterror); ok {
-                                fmt.Printf("%s:%v:%v: %v\n", conf, p.lineno, p.colno, se)
+                                fmt.Printf("%v: %v\n", p.l.location(), se)
                         } else {
                                 panic(e)
                         }
