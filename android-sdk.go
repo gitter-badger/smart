@@ -34,24 +34,24 @@ type _androidsdk struct {
 func (sdk *_androidsdk) setupModule(p *parser, args []string, vars map[string]string) bool {
         var m *module
         if m = p.module; m == nil {
-                p.stepLineBack(); errorf(0, "no module")
+                errorf(0, "no module")
         }
 
-        d := filepath.Dir(p.file)
+        d := filepath.Dir(p.l.file)
         sources, err := findFiles(filepath.Join(d, "src"), `\.java$`, -1)
         for i, _ := range sources { sources[i] = sources[i][len(d)+1:] }
 
         if err != nil {
-                p.stepLineBack(); errorf(0, fmt.Sprintf("can't find Java sources in `%v'", d))
+                errorf(0, fmt.Sprintf("can't find Java sources in `%v'", d))
         }
 
         var platform string
         if s, ok := vars["PLATFORM"]; ok { platform = s } else { platform = "android-10" }
 
         var v *variable
-        loc := location{ file:&(p.file), lineno:p.lineno-1, colno:p.prevColno+1 }
-        v = p.setVariable("this.platform", platform); v.loc = loc
-        v = p.setVariable("this.sources", strings.Join(sources, " ")); v.loc = loc
+        loc := p.l.location()
+        v = p.setVariable("this.platform", platform); v.loc = *loc
+        v = p.setVariable("this.sources", strings.Join(sources, " ")); v.loc = *loc
         return true
 }
 
@@ -70,7 +70,7 @@ func (sdk *_androidsdk) getResources(ds ...string) (as []*action) {
 func (sdk *_androidsdk) buildModule(p *parser, args []string) bool {
         var m *module
         if m = p.module; m == nil {
-                p.stepLineBack(); errorf(0, "no module")
+                errorf(0, "no module")
         }
 
         platform := strings.TrimSpace(p.call("this.platform"))
@@ -78,7 +78,7 @@ func (sdk *_androidsdk) buildModule(p *parser, args []string) bool {
                 errorf(0, "unkown platform for `%v'", m.name)
         }
 
-        gen := &androidsdkGen{ platform:platform, out:filepath.Join("out", m.name), d:filepath.Dir(p.file) }
+        gen := &androidsdkGen{ platform:platform, out:filepath.Join("out", m.name), d:filepath.Dir(p.l.file) }
 
         var prequisites []*action
         var a *action
@@ -100,7 +100,6 @@ func (sdk *_androidsdk) buildModule(p *parser, args []string) bool {
                         var classpath []string
                         for _, u := range m.using {
                                 if u.kind != "jar" {
-                                        p.stepLineBack()
                                         errorf(0, "can't use module of type `%v'", u.kind)
                                 }
                                 if v, ok := u.variables["this.export.jar"]; ok {
@@ -130,7 +129,7 @@ func (sdk *_androidsdk) buildModule(p *parser, args []string) bool {
                 p.setVariable("this.export.jar", c.target)
                 m.action = newInAction(m.name+".jar", c, prequisites...)
         default:
-                p.stepLineBack(); errorf(0, "unknown module type `%v'", m.kind)
+                errorf(0, "unknown module type `%v'", m.kind)
         }
         return true
 }
