@@ -41,7 +41,6 @@ const (
         node_rule
         node_double_colon_rule
         node_call
-        node_call_arg
 )
 
 var nodeTypeNames = []string {
@@ -53,7 +52,6 @@ var nodeTypeNames = []string {
         node_rule: "rule",
         node_double_colon_rule: "double-colon-rule",
         node_call: "call",
-        node_call_arg: "arg",
 }
 
 func (k nodeType) String() string {
@@ -186,8 +184,7 @@ func (l *lex) new(t nodeType, off int) *node {
 }
 
 func (l *lex) parseComment() *node {
-        var r rune
-        n := l.new(node_comment, -1)
+        n, r := l.new(node_comment, -1), rune(0)
         for {
                 for r != '\n' { if r = l.getRune(); r == 0 { break } }
                 if r == '\n' && l.peekRune() == '#' { r = l.getRune(); continue }
@@ -197,11 +194,33 @@ func (l *lex) parseComment() *node {
         return n
 }
 
+func (l *lex) parseText(off int) *node {
+        n, r := l.new(node_text, off), rune(0)
+        for {
+                if r = l.getRune(); r == 0 { break }
+                if strings.IndexRune(" $:=", r) != -1 { l.ungetRune(); break }
+        }
+        n.end = l.pos
+        return n
+}
+
+func (l *lex) parseSpaces(off int) *node {
+        n, r := l.new(node_spaces, off), rune(0)
+        for {
+                if r = l.getRune(); r == 0 { break }
+                if !unicode.IsSpace(r) { l.ungetRune(); break }
+        }
+        n.end = l.pos
+        return n
+}
+
+//func (l *lex) parseContinual(off int) *node {
+//        return
+//}
+
 func (l *lex) parseAssign(off int) *node {
-        var r rune
-        n := l.new(node_assign, off)
-        n.children = append(n.children, l.list...)
-        l.list = l.list[0:0]
+        n, r := l.new(node_assign, off), rune(0)
+        n.children, l.list = append(n.children, l.list...), l.list[0:0]
         for {
                 if r = l.getRune(); r == 0 || r == '\n' || r == '#' { break }
         }
@@ -222,80 +241,75 @@ func (l *lex) parseRule() *node {
 }
 
 func (l *lex) parseCall() *node {
-        n := l.new(node_call, -1)
+        n, r := l.new(node_call, -1), rune(0)
         rr := l.getRune()
         switch rr {
         case 0: errorf(0, "unexpected end of file: '%v'", string(l.s[n.pos:l.pos]))
         case '(': rr = ')'
         case '{': rr = '}'
-        default: n.end = l.pos; return n
+        default:
+                n.children, n.end = append(n.children, l.new(node_text, -1)), l.pos
+                return n
         }
-        for {
-                if r := l.getRune(); r == 0 {
-                        errorf(0, "unexpected end of file: '%v'", string(l.s[n.pos:l.pos]))
-                } else if r == '$' {
-                        n.children = append(n.children, l.parseCall())
-                } else if r == rr {
-                        break
+        nn := l.new(node_text, 0)
+out_loop: for {
+                r = l.getRune()
+                switch {
+                case r == 0: errorf(0, "unexpected end of file: '%v'", string(l.s[n.pos:l.pos]))
+                case r == ' ' && len(n.children) == 0: fallthrough
+                case r == ',' || r == rr:
+                        if 0 < len(nn.children) {
+                                lc := nn.children[len(nn.children)-1]
+                                c := l.new(node_text, 0)
+                                c.pos, c.end = lc.end + 1, l.pos
+                                nn.children = append(nn.children, c)
+                                //fmt.Printf("%v: call: %v\n", l.location(), len(nn.children))
+                        }
+                        nn.end, n.children = l.pos, append(n.children, nn)
+                        if r == rr {
+                                break out_loop
+                        } else {
+                                nn = l.new(node_text, 0)
+                        }
+                case r == '$': nn.children = append(nn.children, l.parseCall())
+                case r == ' ' && len(n.children) > 0: nn.children = append(nn.children, l.parseSpaces(-1))
                 }
         }
         n.end = l.pos
         return n
 }
 
-func (l *lex) parseAny() *node {
+func (l *lex) parse() {
+        l.lineno, l.colno = 1, 0
 main_loop:
         for {
                 var r rune
                 if r = l.getRune(); r == 0 { break main_loop }
                 switch {
-                case r == '#': return l.parseComment()
+                case r == '#': l.list = append(l.list, l.parseComment())
                 case r == '\\':
                         switch l.getRune() {
                         case 0: break main_loop
-                        case '\n': l.new(node_continual, -2)
+                        case '\n': l.list = append(l.list, l.new(node_continual, -2))
                         default: l.ungetRune()
                         }
-                case r == '=':
-                        return l.parseAssign(-1)
+                case r == '=': l.list = append(l.list, l.parseAssign(-1))
                 case r == ':':
                         switch l.getRune() {
-                        case '0': break main_loop
-                        case '=': return l.parseAssign(-2)
-                        case ':': return l.parseDoubleColonRule()
-                        default:  l.ungetRune(); return l.parseRule()
+                        case 0: break main_loop
+                        case '=': l.list = append(l.list, l.parseAssign(-2))
+                        case ':': l.list = append(l.list, l.parseDoubleColonRule())
+                        default:  l.ungetRune(); l.list = append(l.list, l.parseRule())
                         }
-                case r == '$':
-                        return l.parseCall()
+                case r == '$': l.list = append(l.list, l.parseCall())
                 case r == '\n':
                         l.nodes, l.list = append(l.nodes, l.list...), l.list[0:0]
                 case r != '\n' && unicode.IsSpace(r):
-                        n := l.new(node_spaces, -1)
-                        for {
-                                if r = l.getRune(); r == 0 { break main_loop }
-                                if !unicode.IsSpace(r) { l.ungetRune(); break }
-                        }
-                        n.end = l.pos; return n
+                        l.list = append(l.list, l.parseSpaces(-1))
                 default:
-                        n := l.new(node_text, -1)
-                        for {
-                                if r = l.getRune(); r == 0 { break main_loop }
-                                if strings.IndexRune(" $:=", r) != -1 { l.ungetRune(); break }
-                        }
-                        n.end = l.pos; return n
+                        l.list = append(l.list, l.parseText(-1))
                 }
-        }
-        return nil
-}
-
-func (l *lex) parse() {
-        l.lineno, l.colno = 1, 0
-        for {
-                if n := l.parseAny(); n == nil {
-                        break
-                } else {
-                        l.list = append(l.list, n)
-                }
+                if len(l.s) == l.pos { break }
         }
         return
 }
