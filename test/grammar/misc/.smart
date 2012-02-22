@@ -10,6 +10,20 @@ $(info sources $(this.sources))
 $(info includes $(this.includes))
 $(info includes $(this.includes))
 
+aaa := a\
+ b\
+ c\
+
+bbb := a \
+ b \
+ c \
+
+ccc := a b c d e foo
+
+$(info $(aaa)) # output: a b c
+$(info $(bbb)) # output: a b c
+$(info $(ccc)) # output: a b c d e foo
+
 a = a
 i = i
 sh$ared = sh$ared

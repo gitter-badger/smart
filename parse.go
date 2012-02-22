@@ -38,6 +38,8 @@ const (
         node_spaces
         node_text
         node_assign
+        node_simple_assign
+        node_question_assign
         node_rule
         node_double_colon_rule
         node_call
@@ -49,6 +51,8 @@ var nodeTypeNames = []string {
         node_spaces: "spaces",
         node_text: "text",
         node_assign: "assign",
+        node_simple_assign: "node-simple-assign",
+        node_question_assign: "node-question-assign",
         node_rule: "rule",
         node_double_colon_rule: "double-colon-rule",
         node_call: "call",
@@ -85,6 +89,10 @@ func (l *lex) peekRune() (r rune) {
                 r, _ = utf8.DecodeRune(l.s[l.pos:])
         }
         return
+}
+
+func (l *lex) get(n *node) string {
+        return string(l.s[n.pos:n.end])
 }
 
 func (l *lex) getRune() (r rune) {
@@ -217,9 +225,17 @@ func (l *lex) parseSpaces(off int) *node {
 //        return
 //}
 
-func (l *lex) parseAssign(off int) *node {
+func (l *lex) parseAssign(at nodeType) *node {
         if len(l.list) == 0 {
                 errorf(0, "illigal assignment")
+        }
+
+        off := -1
+        switch at {
+        case node_assign:
+        case node_question_assign: fallthrough
+        case node_simple_assign: off = -2
+        default: errorf(0, "unknown assignment")
         }
 
         li := 0
@@ -247,30 +263,58 @@ func (l *lex) parseAssign(off int) *node {
 
 out_loop: for {
                 r = l.getRune()
-                switch {
+        the_sw: switch {
                 case r == 0 || r == '\n' || r == '#':
                         nn.end = l.pos - 1
+                        if 0 < len(nn.children) {
+                                lc := nn.children[len(nn.children)-1]
+                                if lc.end < nn.end {
+                                        t := l.new(node_text, lc.end-1-nn.end); t.end = nn.end
+                                        if l.s[t.pos] == ' ' { break out_loop }
+                                        //print("t: "+l.get(t)+"\n")
+                                        nn.children = append(nn.children, t)
+                                }
+                        }
+                        if r == '#' { l.nodes = append(l.nodes, l.parseComment()) }
                         break out_loop
                 case r == ' ':
                         ss := l.parseSpaces(-1)
                         if 0 == len(nn.children) {
-                                nn.pos = ss.end
+                                if nn.pos == ss.pos /*|| nn.pos == nn.end*/ {
+                                        nn.pos = ss.end
+                                } else {
+                                        t := l.new(node_text, nn.pos-ss.pos-1); t.end = ss.pos
+                                        //print("t: "+l.get(t)+"\n")
+                                        nn.children = append(nn.children, t)
+                                }
                         } else {
                                 nn.children = append(nn.children, ss)
                         }
-                case r == '$': nn.children = append(nn.children, l.parseCall())
+                case r == '$':
+                        if 0 == len(nn.children) && nn.pos != l.pos-1 {
+                                t := l.new(node_text, nn.pos-l.pos); t.end = l.pos-1
+                                //print("t: "+l.get(t)+"\n")
+                                nn.children = append(nn.children, t)
+                        }
+                        nn.children = append(nn.children, l.parseCall())
                 case r == '\\':
                         switch l.getRune() {
                         case 0: break out_loop
-                        case '\n': nn.children = append(nn.children, l.new(node_continual, -2))
-                        default: l.ungetRune()
+                        case '\n':
+                                if 0 == len(nn.children) && nn.pos != l.pos-2 {
+                                        t := l.new(node_text, nn.pos-l.pos-1); t.end = l.pos-2
+                                        //print("t: "+l.get(t)+"\n")
+                                        nn.children = append(nn.children, t)
+                                }
+                                nn.children = append(nn.children, l.new(node_continual, -2))
+                        default: goto the_sw //l.ungetRune()
                         }
                 }
         }
         n.end = nn.end
 
         //fmt.Printf("assign: '%v', '%v'\n", string(l.s[n.children[0].pos:n.children[0].end]), string(l.s[n.children[1].pos:n.children[len(n.children)-1].end]))
-        fmt.Printf("assign: '%v'\n", string(l.s[n.children[0].pos:n.children[0].end]))
+        //fmt.Printf("assign: '%v'\n", string(l.s[n.children[0].pos:n.children[0].end]))
         return n
 }
 
@@ -339,19 +383,25 @@ main_loop:
         for {
                 var r rune
                 if r = l.getRune(); r == 0 { break main_loop }
-                switch {
+        the_sw: switch {
                 case r == '#': l.nodes = append(l.nodes, l.parseComment())
                 case r == '\\':
                         switch l.getRune() {
                         case 0: break main_loop
                         case '\n': l.list = append(l.list, l.new(node_continual, -2))
-                        default: l.ungetRune()
+                        default: goto the_sw //l.ungetRune()
                         }
-                case r == '=': l.nodes = append(l.nodes, l.parseAssign(-1))
+                case r == '=': l.nodes = append(l.nodes, l.parseAssign(node_assign))
+                case r == '?':
+                        switch l.getRune() {
+                        case 0: break main_loop
+                        case '=': l.list = append(l.list, l.parseAssign(node_question_assign))
+                        default:  l.ungetRune(); l.list = append(l.list, l.parseRule())
+                        }
                 case r == ':':
                         switch l.getRune() {
                         case 0: break main_loop
-                        case '=': l.list = append(l.list, l.parseAssign(-2))
+                        case '=': l.list = append(l.list, l.parseAssign(node_simple_assign))
                         case ':': l.list = append(l.list, l.parseDoubleColonRule())
                         default:  l.ungetRune(); l.list = append(l.list, l.parseRule())
                         }
@@ -534,11 +584,10 @@ func (p *parser) call(name string, args ...string) string {
 }
 
 func (p *parser) setVariable(name, value string) (v *variable) {
-        //loc := location{ file:&(p.file), lineno:p.lineno, colno:p.colno+1 }
         loc := p.l.location()
 
         if name == "this" {
-                fmt.Printf("%v:warning: ignore attempts on \"this\"\n", &loc)
+                fmt.Printf("%v:warning: ignore attempts on \"this\"\n", loc)
                 return
         }
 
@@ -570,10 +619,30 @@ func (p *parser) setVariable(name, value string) (v *variable) {
         return
 }
 
+func (p *parser) expandNode(n *node) string {
+        if len(n.children) == 0 {
+                if n.kind == node_call {
+                        errorf(0, "bad call: %v", p.l.get(n))
+                }
+                return p.l.get(n)
+        }
+        if n.kind == node_call {
+                nn := p.expandNode(n.children[0])
+                fmt.Printf("call: %v\n", nn)
+        }
+        return ""
+}
+
 func (p *parser) processNode(n *node) (err error) {
         switch n.kind {
-        case node_assign: //fmt.Printf("%v:%v:%v: %v, %v children\n", p.l.file, n.lineno, n.colno, n.kind, len(n.children))
-        case node_call: fmt.Printf("%v:%v:%v: %v, %v children\n", p.l.file, n.lineno, n.colno, n.kind, len(n.children))
+        case node_assign:
+                nn, nv := n.children[0], n.children[1]
+                fmt.Printf("%v:%v:%v: %v = %v\n", p.l.file, n.lineno, n.colno, p.l.get(nn), p.l.get(nv))
+                switch p.l.s[n.pos] {
+                case ':': p.setVariable(p.l.get(nn), p.expandNode(nv))
+                case '=': p.setVariable(p.l.get(nn), p.l.get(nv))
+                }
+        case node_call: //fmt.Printf("%v:%v:%v: %v, %v children\n", p.l.file, n.lineno, n.colno, n.kind, len(n.children))
         }
         return
 }
