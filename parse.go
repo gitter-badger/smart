@@ -45,15 +45,15 @@ const (
 )
 
 var nodeTypeNames = []string {
-node_comment: "comment",
-node_continual: "continual",
-node_spaces: "spaces",
-node_text: "text",
-node_assign: "assign",
-node_rule: "rule",
-node_double_colon_rule: "double-colon rule",
-node_call: "call",
-node_call_arg: "arg",
+        node_comment: "comment",
+        node_continual: "continual",
+        node_spaces: "spaces",
+        node_text: "text",
+        node_assign: "assign",
+        node_rule: "rule",
+        node_double_colon_rule: "double-colon-rule",
+        node_call: "call",
+        node_call_arg: "arg",
 }
 
 func (k nodeType) String() string {
@@ -227,7 +227,7 @@ func (l *lex) parseCall() *node {
         switch rr {
         case 0: errorf(0, "unexpected end of file: '%v'", string(l.s[n.pos:l.pos]))
         case '(': rr = ')'
-        case '}': rr = '}'
+        case '{': rr = '}'
         default: n.end = l.pos; return n
         }
         for {
@@ -256,6 +256,8 @@ main_loop:
                         case '\n': l.new(node_continual, -2)
                         default: l.ungetRune()
                         }
+                case r == '=':
+                        return l.parseAssign(-1)
                 case r == ':':
                         switch l.getRune() {
                         case '0': break main_loop
@@ -263,8 +265,6 @@ main_loop:
                         case ':': return l.parseDoubleColonRule()
                         default:  l.ungetRune(); return l.parseRule()
                         }
-                case r == '=':
-                        return l.parseAssign(-1)
                 case r == '$':
                         return l.parseCall()
                 case r == '\n':
@@ -275,7 +275,6 @@ main_loop:
                                 if r = l.getRune(); r == 0 { break main_loop }
                                 if !unicode.IsSpace(r) { l.ungetRune(); break }
                         }
-                        //n.end, l.list = l.pos, append(l.list, n)
                         n.end = l.pos; return n
                 default:
                         n := l.new(node_text, -1)
@@ -283,7 +282,6 @@ main_loop:
                                 if r = l.getRune(); r == 0 { break main_loop }
                                 if strings.IndexRune(" $:=", r) != -1 { l.ungetRune(); break }
                         }
-                        //n.end, l.list = l.pos, append(l.list, n)
                         n.end = l.pos; return n
                 }
         }
