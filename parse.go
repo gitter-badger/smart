@@ -363,7 +363,7 @@ out_loop: for {
                                 nn.children = append(nn.children, c)
                                 //fmt.Printf("%v: call: %v\n", l.location(), len(nn.children))
                         }
-                        nn.end, n.children = l.pos, append(n.children, nn)
+                        nn.end, n.children = l.pos-1, append(n.children, nn)
                         if r == rr {
                                 break out_loop
                         } else {
@@ -627,8 +627,9 @@ func (p *parser) expandNode(n *node) string {
                 return p.l.get(n)
         }
         if n.kind == node_call {
-                nn := p.expandNode(n.children[0])
-                fmt.Printf("call: %v\n", nn)
+                nn, nv := n.children[0], n.children[1]
+                name := p.expandNode(nn)
+                fmt.Printf("expand: %v, %v\n", name, nv)
         }
         return ""
 }
@@ -637,12 +638,29 @@ func (p *parser) processNode(n *node) (err error) {
         switch n.kind {
         case node_assign:
                 nn, nv := n.children[0], n.children[1]
-                fmt.Printf("%v:%v:%v: %v = %v\n", p.l.file, n.lineno, n.colno, p.l.get(nn), p.l.get(nv))
-                switch p.l.s[n.pos] {
-                case ':': p.setVariable(p.l.get(nn), p.expandNode(nv))
-                case '=': p.setVariable(p.l.get(nn), p.l.get(nv))
+                //fmt.Printf("%v:%v:%v: %v = %v\n", p.l.file, n.lineno, n.colno, p.l.get(nn), p.l.get(nv))
+                p.setVariable(p.expandNode(nn), p.l.get(nv))
+        case node_simple_assign:
+                nn, nv := n.children[0], n.children[1]
+                p.setVariable(p.expandNode(nn), p.expandNode(nv))
+        case node_question_assign:
+                // TODO: ...
+        case node_call:
+                //fmt.Printf("%v:%v:%v: call %v\n", p.l.file, n.lineno, n.colno, p.l.get(n))
+                name := p.expandNode(n.children[0])
+                args := []string{}
+                for _, an := range n.children[1:] {
+                        switch an.kind {
+                        case node_text:
+                                s := p.expandNode(an); args = append(args, s)
+                                fmt.Printf("%v:%v:%v: arg '%v' ((%v) '%v') (%v)\n", p.l.file, an.lineno, an.colno, p.l.get(an), len(an.children), s, name)
+                        case node_spaces:
+                        }
                 }
-        case node_call: //fmt.Printf("%v:%v:%v: %v, %v children\n", p.l.file, n.lineno, n.colno, n.kind, len(n.children))
+                if s := p.call(name, args...); s != "" {
+                        errorf(0, "illigal: %v (%v)", s, name)
+                }
+                //fmt.Printf("%v:%v:%v: called %v (%v)\n", p.l.file, n.lineno, n.colno, p.l.get(n), name)
         }
         return
 }
