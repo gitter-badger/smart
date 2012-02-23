@@ -20,6 +20,14 @@ bbb := a \
 
 ccc := a b c d e foo
 
+ddd := $(aaa)\
+  $(bbb) \
+  $(ccc) \
+
+eee = $(aaa) \
+  $(bbb)\
+$(ccc)
+
 $(info $(aaa)) # output: a b c
 $(info $(bbb)) # output: a b c
 $(info $(ccc)) # output: a b c d e foo

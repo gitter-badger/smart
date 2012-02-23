@@ -105,7 +105,7 @@ func (l *lex) getRune() (r rune) {
         //case l.rune == 0:
         //        errorf(-2, "zero reading (at %v)", l.pos)
         case l.rune == utf8.RuneError:
-                errorf(-2, "bad UTF8 encoding")
+                errorf(-2, "invalid UTF8 encoding")
         case l.rune == '\n':
                 l.lineno, l.prevColno, l.colno = l.lineno+1, l.colno, 0
         case l.runeLen > 1:
@@ -255,8 +255,13 @@ func (l *lex) parseAssign(at nodeType) *node {
         nn.children = append(nn.children, l.list...)
         nn.pos, nn.end = l.list[0].pos, l.list[len(l.list)-1].end
 
-        n, r := l.new(node_assign, off), rune(0)
+        n, r := l.new(node_assign, nn.pos-l.pos), rune(0)
         n.children, l.list = append(n.children, nn), l.list[0:0]
+        //fmt.Printf("assign: '%v' (%v)\n", l.get(n), l.list)
+
+        nn = l.new(node_text, off)
+        nn.end = nn.pos - off
+        n.children = append(n.children, nn)
 
         nn = l.new(node_text, 0)
         n.children = append(n.children, nn)
@@ -306,15 +311,16 @@ out_loop: for {
                                         //print("t: "+l.get(t)+"\n")
                                         nn.children = append(nn.children, t)
                                 }
-                                nn.children = append(nn.children, l.new(node_continual, -2))
-                        default: goto the_sw //l.ungetRune()
+                                cn := l.new(node_continual, -2); cn.end = cn.pos+2
+                                nn.children = append(nn.children, cn)
+                                break
+                        default: goto the_sw
                         }
                 }
         }
         n.end = nn.end
 
-        //fmt.Printf("assign: '%v', '%v'\n", string(l.s[n.children[0].pos:n.children[0].end]), string(l.s[n.children[1].pos:n.children[len(n.children)-1].end]))
-        //fmt.Printf("assign: '%v'\n", string(l.s[n.children[0].pos:n.children[0].end]))
+        //fmt.Printf("assign: '%v'\n", l.get(n))
         return n
 }
 
@@ -389,21 +395,21 @@ main_loop:
                         switch l.getRune() {
                         case 0: break main_loop
                         case '\n': l.list = append(l.list, l.new(node_continual, -2))
-                        default: goto the_sw //l.ungetRune()
+                        default: goto the_sw
                         }
                 case r == '=': l.nodes = append(l.nodes, l.parseAssign(node_assign))
                 case r == '?':
                         switch l.getRune() {
                         case 0: break main_loop
-                        case '=': l.list = append(l.list, l.parseAssign(node_question_assign))
+                        case '=': l.nodes = append(l.nodes, l.parseAssign(node_question_assign))
                         default:  l.ungetRune(); l.list = append(l.list, l.parseRule())
                         }
                 case r == ':':
                         switch l.getRune() {
                         case 0: break main_loop
-                        case '=': l.list = append(l.list, l.parseAssign(node_simple_assign))
-                        case ':': l.list = append(l.list, l.parseDoubleColonRule())
-                        default:  l.ungetRune(); l.list = append(l.list, l.parseRule())
+                        case '=': l.nodes = append(l.nodes, l.parseAssign(node_simple_assign))
+                        case ':': l.nodes = append(l.nodes, l.parseDoubleColonRule())
+                        default:  l.ungetRune(); l.nodes = append(l.nodes, l.parseRule())
                         }
                 case r == '$': l.list = append(l.list, l.parseCall())
                 case r == '\n':
@@ -620,12 +626,15 @@ func (p *parser) setVariable(name, value string) (v *variable) {
 }
 
 func (p *parser) expandNode(n *node) string {
+        fmt.Printf("%v:%v:%v: expand '%v' (%v)\n", p.l.file, n.lineno, n.colno, p.l.get(n), len(n.children))
+
         if len(n.children) == 0 {
                 if n.kind == node_call {
                         errorf(0, "bad call: %v", p.l.get(n))
                 }
                 return p.l.get(n)
         }
+
         if n.kind == node_call {
                 nn, nv := n.children[0], n.children[1]
                 name := p.expandNode(nn)
@@ -635,7 +644,11 @@ func (p *parser) expandNode(n *node) string {
 }
 
 func (p *parser) processNode(n *node) (err error) {
+        fmt.Printf("%v:%v:%v: node '%v' (%v, %v)\n", p.l.file, n.lineno, n.colno, p.l.get(n), n.kind, len(n.children))
+
         switch n.kind {
+        case node_comment:
+        case node_spaces:
         case node_assign:
                 nn, nv := n.children[0], n.children[1]
                 //fmt.Printf("%v:%v:%v: %v = %v\n", p.l.file, n.lineno, n.colno, p.l.get(nn), p.l.get(nv))
@@ -647,13 +660,12 @@ func (p *parser) processNode(n *node) (err error) {
                 // TODO: ...
         case node_call:
                 //fmt.Printf("%v:%v:%v: call %v\n", p.l.file, n.lineno, n.colno, p.l.get(n))
-                name := p.expandNode(n.children[0])
-                args := []string{}
+                name, args := p.expandNode(n.children[0]), []string{}
                 for _, an := range n.children[1:] {
                         switch an.kind {
                         case node_text:
                                 s := p.expandNode(an); args = append(args, s)
-                                fmt.Printf("%v:%v:%v: arg '%v' ((%v) '%v') (%v)\n", p.l.file, an.lineno, an.colno, p.l.get(an), len(an.children), s, name)
+                                //fmt.Printf("%v:%v:%v: arg '%v' ((%v) '%v') (%v)\n", p.l.file, an.lineno, an.colno, p.l.get(an), len(an.children), s, name)
                         case node_spaces:
                         }
                 }
@@ -669,7 +681,7 @@ func (p *parser) parse() (err error) {
         p.l.parse()
 
         for _, n := range p.l.nodes {
-                //fmt.Printf("%v: %v, %v children\n", p.l.location(), n.kind, len(n.children))
+                if n.kind == node_comment { continue }
                 if e := p.processNode(n); e != nil {
                         break
                 }
