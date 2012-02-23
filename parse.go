@@ -626,25 +626,43 @@ func (p *parser) setVariable(name, value string) (v *variable) {
 }
 
 func (p *parser) expandNode(n *node) string {
-        fmt.Printf("%v:%v:%v: expand '%v' (%v)\n", p.l.file, n.lineno, n.colno, p.l.get(n), len(n.children))
+        //fmt.Printf("%v:%v:%v: expand '%v' (%v)\n", p.l.file, n.lineno, n.colno, p.l.get(n), len(n.children))
 
         if len(n.children) == 0 {
-                if n.kind == node_call {
-                        errorf(0, "bad call: %v", p.l.get(n))
+                switch n.kind {
+                case node_comment: errorf(0, "can't expand comment: %v", p.l.get(n))
+                case node_call: errorf(0, "invalid call: %v", p.l.get(n))
+                case node_continual: return " "
                 }
                 return p.l.get(n)
         }
 
         if n.kind == node_call {
-                nn, nv := n.children[0], n.children[1]
-                name := p.expandNode(nn)
-                fmt.Printf("expand: %v, %v\n", name, nv)
+                //fmt.Printf("expand: call: %v, %v\n", p.l.get(n), len(n.children))
+                name, args := p.expandNode(n.children[0]), []string{}
+                for _, an := range n.children[1:] {
+                        switch an.kind {
+                        case node_text:
+                                s := p.expandNode(an); args = append(args, s)
+                                //fmt.Printf("%v:%v:%v: arg '%v' ((%v) '%v') (%v)\n", p.l.file, an.lineno, an.colno, p.l.get(an), len(an.children), s, name)
+                        case node_spaces:
+                        }
+                }
+                fmt.Printf("%v:%v:%v: call '%v' %v\n", p.l.file, n.lineno, n.colno, name, args)
+                return p.call(name, args...)
+        } else {
+                var b bytes.Buffer
+                for _, cn := range n.children {
+                        //fmt.Printf("expand: %v, %v\n", cn.kind, p.l.get(cn))
+                        b.WriteString(p.expandNode(cn))
+                }
+                return b.String()
         }
         return ""
 }
 
 func (p *parser) processNode(n *node) (err error) {
-        fmt.Printf("%v:%v:%v: node '%v' (%v, %v)\n", p.l.file, n.lineno, n.colno, p.l.get(n), n.kind, len(n.children))
+        //fmt.Printf("%v:%v:%v: node '%v' (%v, %v)\n", p.l.file, n.lineno, n.colno, p.l.get(n), n.kind, len(n.children))
 
         switch n.kind {
         case node_comment:
@@ -660,19 +678,9 @@ func (p *parser) processNode(n *node) (err error) {
                 // TODO: ...
         case node_call:
                 //fmt.Printf("%v:%v:%v: call %v\n", p.l.file, n.lineno, n.colno, p.l.get(n))
-                name, args := p.expandNode(n.children[0]), []string{}
-                for _, an := range n.children[1:] {
-                        switch an.kind {
-                        case node_text:
-                                s := p.expandNode(an); args = append(args, s)
-                                //fmt.Printf("%v:%v:%v: arg '%v' ((%v) '%v') (%v)\n", p.l.file, an.lineno, an.colno, p.l.get(an), len(an.children), s, name)
-                        case node_spaces:
-                        }
+                if s := p.expandNode(n); s != "" {
+                        errorf(0, "illigal: %v (%v)", s, p.l.get(n))
                 }
-                if s := p.call(name, args...); s != "" {
-                        errorf(0, "illigal: %v (%v)", s, name)
-                }
-                //fmt.Printf("%v:%v:%v: called %v (%v)\n", p.l.file, n.lineno, n.colno, p.l.get(n), name)
         }
         return
 }
