@@ -328,6 +328,15 @@ out_loop: for {
                         }
                 }
         }
+
+        for cn, c := range nn.children {
+                if c.kind != node_spaces { nn.children = nn.children[cn:]; break }
+        }
+        
+        if len(nn.children) == 1 && nn.children[0].kind == nn.kind {
+                nn.children = nn.children[0:0]
+        }
+
         n.end = nn.end
 
         //fmt.Printf("%v:%v: %v, '%v'\n", l.file, n.lineno, n.kind, l.get(n))
