@@ -194,10 +194,18 @@ func (l *lex) parseComment() *node {
         n, r := l.new(node_comment, -1), rune(0)
         for {
                 for r != '\n' { if r = l.getRune(); r == 0 { break } }
-                if r == '\n' && l.peekRune() == '#' { r = l.getRune(); continue }
+                if r == '\n' && l.peekRune() == '#' {
+                        r = l.getRune(); continue
+                } else {
+                        // return the '\n' because the consequenced node may need
+                        // this as separator.
+                        l.ungetRune()
+                }
                 break
         }
         n.end = l.pos
+
+        //fmt.Printf("%v:%v: %v, '%v'\n", l.file, n.lineno, n.kind, l.get(n))
         return n
 }
 
@@ -241,14 +249,15 @@ func (l *lex) parseAssign(at nodeType) *node {
         li := 0
         for {
                 if l.list[li].kind != node_spaces { break }
-                if li += 1; li == len(l.list) { break }
+                if li += 1; len(l.list) <= li { break }
         }
 
         l.list = l.list[li:]
-        li = len(l.list) - 1
+        li = len(l.list)-1
         for {
+                //fmt.Printf("li: %v, %v\n", li, len(l.list))
                 if l.list[li].kind == node_spaces { l.list = l.list[0:li] }
-                if li -= 1; li == 0 { break }
+                if li -= 1; li <= 0 { break }
         }
 
         nn := l.new(node_text, 0)
@@ -270,31 +279,32 @@ out_loop: for {
                 r = l.getRune()
         the_sw: switch {
                 case r == 0 || r == '\n' || r == '#':
-                        nn.end = l.pos - 1
+                        if r != 0 { l.ungetRune() }
+
+                        nn.end = l.pos
+
                         if 0 < len(nn.children) {
                                 lc := nn.children[len(nn.children)-1]
-                                if lc.end < nn.end {
-                                        t := l.new(node_text, lc.end-1-nn.end); t.end = nn.end
-                                        if l.s[t.pos] == ' ' { break out_loop }
+                                if lc.end < nn.end { // the last child does not coincide with the end
+                                        t := l.new(node_text, lc.end-nn.end); t.end = nn.end
+                                        if l.s[t.pos] == ' ' { errorf(0, "unexpected space") }
                                         //print("t: "+l.get(t)+"\n")
                                         nn.children = append(nn.children, t)
                                 }
                         }
-                        if r == '#' { l.nodes = append(l.nodes, l.parseComment()) }
                         break out_loop
                 case r == ' ':
                         ss := l.parseSpaces(-1)
                         if 0 == len(nn.children) {
                                 if nn.pos == ss.pos /*|| nn.pos == nn.end*/ {
-                                        nn.pos = ss.end
+                                        nn.pos = ss.end // just ignore the first spaces
                                 } else {
                                         t := l.new(node_text, nn.pos-ss.pos-1); t.end = ss.pos
-                                        //print("t: "+l.get(t)+"\n")
+                                        print("t: "+l.get(t)+"\n")
                                         nn.children = append(nn.children, t)
                                 }
-                        } else {
-                                nn.children = append(nn.children, ss)
                         }
+                        nn.children = append(nn.children, ss)
                 case r == '$':
                         if 0 == len(nn.children) && nn.pos != l.pos-1 {
                                 t := l.new(node_text, nn.pos-l.pos); t.end = l.pos-1
@@ -320,7 +330,7 @@ out_loop: for {
         }
         n.end = nn.end
 
-        //fmt.Printf("assign: '%v'\n", l.get(n))
+        //fmt.Printf("%v:%v: %v, '%v'\n", l.file, n.lineno, n.kind, l.get(n))
         return n
 }
 
@@ -390,19 +400,21 @@ main_loop:
                 var r rune
                 if r = l.getRune(); r == 0 { break main_loop }
         the_sw: switch {
-                case r == '#': l.nodes = append(l.nodes, l.parseComment())
+                case r == '#':
+                        l.nodes = append(l.nodes, l.parseComment())
                 case r == '\\':
                         switch l.getRune() {
                         case 0: break main_loop
                         case '\n': l.list = append(l.list, l.new(node_continual, -2))
                         default: goto the_sw
                         }
-                case r == '=': l.nodes = append(l.nodes, l.parseAssign(node_assign))
+                case r == '=':
+                        l.nodes = append(l.nodes, l.parseAssign(node_assign))
                 case r == '?':
                         switch l.getRune() {
                         case 0: break main_loop
                         case '=': l.nodes = append(l.nodes, l.parseAssign(node_question_assign))
-                        default:  l.ungetRune(); l.list = append(l.list, l.parseRule())
+                        default: goto the_sw
                         }
                 case r == ':':
                         switch l.getRune() {
@@ -411,7 +423,8 @@ main_loop:
                         case ':': l.nodes = append(l.nodes, l.parseDoubleColonRule())
                         default:  l.ungetRune(); l.nodes = append(l.nodes, l.parseRule())
                         }
-                case r == '$': l.list = append(l.list, l.parseCall())
+                case r == '$':
+                        l.list = append(l.list, l.parseCall())
                 case r == '\n':
                         l.nodes, l.list = append(l.nodes, l.list...), l.list[0:0]
                 case r != '\n' && unicode.IsSpace(r):
@@ -648,12 +661,12 @@ func (p *parser) expandNode(n *node) string {
                         case node_spaces:
                         }
                 }
-                fmt.Printf("%v:%v:%v: call '%v' %v\n", p.l.file, n.lineno, n.colno, name, args)
+                //fmt.Printf("%v:%v:%v: call '%v' %v\n", p.l.file, n.lineno, n.colno, name, args)
                 return p.call(name, args...)
         } else {
                 var b bytes.Buffer
                 for _, cn := range n.children {
-                        //fmt.Printf("expand: %v, %v\n", cn.kind, p.l.get(cn))
+                        //fmt.Printf("%v:%v:%v: %v '%v'\n", p.l.file, cn.lineno, cn.colno, cn.kind, p.l.get(cn))
                         b.WriteString(p.expandNode(cn))
                 }
                 return b.String()

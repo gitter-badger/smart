@@ -16,7 +16,7 @@ go tool 6g -o _go_.6 $GOFILES
 go tool pack gr smart.a _go_.6
 
 [[ -f smart ]] && rm -f smart
-go tool 6g -I . -o main.6 main.go
+go tool 6g -I . -o main.6 main/main.go
 go tool 6l -L . -o smart main.6
 
 test -f smart && rm -f $OFILES main.6

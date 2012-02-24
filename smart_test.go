@@ -1,8 +1,8 @@
-package smart_test
+package smart
 
 import (
+        //. "smart"
         "testing"
-        . "smart"
 )
 
 func TestTraverse(t *testing.T) {
