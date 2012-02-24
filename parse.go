@@ -68,6 +68,10 @@ type node struct {
         pos, end, lineno, colno int
 }
 
+func (n *node) len() int {
+        return n.end - n.pos
+}
+
 type lex struct {
         file string
         s []byte // the content of the file
@@ -383,12 +387,22 @@ out_loop: for {
                 case r == ',':
                         if 0 < len(nn.children) {
                                 lc := nn.children[len(nn.children)-1]
-                                c := l.new(node_text, 0)
-                                c.pos, c.end = lc.end + 1, l.pos
-                                nn.children = append(nn.children, c)
-                                //fmt.Printf("%v: call: %v\n", l.location(), len(nn.children))
+                                if lc.end+1 < l.pos {
+                                        c := l.new(node_text, 0)
+                                        c.pos, c.end = lc.end+1, l.pos
+                                        nn.children = append(nn.children, c)
+                                        //fmt.Printf("%v:%v:%v: '%v', '%v'\n", l.file, nn.lineno, nn.colno, l.get(nn), l.get(c))
+                                }
                         }
-                        nn.end, n.children = l.pos-1, append(n.children, nn)
+
+                        nn.end = l.pos-1
+
+                        if len(nn.children) == 1 /*&& nn.children[0].kind != nn.kind*/ {
+                                n.children = append(n.children, nn.children[0])
+                        } else {
+                                n.children = append(n.children, nn)
+                        }
+
                         if r == rr {
                                 break out_loop
                         } else {
