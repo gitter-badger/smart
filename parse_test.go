@@ -106,7 +106,7 @@ $(a) \
                 var cn int
                 for cn = 0; cn < len(c.children) && cn < len(cs); cn++ {
                         if s := l.get(c.children[cn]); s != cs[cn] {
-                                t.Error("expected child", "'"+cs[cn]+"'", ", but '"+s+"'")
+                                t.Error("expected child", cn, "'"+cs[cn]+"'", ", but '"+s+"',", "in '"+l.get(c)+"'")
                                 break
                         }
                 }

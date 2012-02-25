@@ -276,57 +276,32 @@ func (l *lex) parseAssign(at nodeType) *node {
         n.children = append(n.children, nn)
 
         // value
-        nn = l.new(node_text, 0)
+        nn, t := l.new(node_text, 0), l.new(node_text, 0)
         n.children = append(n.children, nn)
 
 out_loop: for {
                 r := l.getRune()
         the_sw: switch {
+                default: t.end = l.pos
                 case r == 0 || r == '\n' || r == '#':
                         if r != 0 { l.ungetRune() }
-
+                        if 0 < t.len() { nn.children = append(nn.children, t) }
                         nn.end = l.pos
-
-                        if 0 < len(nn.children) {
-                                lc := nn.children[len(nn.children)-1]
-                                if lc.end < nn.end { // the last child does not coincide with the end
-                                        t := l.new(node_text, lc.end-nn.end); t.end = nn.end
-                                        if l.s[t.pos] == ' ' { errorf(0, "unexpected space") }
-                                        //print("t: "+l.get(t)+"\n")
-                                        nn.children = append(nn.children, t)
-                                }
-                        }
                         break out_loop
                 case r == ' ':
                         ss := l.parseSpaces(-1)
-                        if 0 == len(nn.children) {
-                                if nn.pos == ss.pos /*|| nn.pos == nn.end*/ {
-                                        nn.pos = ss.end // just ignore the first spaces
-                                } else {
-                                        t := l.new(node_text, nn.pos-ss.pos-1); t.end = ss.pos
-                                        //print("t: "+l.get(t)+"\n")
-                                        nn.children = append(nn.children, t)
-                                }
-                        }
+                        if ss.pos == nn.pos { nn.pos, t.pos, t.end = ss.end, ss.end, ss.end } // ignore the first space just after '='
+                        if 0 < t.len() { nn.children, t = append(nn.children, t), l.new(node_text, 0) }
                         nn.children = append(nn.children, ss)
                 case r == '$':
-                        /*
-                        pos := l.pos-1
-                        if 0 < len(nn.children) && nn.pos != pos {
-                                t := l.new(node_text, nn.pos-pos-1); t.end = pos
-                                //print("t: "+l.get(t)+"\n")
-                                nn.children = append(nn.children, t)
-                        }*/
-                        nn.children = append(nn.children, l.parseCall())
+                        cc := l.parseCall()
+                        if 0 < t.len() { nn.children, t = append(nn.children, t), l.new(node_text, 0) }
+                        nn.children = append(nn.children, cc)
                 case r == '\\':
                         switch l.getRune() {
                         case 0: break out_loop
                         case '\n':
-                                if 0 == len(nn.children) && nn.pos != l.pos-2 {
-                                        t := l.new(node_text, nn.pos-l.pos-1); t.end = l.pos-2
-                                        //print("t: "+l.get(t)+"\n")
-                                        nn.children = append(nn.children, t)
-                                }
+                                if 0 < t.len() { nn.children, t = append(nn.children, t), l.new(node_text, 0) }
                                 cn := l.new(node_continual, -2); cn.end = cn.pos+2
                                 nn.children = append(nn.children, cn)
                                 break
