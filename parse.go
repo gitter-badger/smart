@@ -238,10 +238,6 @@ func (l *lex) parseSpaces(off int) *node {
 //}
 
 func (l *lex) parseAssign(at nodeType) *node {
-        if len(l.list) == 0 {
-                errorf(0, "illigal assignment")
-        }
-
         off := -1
         switch at {
         case node_assign:
@@ -250,37 +246,41 @@ func (l *lex) parseAssign(at nodeType) *node {
         default: errorf(0, "unknown assignment")
         }
 
-        li := 0
-        for {
-                if l.list[li].kind != node_spaces { break }
-                if li += 1; len(l.list) <= li { break }
+        for cn, c := range l.list {
+                //fmt.Printf("assign:1: %v '%v'\n", c.kind, l.get(c))
+                if c.kind != node_spaces { l.list = l.list[cn:]; break }
         }
 
-        l.list = l.list[li:]
-        li = len(l.list)-1
-        for {
-                //fmt.Printf("li: %v, %v\n", li, len(l.list))
-                if l.list[li].kind == node_spaces { l.list = l.list[0:li] }
-                if li -= 1; li <= 0 { break }
+        for li := len(l.list)-1; 0 <= li; li-- {
+                //fmt.Printf("assign:2: %v '%v'\n", l.list[li].kind, l.get(l.list[li]))
+                if l.list[li].kind != node_spaces { l.list = l.list[0:li+1]; break }
         }
 
+        if len(l.list) == 0 {
+                errorf(0, "illigal assignment with no variable name")
+        }
+
+        // the name
         nn := l.new(node_text, 0)
         nn.children = append(nn.children, l.list...)
-        nn.pos, nn.end = l.list[0].pos, l.list[len(l.list)-1].end
+        nn.pos, nn.end, l.list = l.list[0].pos, l.list[len(l.list)-1].end, l.list[0:0]
 
-        n, r := l.new(node_assign, nn.pos-l.pos), rune(0)
-        n.children, l.list = append(n.children, nn), l.list[0:0]
-        //fmt.Printf("assign: '%v' (%v)\n", l.get(n), l.list)
+        // 'n' is the whole assign statemetn, e.g. "foo = bar"
+        n := l.new(at, nn.pos-l.pos)
+        n.children = append(n.children, nn)
+        //fmt.Printf("assign: '%v'\n", l.get(n))
 
+        // the equal signs: '=', ':=', '?='
         nn = l.new(node_text, off)
         nn.end = nn.pos - off
         n.children = append(n.children, nn)
 
+        // value
         nn = l.new(node_text, 0)
         n.children = append(n.children, nn)
 
 out_loop: for {
-                r = l.getRune()
+                r := l.getRune()
         the_sw: switch {
                 case r == 0 || r == '\n' || r == '#':
                         if r != 0 { l.ungetRune() }
@@ -304,17 +304,19 @@ out_loop: for {
                                         nn.pos = ss.end // just ignore the first spaces
                                 } else {
                                         t := l.new(node_text, nn.pos-ss.pos-1); t.end = ss.pos
-                                        print("t: "+l.get(t)+"\n")
+                                        //print("t: "+l.get(t)+"\n")
                                         nn.children = append(nn.children, t)
                                 }
                         }
                         nn.children = append(nn.children, ss)
                 case r == '$':
-                        if 0 == len(nn.children) && nn.pos != l.pos-1 {
-                                t := l.new(node_text, nn.pos-l.pos); t.end = l.pos-1
+                        /*
+                        pos := l.pos-1
+                        if 0 < len(nn.children) && nn.pos != pos {
+                                t := l.new(node_text, nn.pos-pos-1); t.end = pos
                                 //print("t: "+l.get(t)+"\n")
                                 nn.children = append(nn.children, t)
-                        }
+                        }*/
                         nn.children = append(nn.children, l.parseCall())
                 case r == '\\':
                         switch l.getRune() {
@@ -337,13 +339,13 @@ out_loop: for {
                 if c.kind != node_spaces { nn.children = nn.children[cn:]; break }
         }
         
-        if len(nn.children) == 1 && nn.children[0].kind == nn.kind {
+        if len(nn.children) == 1 /*&& nn.children[0].kind == nn.kind*/ {
                 nn.children = nn.children[0:0]
         }
 
         n.end = nn.end
 
-        //fmt.Printf("%v:%v: %v, '%v'\n", l.file, n.lineno, n.kind, l.get(n))
+        //fmt.Printf("%v:%v: %v, '%v', '%v'\n", l.file, n.lineno, n.kind, l.get(n), l.get(nn))
         return n
 }
 
@@ -377,15 +379,23 @@ out_loop: for {
                 case r == 0: errorf(0, "unexpected end of file: '%v'", string(l.s[n.pos:l.pos]))
                 case r == '(': parentheses = append(parentheses, ')')
                 case r == '{': parentheses = append(parentheses, '}')
+                case r == '$':
+                        nn.children = append(nn.children, l.parseCall())
                 case r == rr:
                         if 0 < len(parentheses) && rr == parentheses[len(parentheses)-1] {
                                 parentheses = parentheses[0:len(parentheses)-1]
                                 break
                         }
                         fallthrough
-                case r == ' ' && len(n.children) == 0: fallthrough
+                case r == ' ':
+                        fallthrough
                 case r == ',':
-                        if 0 < len(nn.children) {
+                        nn.end = l.pos-1
+
+                        if r == ' ' && 0 < len(n.children) {
+                                nn.children = append(nn.children, l.parseSpaces(-1))
+                                break
+                        } else if 0 < len(nn.children) {
                                 lc := nn.children[len(nn.children)-1]
                                 if lc.end+1 < l.pos {
                                         c := l.new(node_text, 0)
@@ -395,9 +405,7 @@ out_loop: for {
                                 }
                         }
 
-                        nn.end = l.pos-1
-
-                        if len(nn.children) == 1 /*&& nn.children[0].kind != nn.kind*/ {
+                        if len(nn.children) == 1 {
                                 n.children = append(n.children, nn.children[0])
                         } else {
                                 n.children = append(n.children, nn)
@@ -408,8 +416,6 @@ out_loop: for {
                         } else {
                                 nn = l.new(node_text, 0)
                         }
-                case r == '$': nn.children = append(nn.children, l.parseCall())
-                case r == ' ' && len(n.children) > 0: nn.children = append(nn.children, l.parseSpaces(-1))
                 }
         }
         n.end = l.pos
@@ -670,6 +676,7 @@ func (p *parser) expandNode(n *node) string {
                 case node_call: errorf(0, "invalid call: %v", p.l.get(n))
                 case node_continual: return " "
                 }
+                //fmt.Printf("%v:%v:%v: %v '%v' (%v)\n", p.l.file, n.lineno, n.colno, n.kind, p.l.get(n), len(n.children))
                 return p.l.get(n)
         }
 
@@ -677,16 +684,20 @@ func (p *parser) expandNode(n *node) string {
                 //fmt.Printf("expand: call: %v, %v\n", p.l.get(n), len(n.children))
                 name, args := p.expandNode(n.children[0]), []string{}
                 for _, an := range n.children[1:] {
+                        /*
                         switch an.kind {
                         case node_text:
                                 s := p.expandNode(an); args = append(args, s)
                                 //fmt.Printf("%v:%v:%v: arg '%v' ((%v) '%v') (%v)\n", p.l.file, an.lineno, an.colno, p.l.get(an), len(an.children), s, name)
                         case node_spaces:
-                        }
+                        }*/
+                        s := p.expandNode(an); args = append(args, s)
+                        //fmt.Printf("%v:%v:%v: arg '%v' ((%v) '%v') (%v)\n", p.l.file, an.lineno, an.colno, p.l.get(an), len(an.children), s, name)
                 }
                 //fmt.Printf("%v:%v:%v: call '%v' %v\n", p.l.file, n.lineno, n.colno, name, args)
                 return p.call(name, args...)
         } else {
+                //fmt.Printf("%v:%v:%v: %v '%v' (%v)\n", p.l.file, n.lineno, n.colno, n.kind, p.l.get(n), len(n.children))
                 var b bytes.Buffer
                 for _, cn := range n.children {
                         //fmt.Printf("%v:%v:%v: %v '%v'\n", p.l.file, cn.lineno, cn.colno, cn.kind, p.l.get(cn))
@@ -704,12 +715,15 @@ func (p *parser) processNode(n *node) (err error) {
         case node_comment:
         case node_spaces:
         case node_assign:
-                nn, nv := n.children[0], n.children[1]
-                //fmt.Printf("%v:%v:%v: %v = %v\n", p.l.file, n.lineno, n.colno, p.l.get(nn), p.l.get(nv))
+                nn, nv := n.children[0], n.children[2]
                 p.setVariable(p.expandNode(nn), p.l.get(nv))
+                //fmt.Printf("%v:%v:%v: %v %v\n", p.l.file, n.lineno, n.colno, p.l.get(nn), p.l.get(nv))
+                //fmt.Printf("%v:%v:%v: '%v' '%v'\n", p.l.file, n.lineno, n.colno, p.expandNode(nn), p.l.get(nv))
         case node_simple_assign:
-                nn, nv := n.children[0], n.children[1]
+                nn, nv := n.children[0], n.children[2]
                 p.setVariable(p.expandNode(nn), p.expandNode(nv))
+                //fmt.Printf("%v:%v:%v: %v %v\n", p.l.file, n.lineno, n.colno, p.l.get(nn), p.l.get(nv))
+                //fmt.Printf("%v:%v:%v: '%v' '%v'\n", p.l.file, n.lineno, n.colno, p.expandNode(nn), p.expandNode(nv))
         case node_question_assign:
                 // TODO: ...
         case node_call:

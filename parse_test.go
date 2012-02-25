@@ -94,11 +94,13 @@ $(a) \
         if len(l.nodes) != 6 { t.Error("expecting 6 nodes but", len(l.nodes)) }
         
         count := 0
-        for _, n := range l.nodes { if n.kind == node_assign { count += 1 } }
-        if count != 6 { t.Error("expecting 9 assigns, but", count) }
+        for _, n := range l.nodes {
+                if n.kind == node_assign || n.kind == node_simple_assign { count += 1 }
+        }
+        if count != 6 { t.Error("expecting 6 assigns, but", count) }
 
         checkNode := func(c *node, k nodeType, cc int, s string, cs ...string) {
-                if c.kind != node_assign { t.Error("expecting", k, ", but", c.kind) }
+                if c.kind != k { t.Error("expecting", k, ", but", c.kind) }
                 if len(c.children) != cc { t.Error("expecting", cc, " children, but", len(c.children)) }
 
                 var cn int
@@ -136,7 +138,7 @@ $(a) \
         if c.children[2].kind != node_text { t.Error("expect child 2 to be text, but", c.children[2].kind) }
         if cn := len(c.children[2].children); cn != 0 { t.Error("expect child number 0, but:", cn) }
 
-        c = l.nodes[4]; checkNode(c, node_assign, 3, `foo := $(a) \
+        c = l.nodes[4]; checkNode(c, node_simple_assign, 3, `foo := $(a) \
  $b\
  ${c}\
 `, "foo", ":=", `$(a) \
@@ -146,7 +148,7 @@ $(a) \
         if c.children[0].kind != node_text { t.Error("expect child 0 to be text, but", c.children[0].kind) }
         if c.children[1].kind != node_text { t.Error("expect child 1 to be text, but", c.children[1].kind) }
         if c.children[2].kind != node_text { t.Error("expect child 2 to be text, but", c.children[2].kind) }
-        if cn := len(c.children[2].children); cn != 9 { t.Error("expect child number 9, but:", cn) }
+        if cn := len(c.children[2].children); cn != 9 { t.Error("expect 9 children, but:", cn) }
 
         c = l.nodes[5]; checkNode(c, node_assign, 3, `bar = $(foo) \
 $(a) \
@@ -156,7 +158,7 @@ $(a) \
         if c.children[0].kind != node_text { t.Error("expect child 0 to be text, but", c.children[0].kind) }
         if c.children[1].kind != node_text { t.Error("expect child 1 to be text, but", c.children[1].kind) }
         if c.children[2].kind != node_text { t.Error("expect child 2 to be text, but", c.children[2].kind) }
-        if cn := len(c.children[2].children); cn != 10 { t.Error("expect child number 10, but:", cn) }
+        if cn := len(c.children[2].children); cn != 10 { t.Error("expect 10 children, but:", cn) }
 }
 
 func TestLexCalls(t *testing.T) {
@@ -184,15 +186,15 @@ $(info $($(foo)),$($($(foo)$(bar))))
 
         var c, cc *node
 
-        if c = l.nodes[2]; c.kind != node_assign { t.Error("expecting assign node, but:", c.kind) }
+        if c = l.nodes[2]; c.kind != node_simple_assign { t.Error("expecting assign node, but:", c.kind) }
         if l.get(c) != `foobar := $(foo)$(bar)` { t.Error("expecting 'foobar := $(foo)$(bar)', but:", "'"+l.get(c)+"'") }
         if len(c.children) != 3 { t.Error("expecting 3 children, but:", len(c.children), ", node:", l.get(c)) }
         if cc = c.children[0]; cc.kind != node_text { t.Error("expecting text node, but:", cc.kind) }
         if cc = c.children[1]; cc.kind != node_text { t.Error("expecting text node, but:", cc.kind) }
         if cc = c.children[2]; cc.kind != node_text { t.Error("expecting text node, but:", cc.kind) }
         if len(cc.children) != 2 { t.Error("expecting 2 children, but:", len(cc.children)) }
-        if cc.children[0].kind != node_call { t.Error("expecting call, but:", cc.children[0].kind) }
-        if cc.children[1].kind != node_call { t.Error("expecting call, but:", cc.children[1].kind) }
+        if cc.children[0].kind != node_call { t.Error("expecting call, but:", cc.children[0].kind, l.get(cc.children[0])) }
+        if cc.children[1].kind != node_call { t.Error("expecting call, but:", cc.children[1].kind, l.get(cc.children[1])) }
         if l.get(cc.children[0]) != `$(foo)` { t.Error("expecting '$(foo)', but:", "'"+l.get(cc.children[0])+"'") }
         if l.get(cc.children[1]) != `$(bar)` { t.Error("expecting '$(bar)', but:", "'"+l.get(cc.children[1])+"'") }
 
@@ -290,10 +292,47 @@ i = i
 sh$ared = shared
 stat$ic = static
 a$$a = foo
-xxx$(use $(sh$ared),$(stat$ic))-$(a$$a)-xxx
+aaaa = xxx$(info $(sh$ared),$(stat$ic))-$(a$$a)-xxx
+bbbb := xxx$(info $(sh$ared),$(stat$ic))-$(a$$a)-xxx
+cccc = xxx-$(sh$ared)-$(stat$ic)-$(a$$a)-xxx
+dddd := xxx-$(sh$ared)-$(stat$ic)-$(a$$a)-xxx
 `
         p := newTestParser("TestParse", s)
+
         if err := p.parse(); err != nil {
                 t.Error("parse failed: %v", err); return
         }
+
+        nd := p.l.nodes[5]
+        if s := p.l.get(nd.children[0]); s != "aaaa" { t.Error("expect aaaa, but", s) }
+        if s := p.l.get(nd.children[1]); s != "=" { t.Error("expect =, but", s) }
+        if s := p.l.get(nd.children[2]); s != "xxx$(info $(sh$ared),$(stat$ic))-$(a$$a)-xxx" { t.Error("expect xxx$(info $(sh$ared),$(stat$ic))-$(a$$a)-xxx, but", s) }
+        if nd = nd.children[2]; nd == nil {
+                t.Error("expecting a node, but nil")
+        } else {
+                if num := len(nd.children); num != 5 { t.Error("expecting 5 children for 'aaaa', but", num) }
+                if s := p.l.get(nd.children[0]); s != "xxx" { t.Error("expecting xxx for 'aaaa', but", s) }
+                if s := p.l.get(nd.children[1]); s != "$(info $(sh$ared),$(stat$ic))" { t.Error("expecting $(info $(sh$ared),$(stat$ic)) for 'aaaa', but", s) }
+                if s := p.l.get(nd.children[2]); s != "-" { t.Error("expecting - for 'aaaa', but", s) }
+                if s := p.l.get(nd.children[3]); s != "$(a$$a)" { t.Error("expecting $(a$$a) for 'aaaa', but", s) }
+                if s := p.l.get(nd.children[4]); s != "-xxx" { t.Error("expecting -xxx for 'aaaa', but", s) }
+        }
+
+        checkVar := func(name, value string) {
+                if v, ok := p.variables[name]; !ok {
+                        t.Error(name, "does not exist");
+                } else if v.value != value {
+                        t.Error(name, "is", v.value, ", but expect", value);
+                }
+        }
+
+        checkVar("a", "a")
+        checkVar("i", "i")
+        checkVar("shared", "shared")
+        checkVar("static", "static")
+        checkVar("a$a", "foo")
+        checkVar("aaaa", "xxx$(info $(sh$ared),$(stat$ic))-$(a$$a)-xxx")
+        checkVar("bbbb", "xxx-foo-xxx")
+        checkVar("cccc", "xxx-$(sh$ared)-$(stat$ic)-$(a$$a)-xxx")
+        checkVar("dddd", "xxx-shared-static-foo-xxx")
 }
