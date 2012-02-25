@@ -289,6 +289,8 @@ func TestParse(t *testing.T) {
         var s = `
 a = a
 i = i
+ii = i $a i a \
+ $a i
 sh$ared = shared
 stat$ic = static
 a$$a = foo
@@ -303,7 +305,49 @@ dddd := xxx-$(sh$ared)-$(stat$ic)-$(a$$a)-xxx
                 t.Error("parse failed: %v", err); return
         }
 
-        nd := p.l.nodes[5]
+        var nd *node
+
+        nd = p.l.nodes[0]
+        if s := p.l.get(nd); s != "a = a" { t.Error("expect 'a = a', but", "'"+s+"'") }
+        if s := p.l.get(nd.children[0]); s != "a" { t.Error("expect 'a', but", "'"+s+"'") }
+        if s := p.l.get(nd.children[1]); s != "=" { t.Error("expect '=', but", "'"+s+"'") }
+        if s := p.l.get(nd.children[2]); s != "a" { t.Error("expect 'a', but", "'"+s+"'") }
+
+        nd = p.l.nodes[1]
+        if s := p.l.get(nd); s != "i = i" { t.Error("expect 'i = i', but", "'"+s+"'") }
+        if s := p.l.get(nd.children[0]); s != "i" { t.Error("expect 'i', but", "'"+s+"'") }
+        if s := p.l.get(nd.children[1]); s != "=" { t.Error("expect '=', but", "'"+s+"'") }
+        if s := p.l.get(nd.children[2]); s != "i" { t.Error("expect 'i', but", "'"+s+"'") }
+
+        nd = p.l.nodes[2]
+        if s := p.l.get(nd); s != `ii = i $a i a \
+ $a i` { t.Error(`expect 'ii = i $a i a \
+ $a i', but`, "'"+s+"'") }
+        if s := p.l.get(nd.children[0]); s != "ii" { t.Error("expect 'ii', but", "'"+s+"'") }
+        if s := p.l.get(nd.children[1]); s != "=" { t.Error("expect '=', but", "'"+s+"'") }
+        if s := p.l.get(nd.children[2]); s != `i $a i a \
+ $a i` { t.Error(`expect 'i $a i a \
+ $a i', but`, "'"+s+"'") }
+
+        nd = p.l.nodes[3]
+        if s := p.l.get(nd); s != "sh$ared = shared" { t.Error("expect 'sh$ared = shared', but", "'"+s+"'") }
+        if s := p.l.get(nd.children[0]); s != "sh$ared" { t.Error("expect 'sh$ared', but", "'"+s+"'") }
+        if s := p.l.get(nd.children[1]); s != "=" { t.Error("expect '=', but", "'"+s+"'") }
+        if s := p.l.get(nd.children[2]); s != "shared" { t.Error("expect 'shared', but", "'"+s+"'") }
+
+        nd = p.l.nodes[4]
+        if s := p.l.get(nd); s != "stat$ic = static" { t.Error("expect 'stat$ic = static', but", "'"+s+"'") }
+        if s := p.l.get(nd.children[0]); s != "stat$ic" { t.Error("expect 'stat$ic', but", "'"+s+"'") }
+        if s := p.l.get(nd.children[1]); s != "=" { t.Error("expect '=', but", "'"+s+"'") }
+        if s := p.l.get(nd.children[2]); s != "static" { t.Error("expect 'static', but", "'"+s+"'") }
+
+        nd = p.l.nodes[5]
+        if s := p.l.get(nd); s != "a$$a = foo" { t.Error("expect 'a$$a = foo', but", "'"+s+"'") }
+        if s := p.l.get(nd.children[0]); s != "a$$a" { t.Error("expect 'a$$a', but", "'"+s+"'") }
+        if s := p.l.get(nd.children[1]); s != "=" { t.Error("expect '=', but", "'"+s+"'") }
+        if s := p.l.get(nd.children[2]); s != "foo" { t.Error("expect 'foo', but", "'"+s+"'") }
+
+        nd = p.l.nodes[6]
         if s := p.l.get(nd.children[0]); s != "aaaa" { t.Error("expect aaaa, but", s) }
         if s := p.l.get(nd.children[1]); s != "=" { t.Error("expect =, but", s) }
         if s := p.l.get(nd.children[2]); s != "xxx$(info $(sh$ared),$(stat$ic))-$(a$$a)-xxx" { t.Error("expect xxx$(info $(sh$ared),$(stat$ic))-$(a$$a)-xxx, but", s) }
@@ -328,6 +372,8 @@ dddd := xxx-$(sh$ared)-$(stat$ic)-$(a$$a)-xxx
 
         checkVar("a", "a")
         checkVar("i", "i")
+        checkVar("ii", `i $a i a \
+ $a i`)
         checkVar("shared", "shared")
         checkVar("static", "static")
         checkVar("a$a", "foo")
