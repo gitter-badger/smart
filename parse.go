@@ -210,8 +210,9 @@ out_loop: for {
                 case l.rune == '(': parentheses = append(parentheses, ')')
                 case l.rune == '{': parentheses = append(parentheses, '}')
                 case l.rune == '$':
+                        c := l.parseCall()
                         if 0 < t.len() { nn.children, t = append(nn.children, t), l.new(node_text, 0) }
-                        nn.children = append(nn.children, l.parseCall())
+                        nn.children = append(nn.children, c)
                 case l.rune == rr:
                         if 0 < len(parentheses) && rr == parentheses[len(parentheses)-1] {
                                 parentheses = parentheses[0:len(parentheses)-1]; break
