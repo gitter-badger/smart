@@ -38,18 +38,18 @@ foobac=# comment 6	`
         l := newTestLex("TestLexComments", s)
         l.parse()
 
-        if len(l.nodes) != 16 { t.Error("expecting 16 nodes but", len(l.nodes)) }
+        if len(l.nodes) != 16 { t.Error("expecting 16 nodes but", len(l.nodes)); return }
 
         count := 0
         for _, n := range l.nodes { if n.kind == node_comment { count += 1 } }
-        if count != 9 { t.Error("expecting 9 comments but", count) }
+        if count != 9 { t.Error("expecting 9 comments but", count); return }
 
         var c *node
 
         checkNode := func(n int, k nodeType, s string) (quit bool) {
                 if len(l.nodes) < n+1 { t.Error("expecting at list", n+1, "nodes but", len(l.nodes)); return true }
                 if c = l.nodes[n]; c.kind != k { t.Error("node", n ,"is not comment:", c.kind) }
-                if l.get(c) != s { t.Error("node", n, "is:", c.kind, "'"+l.get(c)+"'", ", not", "'"+s+"'") }
+                if l.str(c) != s { t.Error("node", n, "is:", c.kind, "'"+l.str(c)+"'", ", not", "'"+s+"'") }
                 return false
         }
 
@@ -91,52 +91,52 @@ $(a) \
         l := newTestLex("TestLexAssigns", s)
         l.parse()
 
-        if len(l.nodes) != 6 { t.Error("expecting 6 nodes but", len(l.nodes)) }
+        if len(l.nodes) != 6 { t.Error("expecting 6 nodes but", len(l.nodes)); return }
         
         count := 0
         for _, n := range l.nodes {
                 if n.kind == node_assign || n.kind == node_simple_assign { count += 1 }
         }
-        if count != 6 { t.Error("expecting 6 assigns, but", count) }
+        if count != 6 { t.Error("expecting 6 assigns, but", count); return }
 
         checkNode := func(c *node, k nodeType, cc int, s string, cs ...string) {
-                if c.kind != k { t.Error("expecting", k, ", but", c.kind) }
-                if len(c.children) != cc { t.Error("expecting", cc, " children, but", len(c.children)) }
+                if c.kind != k { t.Error("expecting", k, ", but", c.kind); return }
+                if len(c.children) != cc { t.Error("expecting", cc, " children, but", len(c.children)); return }
 
                 var cn int
                 for cn = 0; cn < len(c.children) && cn < len(cs); cn++ {
-                        if s := l.get(c.children[cn]); s != cs[cn] {
-                                t.Error("expected child", cn, "'"+cs[cn]+"'", ", but '"+s+"',", "in '"+l.get(c)+"'")
+                        if s := l.str(c.children[cn]); s != cs[cn] {
+                                t.Error("expected child", cn, "'"+cs[cn]+"'", ", but '"+s+"',", "in '"+l.str(c)+"'")
                                 break
                         }
                 }
-                if cn != len(cs) { t.Error("expecting at least", len(cs), "children, but", cn) }
+                if cn != len(cs) { t.Error("expecting at least", len(cs), "children, but", cn); return }
         }
 
         var c *node
         c = l.nodes[0]; checkNode(c, node_assign, 3, `a = a`, "a", "=", "a")
-        if c.children[0].kind != node_text { t.Error("expect child 0 to be text, but", c.children[0].kind) }
-        if c.children[1].kind != node_text { t.Error("expect child 1 to be text, but", c.children[1].kind) }
-        if c.children[2].kind != node_text { t.Error("expect child 2 to be text, but", c.children[2].kind) }
-        if cn := len(c.children[2].children); cn != 0 { t.Error("expect child number 0, but:", cn) }
+        if c.children[0].kind != node_text { t.Error("expect child 0 to be text, but", c.children[0].kind); return }
+        if c.children[1].kind != node_text { t.Error("expect child 1 to be text, but", c.children[1].kind); return }
+        if c.children[2].kind != node_text { t.Error("expect child 2 to be text, but", c.children[2].kind); return }
+        if cn := len(c.children[2].children); cn != 0 { t.Error("expect child number 0, but:", cn); return }
 
         c = l.nodes[1]; checkNode(c, node_assign, 3, `b= b`, "b", "=", "b")
-        if c.children[0].kind != node_text { t.Error("expect child 0 to be text, but", c.children[0].kind) }
-        if c.children[1].kind != node_text { t.Error("expect child 1 to be text, but", c.children[1].kind) }
-        if c.children[2].kind != node_text { t.Error("expect child 2 to be text, but", c.children[2].kind) }
-        if cn := len(c.children[2].children); cn != 0 { t.Error("expect child number 0, but:", cn) }
+        if c.children[0].kind != node_text { t.Error("expect child 0 to be text, but", c.children[0].kind); return }
+        if c.children[1].kind != node_text { t.Error("expect child 1 to be text, but", c.children[1].kind); return }
+        if c.children[2].kind != node_text { t.Error("expect child 2 to be text, but", c.children[2].kind); return }
+        if cn := len(c.children[2].children); cn != 0 { t.Error("expect child number 0, but:", cn); return }
 
         c = l.nodes[2]; checkNode(c, node_assign, 3, `c=c`, "c", "=", "c")
-        if c.children[0].kind != node_text { t.Error("expect child 0 to be text, but", c.children[0].kind) }
-        if c.children[1].kind != node_text { t.Error("expect child 1 to be text, but", c.children[1].kind) }
-        if c.children[2].kind != node_text { t.Error("expect child 2 to be text, but", c.children[2].kind) }
-        if cn := len(c.children[2].children); cn != 0 { t.Error("expect child number 0, but:", cn) }
+        if c.children[0].kind != node_text { t.Error("expect child 0 to be text, but", c.children[0].kind); return }
+        if c.children[1].kind != node_text { t.Error("expect child 1 to be text, but", c.children[1].kind); return }
+        if c.children[2].kind != node_text { t.Error("expect child 2 to be text, but", c.children[2].kind); return }
+        if cn := len(c.children[2].children); cn != 0 { t.Error("expect child number 0, but:", cn); return }
 
         c = l.nodes[3]; checkNode(c, node_assign, 3, `d       =           d`, "d", "=", "d")
-        if c.children[0].kind != node_text { t.Error("expect child 0 to be text, but", c.children[0].kind) }
-        if c.children[1].kind != node_text { t.Error("expect child 1 to be text, but", c.children[1].kind) }
-        if c.children[2].kind != node_text { t.Error("expect child 2 to be text, but", c.children[2].kind) }
-        if cn := len(c.children[2].children); cn != 0 { t.Error("expect child number 0, but:", cn) }
+        if c.children[0].kind != node_text { t.Error("expect child 0 to be text, but", c.children[0].kind); return }
+        if c.children[1].kind != node_text { t.Error("expect child 1 to be text, but", c.children[1].kind); return }
+        if c.children[2].kind != node_text { t.Error("expect child 2 to be text, but", c.children[2].kind); return }
+        if cn := len(c.children[2].children); cn != 0 { t.Error("expect child number 0, but:", cn); return }
 
         c = l.nodes[4]; checkNode(c, node_simple_assign, 3, `foo := $(a) \
  $b\
@@ -145,20 +145,20 @@ $(a) \
  $b\
  ${c}\
 `)
-        if c.children[0].kind != node_text { t.Error("expect child 0 to be text, but", c.children[0].kind) }
-        if c.children[1].kind != node_text { t.Error("expect child 1 to be text, but", c.children[1].kind) }
-        if c.children[2].kind != node_text { t.Error("expect child 2 to be text, but", c.children[2].kind) }
-        if cn := len(c.children[2].children); cn != 9 { t.Error("expect 9 children, but:", cn) }
+        if c.children[0].kind != node_text { t.Error("expect child 0 to be text, but", c.children[0].kind); return }
+        if c.children[1].kind != node_text { t.Error("expect child 1 to be text, but", c.children[1].kind); return }
+        if c.children[2].kind != node_text { t.Error("expect child 2 to be text, but", c.children[2].kind); return }
+        if cn := len(c.children[2].children); cn != 9 { t.Error("expect 9 children, but:", cn); return }
 
         c = l.nodes[5]; checkNode(c, node_assign, 3, `bar = $(foo) \
 $(a) \
  $b $c`, `bar`, `=`, `$(foo) \
 $(a) \
  $b $c`)
-        if c.children[0].kind != node_text { t.Error("expect child 0 to be text, but", c.children[0].kind) }
-        if c.children[1].kind != node_text { t.Error("expect child 1 to be text, but", c.children[1].kind) }
-        if c.children[2].kind != node_text { t.Error("expect child 2 to be text, but", c.children[2].kind) }
-        if cn := len(c.children[2].children); cn != 10 { t.Error("expect 10 children, but:", cn) }
+        if c.children[0].kind != node_text { t.Error("expect child 0 to be text, but", c.children[0].kind); return }
+        if c.children[1].kind != node_text { t.Error("expect child 1 to be text, but", c.children[1].kind); return }
+        if c.children[2].kind != node_text { t.Error("expect child 2 to be text, but", c.children[2].kind); return }
+        if cn := len(c.children[2].children); cn != 10 { t.Error("expect 10 children, but:", cn); return }
 }
 
 func TestLexCalls(t *testing.T) {
@@ -178,111 +178,112 @@ $(info $($(foo)),$($($(foo)$(bar))))
         l := newTestLex("TestLexCalls", s)
         l.parse()
 
-        if len(l.nodes) != 9 { t.Error("expecting 8 nodes but", len(l.nodes)) }
+        if len(l.nodes) != 9 { t.Error("expecting 8 nodes but", len(l.nodes)); return }
         
         count := 0
         for _, n := range l.nodes { if n.kind == node_call { count += 1 } }
-        if count != 5 { t.Error("expecting 4 calls, but", count) }
+        if count != 5 { t.Error("expecting 4 calls, but", count); return }
 
         var c, cc *node
 
-        if c = l.nodes[2]; c.kind != node_simple_assign { t.Error("expecting assign node, but:", c.kind) }
-        if l.get(c) != `foobar := $(foo)$(bar)` { t.Error("expecting 'foobar := $(foo)$(bar)', but:", "'"+l.get(c)+"'") }
-        if len(c.children) != 3 { t.Error("expecting 3 children, but:", len(c.children), ", node:", l.get(c)) }
-        if cc = c.children[0]; cc.kind != node_text { t.Error("expecting text node, but:", cc.kind) }
-        if cc = c.children[1]; cc.kind != node_text { t.Error("expecting text node, but:", cc.kind) }
-        if cc = c.children[2]; cc.kind != node_text { t.Error("expecting text node, but:", cc.kind) }
-        if len(cc.children) != 2 { t.Error("expecting 2 children, but:", len(cc.children)) }
-        if cc.children[0].kind != node_call { t.Error("expecting call, but:", cc.children[0].kind, l.get(cc.children[0])) }
-        if cc.children[1].kind != node_call { t.Error("expecting call, but:", cc.children[1].kind, l.get(cc.children[1])) }
-        if l.get(cc.children[0]) != `$(foo)` { t.Error("expecting '$(foo)', but:", "'"+l.get(cc.children[0])+"'") }
-        if l.get(cc.children[1]) != `$(bar)` { t.Error("expecting '$(bar)', but:", "'"+l.get(cc.children[1])+"'") }
+        if c = l.nodes[2]; c.kind != node_simple_assign { t.Error("expecting assign node, but:", c.kind); return }
+        if l.str(c) != `foobar := $(foo)$(bar)` { t.Error("expecting 'foobar := $(foo)$(bar)', but:", "'"+l.str(c)+"'"); return }
+        if len(c.children) != 3 { t.Error("expecting 3 children, but:", len(c.children), ", node:", l.str(c)); return }
+        if cc = c.children[0]; cc.kind != node_text { t.Error("expecting text node, but:", cc.kind); return }
+        if cc = c.children[1]; cc.kind != node_text { t.Error("expecting text node, but:", cc.kind); return }
+        if cc = c.children[2]; cc.kind != node_text { t.Error("expecting text node, but:", cc.kind); return }
+        if len(cc.children) != 2 { t.Error("expecting 2 children, but:", len(cc.children)); return }
+        if cc.children[0].kind != node_call { t.Error("expecting call, but:", cc.children[0].kind, l.str(cc.children[0])); return }
+        if cc.children[1].kind != node_call { t.Error("expecting call, but:", cc.children[1].kind, l.str(cc.children[1])); return }
+        if l.str(cc.children[0]) != `$(foo)` { t.Error("expecting '$(foo)', but:", "'"+l.str(cc.children[0])+"'"); return }
+        if l.str(cc.children[1]) != `$(bar)` { t.Error("expecting '$(bar)', but:", "'"+l.str(cc.children[1])+"'"); return }
 
-        if c = l.nodes[4]; c.kind != node_call { t.Error("expecting call node, but:", c.kind) }
-        if len(c.children) != 2 { t.Error("expecting 3 children, but:", len(c.children), ", node:", l.get(c)) }
+        if c = l.nodes[4]; c.kind != node_call { t.Error("expecting call node, but:", c.kind); return }
+        if len(c.children) != 2 { t.Error("expecting 3 children, but:", len(c.children), ", node:", l.str(c)); return }
         // name
-        if cc = c.children[0]; cc.kind != node_text { t.Error("expecting text node, but:", cc.kind) }
-        if l.get(cc) != "info" { t.Error("expecting 'info', but:", "'"+l.get(cc)+"'") }
+        if cc = c.children[0]; cc.kind != node_text { t.Error("expecting text node, but:", cc.kind); return }
+        if l.str(cc) != "info" { t.Error("expecting 'info', but:", "'"+l.str(cc)+"'"); return }
         // arg 1
-        if cc = c.children[1]; cc.kind != node_text { t.Error("expecting text node, but:", cc.kind) }
-        if l.get(cc) != "$(foo)$(bar)" { t.Error("expecting '$(foo)$(bar)', but:", "'"+l.get(cc)+"'") }
-        if len(cc.children) != 2 { t.Error("expecting 2 children, but:", len(cc.children), "'"+l.get(cc)+"'") }
+        if cc = c.children[1]; cc.kind != node_text { t.Error("expecting text node, but:", cc.kind); return }
+        if l.str(cc) != "$(foo)$(bar)" { t.Error("expecting '$(foo)$(bar)', but:", "'"+l.str(cc)+"'"); return }
+        if len(cc.children) != 2 { t.Error("expecting 2 children, but:", len(cc.children), "'"+l.str(cc)+"'"); return }
         // arg 1 -> child 1, 2
-        if l.get(cc.children[0]) != "$(foo)" { t.Error("expecting '$(foo)', but:", "'"+l.get(cc.children[0])+"'") }
-        if l.get(cc.children[1]) != "$(bar)" { t.Error("expecting '$(bar)', but:", "'"+l.get(cc.children[1])+"'") }
-        if cc.children[0].kind != node_call { t.Error("expecting call, but:", cc.children[0].kind) }
-        if cc.children[1].kind != node_call { t.Error("expecting call, but:", cc.children[1].kind) }
+        if l.str(cc.children[0]) != "$(foo)" { t.Error("expecting '$(foo)', but:", "'"+l.str(cc.children[0])+"'"); return }
+        if l.str(cc.children[1]) != "$(bar)" { t.Error("expecting '$(bar)', but:", "'"+l.str(cc.children[1])+"'"); return }
+        if cc.children[0].kind != node_call { t.Error("expecting call, but:", cc.children[0].kind); return }
+        if cc.children[1].kind != node_call { t.Error("expecting call, but:", cc.children[1].kind); return }
 
-        if c = l.nodes[5]; c.kind != node_call { t.Error("expecting call node, but:", c.kind) }
-        if len(c.children) != 2 { t.Error("expecting 2 children, but:", len(c.children), ", node:", l.get(c)) }
+        if c = l.nodes[5]; c.kind != node_call { t.Error("expecting call node, but:", c.kind); return }
+        if len(c.children) != 2 { t.Error("expecting 2 children, but:", len(c.children), ", node:", l.str(c)); return }
         // name
-        if cc = c.children[0]; cc.kind != node_text { t.Error("expecting text node, but:", cc.kind) }
-        if l.get(cc) != "info" { t.Error("expecting 'info', but:", "'"+l.get(cc)+"'") }
-        if len(cc.children) != 0 { t.Error("expecting 0 children, but:", len(cc.children), ", '"+l.get(cc)+"'") }
+        if cc = c.children[0]; cc.kind != node_text { t.Error("expecting text node, but:", cc.kind); return }
+        if l.str(cc) != "info" { t.Error("expecting 'info', but:", "'"+l.str(cc)+"'"); return }
+        if len(cc.children) != 0 { t.Error("expecting 0 children, but:", len(cc.children), ", '"+l.str(cc)+"'"); return }
         // arg 1
-        if cc = c.children[1]; cc.kind != node_call { t.Error("expecting call node, but:", cc.kind) }
-        if l.get(cc) != "$(foobar)" { t.Error("expecting '$(foobar)', but:", "'"+l.get(cc)+"'") }
-        if len(cc.children) != 1 { t.Error("expecting 1 children, but:", len(cc.children), ", '"+l.get(cc)+"'") }
+        if cc = c.children[1]; cc.kind != node_call { t.Error("expecting call node, but:", cc.kind); return }
+        if l.str(cc) != "$(foobar)" { t.Error("expecting '$(foobar)', but:", "'"+l.str(cc)+"'"); return }
+        if len(cc.children) != 1 { t.Error("expecting 1 children, but:", len(cc.children), ", '"+l.str(cc)+"'"); return }
 
-        if c = l.nodes[6]; c.kind != node_call { t.Error("expecting call node, but:", c.kind) }
-        if len(c.children) != 4 { t.Error("expecting 4 children, but:", len(c.children), ", node:", l.get(c)) }
+        if c = l.nodes[6]; c.kind != node_call { t.Error("expecting call node, but:", c.kind); return }
+        if len(c.children) != 4 { t.Error("expecting 4 children, but:", len(c.children), ", node:", l.str(c)); return }
         // name
-        if cc = c.children[0]; cc.kind != node_text { t.Error("expecting text node, but:", cc.kind) }
-        if l.get(cc) != "info" { t.Error("expecting 'info', but:", "'"+l.get(cc)+"'") }
-        if len(cc.children) != 0 { t.Error("expecting 0 children, but:", len(cc.children), ", '"+l.get(cc)+"'") }
+        if cc = c.children[0]; cc.kind != node_text { t.Error("expecting text node, but:", cc.kind); return }
+        if l.str(cc) != "info" { t.Error("expecting 'info', but:", "'"+l.str(cc)+"'"); return }
+        if len(cc.children) != 0 { t.Error("expecting 0 children, but:", len(cc.children), ", '"+l.str(cc)+"'"); return }
         // arg 1
-        if cc = c.children[1]; cc.kind != node_call { t.Error("expecting call node, but:", cc.kind) }
-        if l.get(cc) != "$(foo)" { t.Error("expecting '$(foo)', but:", "'"+l.get(cc)+"'") }
-        if len(cc.children) != 1 { t.Error("expecting 1 children, but:", len(cc.children), ", '"+l.get(cc)+"'") }
+        if cc = c.children[1]; cc.kind != node_call { t.Error("expecting call node, but:", cc.kind); return }
+        if l.str(cc) != "$(foo)" { t.Error("expecting '$(foo)', but:", "'"+l.str(cc)+"'"); return }
+        if len(cc.children) != 1 { t.Error("expecting 1 children, but:", len(cc.children), ", '"+l.str(cc)+"'"); return }
         // arg 2
-        if cc = c.children[2]; cc.kind != node_call { t.Error("expecting call node, but:", cc.kind) }
-        if l.get(cc) != "$(bar)" { t.Error("expecting '$(foo)', but:", "'"+l.get(cc)+"'") }
-        if len(cc.children) != 1 { t.Error("expecting 1 children, but:", len(cc.children), ", '"+l.get(cc)+"'") }
+        if cc = c.children[2]; cc.kind != node_call { t.Error("expecting call node, but:", cc.kind); return }
+        if l.str(cc) != "$(bar)" { t.Error("expecting '$(foo)', but:", "'"+l.str(cc)+"'"); return }
+        if len(cc.children) != 1 { t.Error("expecting 1 children, but:", len(cc.children), ", '"+l.str(cc)+"'"); return }
         // arg 3
-        if cc = c.children[3]; cc.kind != node_call { t.Error("expecting call node, but:", cc.kind) }
-        if l.get(cc) != "$(foobar)" { t.Error("expecting '$(foo)', but:", "'"+l.get(cc)+"'") }
-        if len(cc.children) != 1 { t.Error("expecting 1 children, but:", len(cc.children), ", '"+l.get(cc)+"'") }
+        if cc = c.children[3]; cc.kind != node_call { t.Error("expecting call node, but:", cc.kind); return }
+        if l.str(cc) != "$(foobar)" { t.Error("expecting '$(foo)', but:", "'"+l.str(cc)+"'"); return }
+        if len(cc.children) != 1 { t.Error("expecting 1 children, but:", len(cc.children), ", '"+l.str(cc)+"'"); return }
 
-        if c = l.nodes[7]; c.kind != node_call { t.Error("expecting call node, but:", c.kind) }
-        if len(c.children) != 3 { t.Error("expecting 3 children, but:", len(c.children), ", node:", l.get(c)) }
+        if c = l.nodes[7]; c.kind != node_call { t.Error("expecting call node, but:", c.kind); return }
+        if len(c.children) != 3 { t.Error("expecting 3 children, but:", len(c.children), ", node:", l.str(c)); return }
         // name
-        if cc = c.children[0]; cc.kind != node_text { t.Error("expecting text node, but:", cc.kind) }
-        if l.get(cc) != "info" { t.Error("expecting 'info', but:", "'"+l.get(cc)+"'") }
-        if len(cc.children) != 0 { t.Error("expecting 0 children, but:", len(cc.children), ", '"+l.get(cc)+"'") }
+        if cc = c.children[0]; cc.kind != node_text { t.Error("expecting text node, but:", cc.kind); return }
+        if l.str(cc) != "info" { t.Error("expecting 'info', but:", "'"+l.str(cc)+"'"); return }
+        if len(cc.children) != 0 { t.Error("expecting 0 children, but:", len(cc.children), ", '"+l.str(cc)+"'"); return }
         // arg 1
-        if cc = c.children[1]; cc.kind != node_text { t.Error("expecting call node, but:", cc.kind) }
-        if l.get(cc) != "$(foo) $(bar)" { t.Error("expecting '$(foo) $(bar)', but:", "'"+l.get(cc)+"'") }
-        if len(cc.children) != 3 { t.Error("expecting 3 children, but:", len(cc.children), ", '"+l.get(cc)+"'") }
+        if cc = c.children[1]; cc.kind != node_text { t.Error("expecting call node, but:", cc.kind); return }
+        if l.str(cc) != "$(foo) $(bar)" { t.Error("expecting '$(foo) $(bar)', but:", "'"+l.str(cc)+"'"); return }
+        if len(cc.children) != 3 { t.Error("expecting 3 children, but:", len(cc.children), ", '"+l.str(cc)+"'"); return }
         // arg 2
-        if cc = c.children[2]; cc.kind != node_text { t.Error("expecting call node, but:", cc.kind) }
-        if l.get(cc) != " $(foobar) " { t.Error("expecting '$(foobar)', but:", "'"+l.get(cc)+"'") }
-        if len(cc.children) != 3 { t.Error("expecting 2 children, but:", len(cc.children), ", '"+l.get(cc)+"'") }
+        if cc = c.children[2]; cc.kind != node_text { t.Error("expecting call node, but:", cc.kind); return }
+        if l.str(cc) != " $(foobar) " { t.Error("expecting '$(foobar)', but:", "'"+l.str(cc)+"'"); return }
+        if len(cc.children) != 3 { t.Error("expecting 2 children, but:", len(cc.children), ", '"+l.str(cc)+"'"); return }
 
-        if c = l.nodes[8]; c.kind != node_call { t.Error("expecting call node, but:", c.kind) }
-        if len(c.children) != 3 { t.Error("expecting 3 children, but:", len(c.children), ", node:", l.get(c)) }
+        if c = l.nodes[8]; c.kind != node_call { t.Error("expecting call node, but:", c.kind); return }
+        if l.str(c) != "$(info $($(foo)),$($($(foo)$(bar))))" { t.Error("expecting '$(info $($(foo)),$($($(foo)$(bar))))', but:", "'"+l.str(c)+"'"); return }
+        if len(c.children) != 3 { t.Error("expecting 3 children, but:", len(c.children), ", node:", l.str(c)); return }
         // name
-        if cc = c.children[0]; cc.kind != node_text { t.Error("expecting text node, but:", cc.kind) }
-        if l.get(cc) != "info" { t.Error("expecting 'info', but:", "'"+l.get(cc)+"'") }
-        if len(cc.children) != 0 { t.Error("expecting 0 children, but:", len(cc.children), ", '"+l.get(cc)+"'") }
+        if cc = c.children[0]; cc.kind != node_text { t.Error("expecting text node, but:", cc.kind); return }
+        if len(cc.children) != 0 { t.Error("expecting 0 children, but:", len(cc.children), ", '"+l.str(cc)+"'"); return }
+        if l.str(cc) != "info" { t.Error("expecting 'info', but:", "'"+l.str(cc)+"'"); return }
         // arg 1
-        if cc = c.children[1]; cc.kind != node_call { t.Error("expecting call node, but:", cc.kind) }
-        if l.get(cc) != "$($(foo))" { t.Error("expecting '$($(foo))', but:", "'"+l.get(cc)+"'") }
-        if len(cc.children) != 1 { t.Error("expecting 1 children, but:", len(cc.children), ", '"+l.get(cc)+"'") }
-        if cc = cc.children[0]; cc.kind != node_call { t.Error("expecting call node, but:", cc.kind) }
-        if len(cc.children) != 1 { t.Error("expecting 1 children, but:", len(cc.children), ", '"+l.get(cc)+"'") }
-        if l.get(cc) != "$(foo)" { t.Error("expecting '$(foo)', but:", "'"+l.get(cc)+"'") }
+        if cc = c.children[1]; cc.kind != node_call { t.Error("expecting call node, but:", cc.kind); return }
+        if l.str(cc) != "$($(foo))" { t.Error("expecting '$($(foo))', but:", "'"+l.str(cc)+"'"); return }
+        if len(cc.children) != 1 { t.Error("expecting 1 children, but:", len(cc.children), ", '"+l.str(cc)+"'"); return }
+        if cc = cc.children[0]; cc.kind != node_call { t.Error("expecting call node, but:", cc.kind); return }
+        if l.str(cc) != "$(foo)" { t.Error("expecting '$(foo)', but:", "'"+l.str(cc)+"'"); return }
+        if len(cc.children) != 1 { t.Error("expecting 1 children, but:", len(cc.children), ", '"+l.str(cc)+"'"); return }
         // arg 2
-        if cc = c.children[2]; cc.kind != node_call { t.Error("expecting call node, but:", cc.kind) }
-        if l.get(cc) != "$($($(foo)$(bar)))" { t.Error("expecting '$($($(foo)$(bar)))', but:", "'"+l.get(cc)+"'") }
-        if len(cc.children) != 1 { t.Error("expecting 1 children, but:", len(cc.children), ", '"+l.get(cc)+"'") }
-        if cc = cc.children[0]; cc.kind != node_call { t.Error("expecting call node, but:", cc.kind) }
-        if len(cc.children) != 1 { t.Error("expecting 1 children, but:", len(cc.children), ", '"+l.get(cc)+"'") }
-        if l.get(cc) != "$($(foo)$(bar))" { t.Error("expecting '$($(foo)$(bar))', but:", "'"+l.get(cc)+"'") }
-        if cc = cc.children[0]; cc.kind != node_text { t.Error("expecting text node, but:", cc.kind) }
-        if l.get(cc.children[0]) != "$(foo)" { t.Error("expecting '$(foo)', but:", "'"+l.get(cc.children[0])+"'") }
-        if l.get(cc.children[1]) != "$(bar)" { t.Error("expecting '$(bar)', but:", "'"+l.get(cc.children[1])+"'") }
-        if cc.children[0].kind != node_call { t.Error("expecting call node, but:", cc.children[0].kind) }
-        if cc.children[1].kind != node_call { t.Error("expecting call node, but:", cc.children[1].kind) }
+        if cc = c.children[2]; cc.kind != node_call { t.Error("expecting call node, but:", cc.kind); return }
+        if l.str(cc) != "$($($(foo)$(bar)))" { t.Error("expecting '$($($(foo)$(bar)))', but:", "'"+l.str(cc)+"'"); return }
+        if len(cc.children) != 1 { t.Error("expecting 1 children, but:", len(cc.children), ", '"+l.str(cc)+"'"); return }
+        if cc = cc.children[0]; cc.kind != node_call { t.Error("expecting call node, but:", cc.kind); return }
+        if l.str(cc) != "$($(foo)$(bar))" { t.Error("expecting '$($(foo)$(bar))', but:", "'"+l.str(cc)+"'"); return }
+        if len(cc.children) != 1 { t.Error("expecting 1 children, but:", len(cc.children), ", '"+l.str(cc)+"'"); return }
+        if cc = cc.children[0]; cc.kind != node_text { t.Error("expecting text node, but:", cc.kind); return }
+        if l.str(cc.children[0]) != "$(foo)" { t.Error("expecting '$(foo)', but:", "'"+l.str(cc.children[0])+"'"); return }
+        if l.str(cc.children[1]) != "$(bar)" { t.Error("expecting '$(bar)', but:", "'"+l.str(cc.children[1])+"'"); return }
+        if cc.children[0].kind != node_call { t.Error("expecting call node, but:", cc.children[0].kind); return }
+        if cc.children[1].kind != node_call { t.Error("expecting call node, but:", cc.children[1].kind); return }
 }
 
 func TestParse(t *testing.T) {
@@ -301,84 +302,113 @@ dddd := xxx-$(sh$ared)-$(stat$ic)-$(a$$a)-xxx
 `
         p := newTestParser("TestParse", s)
 
-        if err := p.parse(); err != nil {
-                t.Error("parse failed: %v", err); return
-        }
+        if err := p.parse(); err != nil { t.Error("parse error:", err); return }
 
         var nd *node
 
         nd = p.l.nodes[0]
-        if s := p.l.get(nd); s != "a = a" { t.Error("expect 'a = a', but", "'"+s+"'") }
-        if s := p.l.get(nd.children[0]); s != "a" { t.Error("expect 'a', but", "'"+s+"'") }
-        if s := p.l.get(nd.children[1]); s != "=" { t.Error("expect '=', but", "'"+s+"'") }
-        if s := p.l.get(nd.children[2]); s != "a" { t.Error("expect 'a', but", "'"+s+"'") }
+        if s := p.l.str(nd); s != "a = a" { t.Error("expect 'a = a', but", "'"+s+"'"); return }
+        if s := p.l.str(nd.children[0]); s != "a" { t.Error("expect 'a', but", "'"+s+"'"); return }
+        if s := p.l.str(nd.children[1]); s != "=" { t.Error("expect '=', but", "'"+s+"'"); return }
+        if s := p.l.str(nd.children[2]); s != "a" { t.Error("expect 'a', but", "'"+s+"'"); return }
 
         nd = p.l.nodes[1]
-        if s := p.l.get(nd); s != "i = i" { t.Error("expect 'i = i', but", "'"+s+"'") }
-        if s := p.l.get(nd.children[0]); s != "i" { t.Error("expect 'i', but", "'"+s+"'") }
-        if s := p.l.get(nd.children[1]); s != "=" { t.Error("expect '=', but", "'"+s+"'") }
-        if s := p.l.get(nd.children[2]); s != "i" { t.Error("expect 'i', but", "'"+s+"'") }
+        if s := p.l.str(nd); s != "i = i" { t.Error("expect 'i = i', but", "'"+s+"'"); return }
+        if s := p.l.str(nd.children[0]); s != "i" { t.Error("expect 'i', but", "'"+s+"'"); return }
+        if s := p.l.str(nd.children[1]); s != "=" { t.Error("expect '=', but", "'"+s+"'"); return }
+        if s := p.l.str(nd.children[2]); s != "i" { t.Error("expect 'i', but", "'"+s+"'"); return }
 
         nd = p.l.nodes[2]
-        if s := p.l.get(nd); s != `ii = i $a i a \
+        if s := p.l.str(nd); s != `ii = i $a i a \
  $a i` { t.Error(`expect 'ii = i $a i a \
- $a i', but`, "'"+s+"'") }
-        if s := p.l.get(nd.children[0]); s != "ii" { t.Error("expect 'ii', but", "'"+s+"'") }
-        if s := p.l.get(nd.children[1]); s != "=" { t.Error("expect '=', but", "'"+s+"'") }
-        if s := p.l.get(nd.children[2]); s != `i $a i a \
+ $a i', but`, "'"+s+"'"); return }
+        if s := p.l.str(nd.children[0]); s != "ii" { t.Error("expect 'ii', but", "'"+s+"'"); return }
+        if s := p.l.str(nd.children[1]); s != "=" { t.Error("expect '=', but", "'"+s+"'"); return }
+        if s := p.l.str(nd.children[2]); s != `i $a i a \
  $a i` { t.Error(`expect 'i $a i a \
- $a i', but`, "'"+s+"'") }
+ $a i', but`, "'"+s+"'"); return }
 
         nd = p.l.nodes[3]
-        if s := p.l.get(nd); s != "sh$ared = shared" { t.Error("expect 'sh$ared = shared', but", "'"+s+"'") }
-        if s := p.l.get(nd.children[0]); s != "sh$ared" { t.Error("expect 'sh$ared', but", "'"+s+"'") }
-        if s := p.l.get(nd.children[1]); s != "=" { t.Error("expect '=', but", "'"+s+"'") }
-        if s := p.l.get(nd.children[2]); s != "shared" { t.Error("expect 'shared', but", "'"+s+"'") }
+        if s := p.l.str(nd); s != "sh$ared = shared" { t.Error("expect 'sh$ared = shared', but", "'"+s+"'"); return }
+        if s := p.l.str(nd.children[0]); s != "sh$ared" { t.Error("expect 'sh$ared', but", "'"+s+"'"); return }
+        if s := p.l.str(nd.children[1]); s != "=" { t.Error("expect '=', but", "'"+s+"'"); return }
+        if s := p.l.str(nd.children[2]); s != "shared" { t.Error("expect 'shared', but", "'"+s+"'"); return }
 
         nd = p.l.nodes[4]
-        if s := p.l.get(nd); s != "stat$ic = static" { t.Error("expect 'stat$ic = static', but", "'"+s+"'") }
-        if s := p.l.get(nd.children[0]); s != "stat$ic" { t.Error("expect 'stat$ic', but", "'"+s+"'") }
-        if s := p.l.get(nd.children[1]); s != "=" { t.Error("expect '=', but", "'"+s+"'") }
-        if s := p.l.get(nd.children[2]); s != "static" { t.Error("expect 'static', but", "'"+s+"'") }
+        if s := p.l.str(nd); s != "stat$ic = static" { t.Error("expect 'stat$ic = static', but", "'"+s+"'"); return }
+        if s := p.l.str(nd.children[0]); s != "stat$ic" { t.Error("expect 'stat$ic', but", "'"+s+"'"); return }
+        if s := p.l.str(nd.children[1]); s != "=" { t.Error("expect '=', but", "'"+s+"'"); return }
+        if s := p.l.str(nd.children[2]); s != "static" { t.Error("expect 'static', but", "'"+s+"'"); return }
 
         nd = p.l.nodes[5]
-        if s := p.l.get(nd); s != "a$$a = foo" { t.Error("expect 'a$$a = foo', but", "'"+s+"'") }
-        if s := p.l.get(nd.children[0]); s != "a$$a" { t.Error("expect 'a$$a', but", "'"+s+"'") }
-        if s := p.l.get(nd.children[1]); s != "=" { t.Error("expect '=', but", "'"+s+"'") }
-        if s := p.l.get(nd.children[2]); s != "foo" { t.Error("expect 'foo', but", "'"+s+"'") }
+        if s := p.l.str(nd); s != "a$$a = foo" { t.Error("expect 'a$$a = foo', but", "'"+s+"'"); return }
+        if s := p.l.str(nd.children[0]); s != "a$$a" { t.Error("expect 'a$$a', but", "'"+s+"'"); return }
+        if s := p.l.str(nd.children[1]); s != "=" { t.Error("expect '=', but", "'"+s+"'"); return }
+        if s := p.l.str(nd.children[2]); s != "foo" { t.Error("expect 'foo', but", "'"+s+"'"); return }
 
         nd = p.l.nodes[6]
-        if s := p.l.get(nd.children[0]); s != "aaaa" { t.Error("expect aaaa, but", s) }
-        if s := p.l.get(nd.children[1]); s != "=" { t.Error("expect =, but", s) }
-        if s := p.l.get(nd.children[2]); s != "xxx$(info $(sh$ared),$(stat$ic))-$(a$$a)-xxx" { t.Error("expect xxx$(info $(sh$ared),$(stat$ic))-$(a$$a)-xxx, but", s) }
+        if s := p.l.str(nd.children[0]); s != "aaaa" { t.Error("expect aaaa, but", s); return }
+        if s := p.l.str(nd.children[1]); s != "=" { t.Error("expect =, but", s); return }
+        if s := p.l.str(nd.children[2]); s != "xxx$(info $(sh$ared),$(stat$ic))-$(a$$a)-xxx" { t.Error("expect xxx$(info $(sh$ared),$(stat$ic))-$(a$$a)-xxx, but", s); return }
         if nd = nd.children[2]; nd == nil {
-                t.Error("expecting a node, but nil")
+                t.Error("expecting a node, but nil"); return
         } else {
-                if num := len(nd.children); num != 5 { t.Error("expecting 5 children for 'aaaa', but", num) }
-                if s := p.l.get(nd.children[0]); s != "xxx" { t.Error("expecting xxx for 'aaaa', but", s) }
-                if s := p.l.get(nd.children[1]); s != "$(info $(sh$ared),$(stat$ic))" { t.Error("expecting $(info $(sh$ared),$(stat$ic)) for 'aaaa', but", s) }
-                if s := p.l.get(nd.children[2]); s != "-" { t.Error("expecting - for 'aaaa', but", s) }
-                if s := p.l.get(nd.children[3]); s != "$(a$$a)" { t.Error("expecting $(a$$a) for 'aaaa', but", s) }
-                if s := p.l.get(nd.children[4]); s != "-xxx" { t.Error("expecting -xxx for 'aaaa', but", s) }
+                if num := len(nd.children); num != 5 { t.Error("expecting 5 children for 'aaaa', but", num); return }
+                if s := p.l.str(nd.children[0]); s != "xxx" { t.Error("expecting xxx for 'aaaa', but", s); return }
+                if s := p.l.str(nd.children[1]); s != "$(info $(sh$ared),$(stat$ic))" { t.Error("expecting $(info $(sh$ared),$(stat$ic)) for 'aaaa', but", s); return }
+                if s := p.l.str(nd.children[2]); s != "-" { t.Error("expecting - for 'aaaa', but", s); return }
+                if s := p.l.str(nd.children[3]); s != "$(a$$a)" { t.Error("expecting $(a$$a) for 'aaaa', but", s); return }
+                if s := p.l.str(nd.children[4]); s != "-xxx" { t.Error("expecting -xxx for 'aaaa', but", s); return }
+
+                var cc *node
+                cn := nd.children[1]
+                if len(cn.children) != 3 { t.Error("expecting 3 children, but", len(cn.children)); return }
+                if s := p.l.str(cn.children[0]); s != "info" { t.Error("expecting 'info', but", s); return }
+
+                cc = cn.children[1]
+                if s := p.l.str(cc); s != "$(sh$ared)" { t.Error("expecting '$(sh$ared)', but", s); return }
+                if cc.kind != node_call { t.Error("expecting call, but", cc.kind); return }
+                if l := len(cc.children); l != 1 { t.Error("expecting 1 child, but", l); return }
+                cc = cc.children[0]
+                if l := len(cc.children); l != 3 { t.Error("expecting 3 children, but", l, "'"+p.l.str(cc)+"'"); return }
+                if ccc := cc.children[0]; p.l.str(ccc) != "sh" { t.Error("expecting sh, but", p.l.str(ccc)); return }
+                if ccc := cc.children[1]; p.l.str(ccc) != "$a" { t.Error("expecting $a, but", p.l.str(ccc)); return }
+                if ccc := cc.children[2]; p.l.str(ccc) != "red" { t.Error("expecting red, but", p.l.str(ccc)); return }
+                
+                cc = cn.children[2]
+                if s := p.l.str(cc); s != "$(stat$ic)" { t.Error("expecting '$(stat$ic)', but", s); return }
+                if cc.kind != node_call { t.Error("expecting call, but", cc.kind); return }
+                if l := len(cc.children); l != 1 { t.Error("expecting 1 child, but", l); return }
+                cc = cc.children[0]
+                if l := len(cc.children); l != 3 { t.Error("expecting 3 children, but", l, "'"+p.l.str(cc)+"'"); return }
+                if ccc := cc.children[0]; p.l.str(ccc) != "stat" { t.Error("expecting stat, but", p.l.str(ccc)); return }
+                if ccc := cc.children[1]; p.l.str(ccc) != "$i" { t.Error("expecting $i, but", p.l.str(ccc)); return }
+                if ccc := cc.children[2]; p.l.str(ccc) != "c" { t.Error("expecting c, but", p.l.str(ccc)); return }
         }
 
-        checkVar := func(name, value string) {
+        checkVar := func(name, value string) bool {
                 if v, ok := p.variables[name]; !ok {
-                        t.Error(name, "does not exist");
+                        t.Error(name, "does not exist"); return false
                 } else if v.value != value {
-                        t.Error(name, "is", v.value, ", but expect", value);
+                        t.Error(name, "is", v.value, ", but expect", value); return false
                 }
+                return true
         }
 
-        checkVar("a", "a")
-        checkVar("i", "i")
-        checkVar("ii", `i $a i a \
- $a i`)
-        checkVar("shared", "shared")
-        checkVar("static", "static")
-        checkVar("a$a", "foo")
-        checkVar("aaaa", "xxx$(info $(sh$ared),$(stat$ic))-$(a$$a)-xxx")
-        checkVar("bbbb", "xxx-foo-xxx")
-        checkVar("cccc", "xxx-$(sh$ared)-$(stat$ic)-$(a$$a)-xxx")
-        checkVar("dddd", "xxx-shared-static-foo-xxx")
+        if _, ok := p.variables["aa"]; ok {
+                t.Error("should not have 'aa' variable"); return
+        }
+
+
+        if !checkVar("a", "a") { return }
+        if !checkVar("i", "i") { return }
+        if !checkVar("ii", `i $a i a \
+ $a i`) { return }
+        if !checkVar("shared", "shared") { return }
+        if !checkVar("static", "static") { return }
+        if !checkVar("a$a", "foo") { return }
+        if !checkVar("aaaa", "xxx$(info $(sh$ared),$(stat$ic))-$(a$$a)-xxx") { return }
+        if !checkVar("bbbb", "xxx-foo-xxx") { return }
+        if !checkVar("cccc", "xxx-$(sh$ared)-$(stat$ic)-$(a$$a)-xxx") { return }
+        if !checkVar("dddd", "xxx-shared-static-foo-xxx") { return }
 }
