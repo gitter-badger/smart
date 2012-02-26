@@ -9,9 +9,7 @@ import (
 func TestTraverse(t *testing.T) {
         m := map[string]bool{}
         err := traverse("main", func(fn string, fi os.FileInfo) bool {
-                if fi.Name() == "main.go" {
-                        m[fi.Name()] = true
-                }
+                m[fi.Name()] = true
                 return true
         })
         if err != nil { t.Errorf("error: %v", err) }
