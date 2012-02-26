@@ -42,36 +42,36 @@ foobac=# comment 6	`
 
         count := 0
         for _, n := range l.nodes { if n.kind == node_comment { count += 1 } }
-        if count != 9 { t.Error("expecting 9 comments but", count); return }
+        if ex := 9; count != ex { t.Error("expecting", ex, "comments but", count); return }
 
         var c *node
 
-        checkNode := func(n int, k nodeType, s string) (quit bool) {
-                if len(l.nodes) < n+1 { t.Error("expecting at list", n+1, "nodes but", len(l.nodes)); return true }
-                if c = l.nodes[n]; c.kind != k { t.Error("node", n ,"is not comment:", c.kind) }
-                if l.str(c) != s { t.Error("node", n, "is:", c.kind, "'"+l.str(c)+"'", ", not", "'"+s+"'") }
-                return false
+        checkNode := func(n int, k nodeType, s string) bool {
+                if len(l.nodes) < n+1 { t.Error("expecting at list", n+1, "nodes but", len(l.nodes)); return false }
+                if c = l.nodes[n]; c.kind != k { t.Error("node", n ,"is not comment:", c.kind); return false }
+                if l.str(c) != s { t.Error("node", n, "is:", c.kind, "'"+l.str(c)+"'", ", not", "'"+s+"'"); return false }
+                return true
         }
 
-        if checkNode(0, node_comment, `# this is a comment
+        if !checkNode(0, node_comment, `# this is a comment
 # this is the second line of the comment`) { return }
-        if checkNode(1, node_comment, `# this is another comment
+        if !checkNode(1, node_comment, `# this is another comment
 # this is the second line of the other comment
 # this is the third line of the other comment`) { return }
-        if checkNode(2, node_comment, `# more...`) { return }
-        if checkNode(3, node_assign, `foo = foo `) { return }
-        if checkNode(4, node_comment, `# comment 1`) { return }
-        if checkNode(5, node_comment, `# comment 2`) { return }
-        if checkNode(6, node_call, `$(info info)`) { return }
-        if checkNode(7, node_spaces, ` `) { return }
-        if checkNode(8, node_assign, `bar = bar`) { return }
-        if checkNode(9, node_comment, `# comment 3`) { return }
-        if checkNode(10, node_assign, `foobar=foobar`) { return }
-        if checkNode(11, node_comment, `#comment 4`) { return }
-        if checkNode(12, node_assign, `foobaz=blah`) { return }
-        if checkNode(13, node_comment, `# comment 5 `) { return }
-        if checkNode(14, node_assign, `foobac=`) { return }
-        if checkNode(15, node_comment, `# comment 6	`) { return }
+        if !checkNode(2, node_comment, `# more...`) { return }
+        if !checkNode(3, node_assign, `foo = foo `) { return }
+        if !checkNode(4, node_comment, `# comment 1`) { return }
+        if !checkNode(5, node_comment, `# comment 2`) { return }
+        if !checkNode(6, node_call, `$(info info)`) { return }
+        if !checkNode(7, node_spaces, ` `) { return }
+        if !checkNode(8, node_assign, `bar = bar`) { return }
+        if !checkNode(9, node_comment, `# comment 3`) { return }
+        if !checkNode(10, node_assign, `foobar=foobar`) { return }
+        if !checkNode(11, node_comment, `#comment 4`) { return }
+        if !checkNode(12, node_assign, `foobaz=blah`) { return }
+        if !checkNode(13, node_comment, `# comment 5 `) { return }
+        if !checkNode(14, node_assign, `foobac=`) { return }
+        if !checkNode(15, node_comment, `# comment 6	`) { return }
 }
 
 func TestLexAssigns(t *testing.T) {
@@ -97,7 +97,7 @@ $(a) \
         for _, n := range l.nodes {
                 if n.kind == node_assign || n.kind == node_simple_assign { count += 1 }
         }
-        if count != 6 { t.Error("expecting 6 assigns, but", count); return }
+        if ex := 6; count != ex { t.Error("expecting", ex, "assigns, but", count); return }
 
         checkNode := func(c *node, k nodeType, cc int, s string, cs ...string) {
                 if c.kind != k { t.Error("expecting", k, ", but", c.kind); return }
@@ -178,11 +178,11 @@ $(info $($(foo)),$($($(foo)$(bar))))
         l := newTestLex("TestLexCalls", s)
         l.parse()
 
-        if len(l.nodes) != 9 { t.Error("expecting 8 nodes but", len(l.nodes)); return }
+        if ex := 9; len(l.nodes) != ex { t.Error("expecting", ex, "nodes but", len(l.nodes)); return }
         
         count := 0
         for _, n := range l.nodes { if n.kind == node_call { count += 1 } }
-        if count != 5 { t.Error("expecting 4 calls, but", count); return }
+        if ex := 5; count != ex { t.Error("expecting", ex, "calls, but", count); return }
 
         var c, cc *node
 
@@ -303,6 +303,7 @@ dddd := xxx-$(sh$ared)-$(stat$ic)-$(a$$a)-xxx
         p := newTestParser("TestParse", s)
 
         if err := p.parse(); err != nil { t.Error("parse error:", err); return }
+        if ex, nl := 10, len(p.l.nodes); nl != ex { t.Error("expect", ex, "but", nl); return }
 
         var nd *node
 
