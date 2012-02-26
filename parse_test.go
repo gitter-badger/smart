@@ -399,7 +399,6 @@ dddd := xxx-$(sh$ared)-$(stat$ic)-$(a$$a)-xxx
                 t.Error("should not have 'aa' variable"); return
         }
 
-
         if !checkVar("a", "a") { return }
         if !checkVar("i", "i") { return }
         if !checkVar("ii", `i $a i a \

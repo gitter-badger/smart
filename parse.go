@@ -153,7 +153,7 @@ func (l *lex) parseComment() *node {
         for {
                 for r != '\n' { if !l.get() { break } else { r = l.rune } }
                 if r == '\n' && l.peek() == '#' {
-                        if !l.get() { break } else { r = l.rune; continue }
+                        if l.get() { r = l.rune; continue }
                 } else {
                         // return the '\n' because the consequenced node may need
                         // this as separator.
