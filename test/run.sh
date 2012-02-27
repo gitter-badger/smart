@@ -5,7 +5,7 @@ out="./out"
 exe=""
 smart="$(dir $PWD)/smart"
 
-[[ -f ../smart.go && -f ../main.go && -f ../build.sh ]] || {
+[[ -f ../smart.go && -f ../main/main.go && -f ../build.sh ]] || {
     echo $BASH_SOURCE:$LINENO "not in test subdir"
     exit -1
 }
