@@ -75,7 +75,7 @@ type command interface {
         execute(targets []string, prequisites []string) bool
 }
 
-type execCommand struct {
+type excmd struct {
         slient bool
         name string
         path string
@@ -87,7 +87,7 @@ type execCommand struct {
         ia32 bool
 }
 
-func (c *execCommand) run(target string, args ...string) bool {
+func (c *excmd) run(target string, args ...string) bool {
         if strings.HasPrefix(c.path, "~/") {
                 c.path = os.Getenv("HOME") + c.path[1:]
         }
@@ -498,7 +498,7 @@ func matchFileName(fn string, rules []*filerule) *filerule {
         return nil
 }
 
-func processFile(dname string, fi os.FileInfo) bool {
+func processFile(fn string, fi os.FileInfo) bool {
         fr := matchFile(fi, generalMetaFiles)
 
         if *flag_g && fr != nil {
@@ -506,17 +506,11 @@ func processFile(dname string, fi os.FileInfo) bool {
         }
 
         if fi.Name() == ".smart" {
-                if _, err := parse(dname); err != nil {
-                        errorf(0, "parse: `%v', %v\n", dname, err)
+                if _, err := parse(fn); err != nil {
+                        errorf(0, "parse: `%v', %v\n", fn, err)
                         return false
                 }
         }
-
-        /*
-        for _, stub := range toolsets {
-                stub.processFile(dname, fi)
-        }
-        */
 
         //fmt.Printf("traverse: %s\n", dname)
         return true

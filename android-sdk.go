@@ -176,7 +176,7 @@ func (ic *androidsdkGenR) execute(targets []string, prequisites []string) bool {
         if ic.assets != "" { args = append(args, "-A", ic.assets) }
         // TODO: -P -G
 
-        c := &execCommand{
+        c := &excmd{
         name: "aapt", slient: androidsdkSlientSome,
         mkdir: outRes,
         path: filepath.Join(androidsdk, "platform-tools", "aapt"),
@@ -225,7 +225,7 @@ func (ic *androidsdkGenClasses) execute(targets []string, prequisites []string) 
         }
 
         args = append(args, prequisites...)
-        c := &execCommand{ name:"javac", mkdir:outClasses, }
+        c := &excmd{ name:"javac", mkdir:outClasses, }
         if !c.run("classes", args...) {
                 errorf(0, "classes: %v", outClasses)
                 return false
@@ -249,7 +249,7 @@ func androidsdkCreateEmptyPackage(name string) bool {
                 return false
         }
 
-        c := &execCommand{ name:"jar", dir:filepath.Dir(name), slient:androidsdkSlientSome, }
+        c := &excmd{ name:"jar", dir:filepath.Dir(name), slient:androidsdkSlientSome, }
         if !c.run("EmptyPackage", "cf", filepath.Base(name), "dummy") {
                 return false
         }
@@ -258,7 +258,7 @@ func androidsdkCreateEmptyPackage(name string) bool {
                 errorf(0, "remove: %v (%v)\n", "dummy", e)
         }
 
-        c = &execCommand{ name:"zip", dir:filepath.Dir(name), slient:androidsdkSlientSome, }
+        c = &excmd{ name:"zip", dir:filepath.Dir(name), slient:androidsdkSlientSome, }
         if !c.run("EmptyPackage", "-qd", filepath.Base(name), "dummy") {
                 return false
         }
@@ -318,7 +318,7 @@ func (ic *androidsdkGenApk) execute(targets []string, prequisites []string) bool
                 errorf(0, "no classes for `%v'", targets)
         }
 
-        c := &execCommand{ name:"dx", dir:outclasses, slient:androidsdkSlientSome, path: filepath.Join(androidsdk, "platform-tools", "dx"), }
+        c := &excmd{ name:"dx", dir:outclasses, slient:androidsdkSlientSome, path: filepath.Join(androidsdk, "platform-tools", "dx"), }
         if !c.run("classes.dex", args...) {
                 errorf(0, "dex: %v\n", "classes.dex")
         }
@@ -331,7 +331,7 @@ func (ic *androidsdkGenApk) execute(targets []string, prequisites []string) bool
                 return false
         }
 
-        c = &execCommand{ name:"aapt", slient:androidsdkSlientSome, path: filepath.Join(androidsdk, "platform-tools", "aapt"), }
+        c = &excmd{ name:"aapt", slient:androidsdkSlientSome, path: filepath.Join(androidsdk, "platform-tools", "aapt"), }
 
         args = []string{ "package", "-u",
                 "-M", filepath.Join(ic.d, "AndroidManifest.xml"),
@@ -378,7 +378,7 @@ func (ic *androidsdkGenApk) execute(targets []string, prequisites []string) bool
                 fmt.Printf("smart: signing %v...\n", targets)
         }
 
-        c = &execCommand{ name:"jarsigner", slient:true/*androidsdkSlientSome*/, }
+        c = &excmd{ name:"jarsigner", slient:true/*androidsdkSlientSome*/, }
         if !c.run("sign package", args...) {
                 os.Remove(filepath.Join(ic.out, "signed.apk"))
                 return false
@@ -398,7 +398,7 @@ func (ic *androidsdkGenJar) execute(targets []string, prequisites []string) bool
                 errorf(0, "pack: %v", libname)
         }
 
-        c := &execCommand{ name:"aapt", slient:androidsdkSlientSome, path: filepath.Join(androidsdk, "platform-tools", "aapt"), }
+        c := &excmd{ name:"aapt", slient:androidsdkSlientSome, path: filepath.Join(androidsdk, "platform-tools", "aapt"), }
 
         args := []string{ "package", "-u",
                 "-M", filepath.Join(ic.d, "AndroidManifest.xml"),
@@ -418,7 +418,7 @@ func (ic *androidsdkGenJar) execute(targets []string, prequisites []string) bool
                 args = append(args, "-uf")
         }
         args = append(args, libname, "-C", filepath.Join(ic.out, "classes"), ".")
-        c = &execCommand{ name:"jar", slient:androidsdkSlientSome, }
+        c = &excmd{ name:"jar", slient:androidsdkSlientSome, }
         if !c.run("PackageClasses", args...) {
                 errorf(0, "pack classes: %v", libname)
         }

@@ -144,14 +144,14 @@ func (gcc *_gcc) useModule(p *parser, m *module) bool {
 }
 
 type gccCommand struct {
-        execCommand
+        excmd
         args []string
         libdirs, libs []string
 }
 
 func gccNewCommand(name string, args ...string) *gccCommand {
         return &gccCommand{
-                execCommand{ name: name, },
+                excmd{ name: name, },
                 args, []string{}, []string{},
         }
 }
