@@ -71,6 +71,8 @@ func (gcc *_gcc) buildModule(p *parser, args []string) bool {
         sources := p.getModuleSources()
         if len(sources) == 0 { errorf(0, "no sources for `%v'", p.module.name) }
 
+        fmt.Printf("sources: %v: %v\n", m.name, sources)
+
         ls := func(name, prefix string) (l []string) {
                 for _, s := range strings.Split(p.call(name), " ") {
                         if strings.HasPrefix(s, prefix) { s = s[len(prefix):] }
@@ -83,7 +85,7 @@ func (gcc *_gcc) buildModule(p *parser, args []string) bool {
         libdirs := ls("this.libdirs", "-L")
         libs := ls("this.libs", "-l")
 
-        cmdAs := gccNewCommand("as", "-c")
+        cmdAs  := gccNewCommand("as",  "-c")
         cmdGcc := gccNewCommand("gcc", "-c")
         cmdGxx := gccNewCommand("g++", "-c")
 

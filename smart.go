@@ -547,6 +547,7 @@ func run(vars map[string]string, cmds []string) {
                 }
                 if !mod.built {
                         fmt.Printf("smart: build `%v'\n", mod.name)
+                        p.module = mod
                         if mod.toolset.buildModule(p, []string{}) {
                                 mod.built = true
                         } else {
@@ -563,8 +564,6 @@ func run(vars map[string]string, cmds []string) {
         var i *pendedBuild
         for 0 < len(moduleBuildList) {
                 i, moduleBuildList = &moduleBuildList[0], moduleBuildList[1:]
-                i.p.module = i.m
-
                 if !buildMod(i.p, i.m) {
                         errorf(0, "module `%v' not built", i.m.name)
                 }
