@@ -28,6 +28,7 @@ func computeTestRunParams() (vars map[string]string, cmds []string) {
                 }
                 cmds = append(cmds, arg)
         }
+        *flag_V, *flag_v = true, false
         return
 }
 
@@ -36,40 +37,43 @@ func testToolsetGcc(t *testing.T) {
         if l := len(moduleOrderList); l != 0 { t.Errorf("expecting len(moduleOrderList) for 0, but %v", l); return }
         if l := len(moduleBuildList); l != 0 { t.Errorf("expecting len(moduleBuildList) for 0, but %v", l); return }
 
-        //if e := os.Chdir("exe"); e != nil { t.Errorf("Chdir: %v", e); return }
-        if s, e := os.Getwd(); e == nil { fmt.Printf("test: %v\n", s) }
+        if e := os.RemoveAll("out"); e != nil { t.Errorf("failed remove `out' directory") }
         run(computeTestRunParams())
-        //if e := os.Chdir(".."); e != nil { t.Errorf("Chdir: %v", e); return }
 
         var m *module
         var ok bool
         if m, ok = modules["foo_gcc_exe"]; !ok { t.Errorf("expecting module foo_gcc_exe"); return }
         if m.name != "foo_gcc_exe" { t.Errorf("expecting module foo_gcc_exe, but %v", m.name); return }
+        if m.kind != "exe" { t.Errorf("expecting exe for foo_gcc_exe, but %v", m.kind); return }
+        if m.action == nil { t.Errorf("no action for the module"); return }
+        if l := len(m.action.targets); l != 1 { t.Errorf("expection 1 targets, but %v", l); return }
+        if fn := filepath.Join("out", m.name, m.name); m.action.targets[0] != fn { t.Errorf("expecting action target %v, but %v", fn, m.action.targets); return }
+        if l := len(m.action.prequisites); l != 1 { t.Errorf("expecting 1 prequisite, but %v", l); return }
         if m, ok = modules["foo_shared"]; !ok { t.Errorf("expecting module foo_shared"); return }
         if m.name != "foo_shared" { t.Errorf("expecting module foo_shared, but %v", m.name); return }
+        if m.kind != "shared" { t.Errorf("expecting shared for foo_shared, but %v", m.kind); return }
+        if m.action == nil { t.Errorf("no action for the module"); return }
+        if l := len(m.action.targets); l != 1 { t.Errorf("expection 1 targets, but %v", l); return }
         if m, ok = modules["foo_static"]; !ok { t.Errorf("expecting module foo_static"); return }
         if m.name != "foo_static" { t.Errorf("expecting module foo_static, but %v", m.name); return }
+        if m.kind != "static" { t.Errorf("expecting static for foo_static, but %v", m.kind); return }
+        if m.action == nil { t.Errorf("no action for the module"); return }
+        if l := len(m.action.targets); l != 1 { t.Errorf("expection 1 targets, but %v", l); return }
 
-        if fi, e := os.Stat("out/foo_gcc_exe"); fi == nil || e != nil || !fi.IsDir() { t.Errorf("failed: %v", e); return }
-        if fi, e := os.Stat("out/foo_gcc_exe/foo_gcc_exe"); fi == nil || e != nil { t.Errorf("failed: %v", e); return }
         if fi, e := os.Stat("out/foo_shared"); fi == nil || e != nil { t.Errorf("failed: %v", e); return }
         if fi, e := os.Stat("out/foo_shared/foo_shared.so"); fi == nil || e != nil { t.Errorf("failed: %v", e); return }
         if fi, e := os.Stat("out/foo_static"); fi == nil || e != nil { t.Errorf("failed: %v", e); return }
         if fi, e := os.Stat("out/foo_static/libfoo_static.a"); fi == nil || e != nil { t.Errorf("failed: %v", e); return }
+        if fi, e := os.Stat("out/foo_gcc_exe"); fi == nil || e != nil || !fi.IsDir() { t.Errorf("failed: %v", e); return }
+        if fi, e := os.Stat("out/foo_gcc_exe/foo_gcc_exe"); fi == nil || e != nil { t.Errorf("failed: %v", e); return }
 }
 
 func testToolsetAndroidNDK(t *testing.T) {
-        //if e := os.Chdir("exe"); e != nil { t.Errorf("Chdir: %v", e); return }
-        if s, e := os.Getwd(); e == nil { fmt.Printf("test: %v\n", s) }
         //run(computeTestRunParams())
-        //if e := os.Chdir(".."); e != nil { t.Errorf("Chdir: %v", e); return }
 }
 
 func testToolsetAndroidSDK(t *testing.T) {
-        //if e := os.Chdir("exe"); e != nil { t.Errorf("Chdir: %v", e); return }
-        if s, e := os.Getwd(); e == nil { fmt.Printf("test: %v\n", s) }
         //run(computeTestRunParams())
-        //if e := os.Chdir(".."); e != nil { t.Errorf("Chdir: %v", e); return }
 }
 
 func TestToolsets(t *testing.T) {
@@ -96,7 +100,9 @@ func TestToolsets(t *testing.T) {
                         var wd string
                         if s, e := os.Getwd(); e != nil { t.Errorf("Getwd: %v", e); return } else { wd = s }
                         if e := os.Chdir(tc); e != nil { t.Errorf("Chdir: %v", e); return }
+                        fmt.Printf("TestToolsets: Entering directory `%v'\n", tc)
                         testToolset(tn, tc, ts)
+                        fmt.Printf("TestToolsets: Leaving directory `%v'\n", tc)
                         if e := os.Chdir(wd); e != nil { t.Errorf("Chdir: %v", e); return }
                 }
         }

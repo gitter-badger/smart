@@ -351,26 +351,15 @@ func drawSourceTransformActions(sources []string, namecommand func(src string) (
 
 type module struct {
         dir string
-        location location // where does it defined
+        location *location // where does it defined
         name string
         toolset toolset
         kind string
-        sources string
         action *action // action for building this module
         variables map[string]*variable
         using, usedBy []*module
-        built bool // marked as 'true' if module is built
+        built, updated bool // marked as 'true' if module is built or updated
 }
-
-type pendedBuild struct {
-        m *module
-        p *parser
-        args []string
-}
-
-var modules = map[string]*module{}
-var moduleOrderList []*module
-var moduleBuildList []pendedBuild
 
 func (m *module) update() {
         //fmt.Printf("update: module: %v\n", m.name)
@@ -384,6 +373,16 @@ func (m *module) update() {
                 fmt.Printf("smart: noting done for `%v'\n", m.name)
         }
 }
+
+type pendedBuild struct {
+        m *module
+        p *parser
+        args []string
+}
+
+var modules = map[string]*module{}
+var moduleOrderList []*module
+var moduleBuildList []pendedBuild
 
 type filerule struct {
         name string
@@ -498,24 +497,6 @@ func matchFileName(fn string, rules []*filerule) *filerule {
         return nil
 }
 
-func processFile(fn string, fi os.FileInfo) bool {
-        fr := matchFile(fi, generalMetaFiles)
-
-        if *flag_g && fr != nil {
-                return false
-        }
-
-        if fi.Name() == ".smart" {
-                if _, err := parse(fn); err != nil {
-                        errorf(0, "parse: `%v', %v\n", fn, err)
-                        return false
-                }
-        }
-
-        //fmt.Printf("traverse: %s\n", dname)
-        return true
-}
-
 func run(vars map[string]string, cmds []string) {
         defer func() {
                 if e := recover(); e != nil {
@@ -530,7 +511,14 @@ func run(vars map[string]string, cmds []string) {
         var d string
         if d = *flag_C; d == "" { d = "." }
 
-        err := traverse(d, processFile)
+        err := traverse(d, func(fn string, fi os.FileInfo) bool {
+                fr := matchFile(fi, generalMetaFiles)
+                if *flag_g && fr != nil { return false }
+                if fi.Name() == ".smart" {
+                        if _, err := parse(fn); err != nil { errorf(0, "parse: `%v', %v\n", fn, err) }
+                }
+                return true
+        })
         if err != nil {
                 fmt.Printf("error: %v\n", err)
         }
@@ -545,21 +533,58 @@ func run(vars map[string]string, cmds []string) {
                 // ...
         }
 
-        var mb = map[string]bool{}
+        var buildDeps func(p *parser, mod *module) int
+        var buildMod func(p *parser, mod *module) bool
+        buildMod = func(p *parser, mod *module) bool {
+                if buildDeps(p, mod) != len(mod.using) {
+                        fmt.Printf("%v: failed building deps of `%v' (by `%v')\n", mod.location, mod.name, mod.name)
+                        return false
+                }
+                if mod.toolset == nil {
+                        //fmt.Printf("%v: no toolset for `%v'(by `%v')\n", mod.location, mod.name, mod.name)
+                        fmt.Printf("%v: no toolset for `%v'\n", mod.location, mod.name)
+                        return false
+                }
+                if !mod.built {
+                        fmt.Printf("smart: build `%v'\n", mod.name)
+                        if mod.toolset.buildModule(p, []string{}) {
+                                mod.built = true
+                        } else {
+                                fmt.Printf("%v: module `%v' not built\n", mod.location, mod.name)
+                        }
+                }
+                return mod.built
+        }
+        buildDeps = func(p *parser, mod *module) (num int) {
+                for _, u := range mod.using { if buildMod(p, u) { num += 1} }
+                return
+        }
+
+        var i *pendedBuild
         for 0 < len(moduleBuildList) {
-                i := &moduleBuildList[0]
-                moduleBuildList = moduleBuildList[1:]
-
-                if v, ok := mb[i.m.name]; ok && v { continue }
-                fmt.Printf("smart: rebuild `%v'\n", i.m.name)
+                i, moduleBuildList = &moduleBuildList[0], moduleBuildList[1:]
                 i.p.module = i.m
-                builtinBuild(i.p, i.args)
-                mb[i.m.name] = true
+
+                if !buildMod(i.p, i.m) {
+                        errorf(0, "module `%v' not built", i.m.name)
+                }
         }
 
-        for _, m := range moduleOrderList {
-                m.update()
+        var updateDeps func(mod *module)
+        var updateMod func(mod *module)
+        updateMod = func(mod *module) {
+                updateDeps(mod)
+                if !mod.updated {
+                        fmt.Printf("smart: update `%v'...\n", mod.name)
+                        mod.update()
+                        mod.updated = true
+                }
         }
+        updateDeps = func(mod *module) {
+                for _, u := range mod.using { updateMod(u) }
+        }
+
+        for _, m := range moduleOrderList { updateMod(m) }
 }
 
 func Main() {

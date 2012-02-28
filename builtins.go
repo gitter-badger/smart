@@ -55,7 +55,7 @@ func builtinModule(p *parser, args []string) string {
                 toolset: toolset,
                 kind: kind,
                 dir: filepath.Dir(p.l.file),
-                location: *p.l.location(),
+                location: p.l.location(),
                 variables: make(map[string]*variable, 128),
                 }
                 modules[m.name] = m
@@ -90,64 +90,16 @@ func builtinModule(p *parser, args []string) string {
 
 func builtinBuild(p *parser, args []string) string {
         var m *module
-        if m = p.module; m == nil {
-                errorf(0, "no module defined")
-        }
+        if m = p.module; m == nil { errorf(0, "no module defined") }
 
-        var buildUsing func(mod *module) int
-        buildUsing = func(mod *module) (num int) {
-                for _, u := range mod.using {
-                        ok := true
-                        if u.toolset == nil {
-                                ok = false
-                        } else if l := len(u.using); 0 < l {
-                                if l != buildUsing(u) { ok = false }
-                        }
-                        if ok && (u.built || u.toolset.buildModule(p, args)) {
-                                u.built = true
-                                num += 1
-                        } else {
-                                fmt.Printf("%v: dependency `%v' not built\n", p.l.location(), u.name)
-                        }
-                }
-                return
-        }
-
-        if m.toolset == nil {
-                errorf(0, "no toolset for `%v'", m.name)
-        }
-
-        if buildUsing(m) != len(m.using) {
-                //errorf(0, "not all dependencies built for `%v'", m.name)
-
-                // not all dependencies built, pend it to the back in the build list
-                moduleBuildList = append(moduleBuildList, pendedBuild{m, p, args})
-                if *flag_v || *flag_V {
-                        fmt.Printf("smart: build `%v' (pended)\n", m.name)
-                }
-                return ""
-        }
-
-        if *flag_v || *flag_V {
-                fmt.Printf("smart: build `%v'\n", m.name)
-        }
-
-        if !(m.built || m.toolset.buildModule(p, args)) {
-                errorf(0, "failed building `%v' via `%v'", m.name, m.toolset)
-        } else {
-                m.built = true
-        }
+        //fmt.Printf("smart: submit building `%v'\n", m.name)
+        moduleBuildList = append(moduleBuildList, pendedBuild{m, p, args})
         return ""
 }
 
 func builtinUse(p *parser, args []string) string {
-        if m := p.module; m == nil {
-                errorf(0, "no module defined")
-        }
-
-        if p.module.toolset == nil {
-                errorf(0, "no toolset for `%v'", p.module.name)
-        }
+        if p.module == nil { errorf(0, "no module defined") }
+        if p.module.toolset == nil { errorf(0, "no toolset for `%v'", p.module.name) }
 
         for _, a := range args {
                 a = strings.TrimSpace(a)
@@ -159,7 +111,7 @@ func builtinUse(p *parser, args []string) string {
                         m = &module{
                         name: a,
                         dir: filepath.Dir(p.l.file),
-                        location: *p.l.location(),
+                        location: p.l.location(),
                         variables: make(map[string]*variable, 128),
                         usedBy: []*module{ p.module },
                         }

@@ -57,22 +57,9 @@ func (gcc *_gcc) setupModule(p *parser, args []string, vars map[string]string) b
 
 func (gcc *_gcc) buildModule(p *parser, args []string) bool {
         var m *module
-        if m = p.module; m == nil {
-                //p.stepLineBack();
-                errorf(0, "no module")
-        }
-
-        if m.action == nil {
-                //p.stepLineBack();
-                errorf(0, "no action for `%v'", p.module.name)
-                return false
-        }
-
-        if m.action.command == nil {
-                //p.stepLineBack();
-                errorf(0, "no command for `%v'", p.module.name)
-                return false
-        }
+        if m = p.module; m == nil { errorf(0, "no module") }
+        if m.action == nil { errorf(0, "no action for `%v'", p.module.name) }
+        if m.action.command == nil { errorf(0, "no command for `%v'", p.module.name) }
 
         var ld *gccCommand
         if l, ok := m.action.command.(*gccCommand); !ok {
@@ -82,9 +69,7 @@ func (gcc *_gcc) buildModule(p *parser, args []string) bool {
         }
 
         sources := p.getModuleSources()
-        if len(sources) == 0 {
-                errorf(0, "no sources for `%v'", p.module.name)
-        }
+        if len(sources) == 0 { errorf(0, "no sources for `%v'", p.module.name) }
 
         ls := func(name, prefix string) (l []string) {
                 for _, s := range strings.Split(p.call(name), " ") {
@@ -135,7 +120,6 @@ func (gcc *_gcc) buildModule(p *parser, args []string) bool {
         m.action.prequisites = append(m.action.prequisites, as...)
 
         //fmt.Printf("module: %v, %v, %v\n", m.name, m.action.targets, len(m.action.prequisites))
-
         return m.action != nil
 }
 
