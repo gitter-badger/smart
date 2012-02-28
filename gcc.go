@@ -71,7 +71,7 @@ func (gcc *_gcc) buildModule(p *parser, args []string) bool {
         sources := p.getModuleSources()
         if len(sources) == 0 { errorf(0, "no sources for `%v'", p.module.name) }
 
-        fmt.Printf("sources: %v: %v\n", m.name, sources)
+        //fmt.Printf("sources: %v: %v\n", m.name, sources)
 
         ls := func(name, prefix string) (l []string) {
                 for _, s := range strings.Split(p.call(name), " ") {
