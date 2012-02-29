@@ -48,7 +48,6 @@ func testToolsetGcc(t *testing.T) {
         if l := len(modules); l != 0 { t.Errorf("expecting len(modules) for 0, but %v", l); return }
         if l := len(moduleOrderList); l != 0 { t.Errorf("expecting len(moduleOrderList) for 0, but %v", l); return }
         if l := len(moduleBuildList); l != 0 { t.Errorf("expecting len(moduleBuildList) for 0, but %v", l); return }
-
         if e := os.RemoveAll("out"); e != nil { t.Errorf("failed remove `out' directory") }
         run(computeTestRunParams())
 
@@ -117,15 +116,16 @@ func testToolsetGcc(t *testing.T) {
         if l := len(m.action.prequisites[0].prequisites); l != 1 { t.Errorf("expecting 1 prequisite, but %v", l); return }
         if s := m.action.prequisites[0].prequisites[0].targets[0]; s != filepath.Join("exe_use_static", "foo.c") { t.Errorf("expect exe_use_static/foo.c, but %v (%v)", s, m.action.prequisites[0].prequisites[0].targets); return }
 
-        if fi, e := os.Stat("out/foo_shared"); fi == nil || e != nil { t.Errorf("failed: %v", e); return }
+        if fi, e := os.Stat("out"); fi == nil || e != nil || !fi.IsDir() { t.Errorf("failed: %v", e); return }
+        if fi, e := os.Stat("out/foo_shared"); fi == nil || e != nil || !fi.IsDir() { t.Errorf("failed: %v", e); return }
         if fi, e := os.Stat("out/foo_shared/foo_shared.so"); fi == nil || e != nil { t.Errorf("failed: %v", e); return }
-        if fi, e := os.Stat("out/foo_static"); fi == nil || e != nil { t.Errorf("failed: %v", e); return }
+        if fi, e := os.Stat("out/foo_static"); fi == nil || e != nil || !fi.IsDir() { t.Errorf("failed: %v", e); return }
         if fi, e := os.Stat("out/foo_static/libfoo_static.a"); fi == nil || e != nil { t.Errorf("failed: %v", e); return }
-        if fi, e := os.Stat("out/foo_gcc_exe"); fi == nil || e != nil || !fi.IsDir() { t.Errorf("failed: %v", e); return }
+        if fi, e := os.Stat("out/foo_gcc_exe"); fi == nil || e != nil || !fi.IsDir() || !fi.IsDir() { t.Errorf("failed: %v", e); return }
         if fi, e := os.Stat("out/foo_gcc_exe/foo_gcc_exe"); fi == nil || e != nil { t.Errorf("failed: %v", e); return }
-        if fi, e := os.Stat("out/foo_gcc_exe_use_static"); fi == nil || e != nil || !fi.IsDir() { t.Errorf("failed: %v", e); return }
+        if fi, e := os.Stat("out/foo_gcc_exe_use_static"); fi == nil || e != nil || !fi.IsDir() || !fi.IsDir() { t.Errorf("failed: %v", e); return }
         if fi, e := os.Stat("out/foo_gcc_exe_use_static/foo_gcc_exe_use_static"); fi == nil || e != nil { t.Errorf("failed: %v", e); return }
-        if fi, e := os.Stat("out/foo_gcc_exe_use_shared"); fi == nil || e != nil || !fi.IsDir() { t.Errorf("failed: %v", e); return }
+        if fi, e := os.Stat("out/foo_gcc_exe_use_shared"); fi == nil || e != nil || !fi.IsDir() || !fi.IsDir() { t.Errorf("failed: %v", e); return }
         if fi, e := os.Stat("out/foo_gcc_exe_use_shared/foo_gcc_exe_use_shared"); fi == nil || e != nil { t.Errorf("failed: %v", e); return }
 
         if s := runcmd("out/foo_gcc_exe/foo_gcc_exe"); s != "hello: out/foo_gcc_exe/foo_gcc_exe\n" { t.Errorf("unexpected foo_gcc_exe output: '%v'", s); return }
@@ -136,7 +136,17 @@ func testToolsetGcc(t *testing.T) {
 }
 
 func testToolsetAndroidNDK(t *testing.T) {
-        //run(computeTestRunParams())
+        if l := len(modules); l != 0 { t.Errorf("expecting len(modules) for 0, but %v", l); return }
+        if l := len(moduleOrderList); l != 0 { t.Errorf("expecting len(moduleOrderList) for 0, but %v", l); return }
+        if l := len(moduleBuildList); l != 0 { t.Errorf("expecting len(moduleBuildList) for 0, but %v", l); return }
+        if e := os.RemoveAll("out"); e != nil { t.Errorf("failed remove `out' directory") }
+        run(computeTestRunParams())
+
+        if fi, e := os.Stat("out"); fi == nil || e != nil || !fi.IsDir() { t.Errorf("failed: %v", e); return }
+        if fi, e := os.Stat("out/foo_androidndk_so"); fi == nil || e != nil || !fi.IsDir() { t.Errorf("failed: %v", e); return }
+        if fi, e := os.Stat("out/foo_androidndk_so/foo_androidndk_so.so"); fi == nil || e != nil { t.Errorf("failed: %v", e); return }
+
+        os.RemoveAll("out")
 }
 
 func testToolsetAndroidSDK(t *testing.T) {
