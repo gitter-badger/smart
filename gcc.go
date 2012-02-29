@@ -73,25 +73,56 @@ func (gcc *_gcc) buildModule(p *parser, args []string) bool {
 
         //fmt.Printf("sources: %v: %v\n", m.name, sources)
 
-        ls := func(name, prefix string) (l []string) {
-                for _, s := range strings.Split(p.call(name), " ") {
-                        if strings.HasPrefix(s, prefix) { s = s[len(prefix):] }
-                        if s == "" { continue }
-                        l = append(l, prefix, s)
+        ls := func(ss, prefix string) (l []string) {
+                for _, s := range strings.Split(ss, " ") {
+                        noprefix := false
+                        if prefix=="-l" {
+                                noprefix = noprefix || strings.ContainsAny(s, "/\\")
+                                noprefix = noprefix || strings.HasSuffix(s, ".so")
+                                noprefix = noprefix || strings.HasSuffix(s, ".a")
+                        }
+                        if noprefix {
+                                l = append(l, s)
+                        } else {
+                                if strings.HasPrefix(s, prefix) { s = s[len(prefix):] }
+                                if s == "" { continue }
+                                l = append(l, prefix+s)
+                        }
                 }
                 return
         }
-        includes := ls("this.includes", "-I")
-        libdirs := ls("this.libdirs", "-L")
-        libs := ls("this.libs", "-l")
+        includes := ls(p.call("this.includes"), "-I")
+        libdirs := ls(p.call("this.libdirs"), "-L")
+        libs := ls(p.call("this.libs"), "-l")
+
+        var useMod func(mod *module)
+        useMod = func(mod *module) {
+                for _, u := range mod.using {
+                        if v, ok := u.variables["this.export.includes"]; ok {
+                                includes = append(includes, ls(v.value, "-I")...)
+                        }
+                        if v, ok := u.variables["this.export.libdirs"]; ok {
+                                libdirs = append(libdirs, ls(v.value, "-L")...)
+                        }
+                        if v, ok := u.variables["this.export.libs"]; ok {
+                                //fmt.Printf("libs: (%v) %v\n", u.name, v.value)
+                                libs = append(libs, ls(v.value, "-l")...)
+                        }
+                        useMod(u)
+                }
+        }
+        useMod(m)
+
+        fmt.Printf("libs: (%v) %v %v\n", m.name, libdirs, libs)
 
         cmdAs  := gccNewCommand("as",  "-c")
         cmdGcc := gccNewCommand("gcc", "-c")
         cmdGxx := gccNewCommand("g++", "-c")
 
         for _, c := range []*gccCommand{cmdAs, cmdGcc, cmdGxx} {
-                c.args, c.libdirs, c.libs = append(c.args, includes...), libdirs, libs
+                c.args = append(c.args, includes...)
         }
+        ld.libdirs, ld.libs = libdirs, libs
 
         as := drawSourceTransformActions(sources, func(src string) (name string, c command) {
                 var fr *filerule
@@ -126,6 +157,7 @@ func (gcc *_gcc) buildModule(p *parser, args []string) bool {
 }
 
 func (gcc *_gcc) useModule(p *parser, m *module) bool {
+        fmt.Printf("TODO: use: %v by %v\n", m.name, p.module.name)
         return false
 }
 
@@ -156,5 +188,6 @@ func (c *gccCommand) execute(targets []string, prequisites []string) bool {
         if 0 < len(c.libs) {
                 args = append(args, append(c.libdirs, c.libs...)...)
         }
+
         return c.run(target, args...)
 }

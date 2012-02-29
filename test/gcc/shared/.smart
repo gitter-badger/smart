@@ -2,5 +2,8 @@
 $(module foo_shared, gcc, shared)
 
 this.sources := foo.c
+#this.export.libdirs := out/foo_shared
+#this.export.libs := foo_shared
+this.export.libs := out/foo_shared/foo_shared.so
 
 $(build)

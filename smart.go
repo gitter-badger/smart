@@ -546,7 +546,9 @@ func run(vars map[string]string, cmds []string) {
                         return false
                 }
                 if !mod.built {
-                        fmt.Printf("smart: build `%v' (%v)\n", mod.name, mod.dir)
+                        if *flag_V {
+                                fmt.Printf("smart: build `%v' (%v)\n", mod.name, mod.dir)
+                        }
                         p.module = mod
                         if mod.toolset.buildModule(p, []string{}) {
                                 mod.built = true

@@ -2,5 +2,7 @@
 $(module foo_static, gcc, static)
 
 this.sources := foo.c
+this.export.libdirs := out/foo_static
+this.export.libs := foo_static
 
 $(build)
