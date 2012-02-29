@@ -71,6 +71,7 @@ func builtinModule(p *parser, args []string) string {
                 m.kind = kind
         }
 
+        m.dir = filepath.Dir(p.l.file)
         p.setModule(m)
 
         // parsed arguments in forms like "PLATFORM=android-9"
@@ -92,7 +93,10 @@ func builtinBuild(p *parser, args []string) string {
         var m *module
         if m = p.module; m == nil { errorf(0, "no module defined") }
 
-        //fmt.Printf("smart: submit building `%v'\n", m.name)
+        if *flag_V {
+                fmt.Printf("smart: submit building `%v' (%v)\n", m.name, m.dir)
+        }
+
         moduleBuildList = append(moduleBuildList, pendedBuild{m, p, args})
         return ""
 }

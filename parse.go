@@ -410,8 +410,7 @@ func (p *parser) getModuleSources() (sources []string) {
         }
 
         if s, ok := p.module.variables["this.sources"]; ok {
-                dir := filepath.Dir(p.l.file)
-                str := p.expand(s.value)
+                dir, str := p.module.dir, p.expand(s.value)
                 sources = strings.Split(str, " ")
                 for i, _ := range sources {
                         if sources[i][0] == '/' { continue }
