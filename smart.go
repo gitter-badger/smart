@@ -365,7 +365,7 @@ func (m *module) update() {
         //fmt.Printf("update: module: %v\n", m.name)
 
         if m.action == nil {
-                fmt.Printf("%v: no action for module \"%v\"\n", &(m.location), m.name)
+                fmt.Printf("%v: no action for module \"%v\"\n", m.location, m.name)
                 return
         }
 

@@ -113,7 +113,7 @@ func (gcc *_gcc) buildModule(p *parser, args []string) bool {
         }
         useMod(m)
 
-        fmt.Printf("libs: (%v) %v %v\n", m.name, libdirs, libs)
+        //fmt.Printf("libs: (%v) %v %v\n", m.name, libdirs, libs)
 
         cmdAs  := gccNewCommand("as",  "-c")
         cmdGcc := gccNewCommand("gcc", "-c")
@@ -157,7 +157,7 @@ func (gcc *_gcc) buildModule(p *parser, args []string) bool {
 }
 
 func (gcc *_gcc) useModule(p *parser, m *module) bool {
-        fmt.Printf("TODO: use: %v by %v\n", m.name, p.module.name)
+        //fmt.Printf("TODO: use: %v by %v\n", m.name, p.module.name)
         return false
 }
 
@@ -178,14 +178,17 @@ func (c *gccCommand) execute(targets []string, prequisites []string) bool {
         var args []string
         var target = targets[0]
 
-        if c.name == "ar" || strings.HasSuffix(c.name, "-ar") {
+        isar := c.name == "ar" || strings.HasSuffix(c.name, "-ar")
+
+        if isar {
                 args = append(c.args, target)
         } else {
                 args = append([]string{ "-o", target, }, c.args...)
         }
 
         args = append(args, prequisites...)
-        if 0 < len(c.libs) {
+
+        if !isar && 0 < len(c.libs) {
                 args = append(args, append(c.libdirs, c.libs...)...)
         }
 

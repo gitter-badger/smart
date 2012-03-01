@@ -233,6 +233,8 @@ func (ndk *_androidndk) loadModule(fn, ndksrc, subdir string) (ok bool) {
 }
 
 func (ndk *_androidndk) loadModules() (ok bool) {
+        return true
+
         ndksrc := filepath.Join(ndk.root, "sources")
         err := traverse(ndksrc, func(fn string, fi os.FileInfo) bool {
                 if !fi.IsDir() && fi.Name() == "Android.mk" {

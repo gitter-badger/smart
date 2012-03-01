@@ -1,0 +1,12 @@
+# -*- makefile-gmake -*-
+# ABI=armeabi PLATFORM=android-9
+$(module native_app_glue, android-ndk, static)
+
+this.sources := android_native_app_glue.c
+this.libs := -llog
+#this.export.includes := $(this.dir)
+this.export.includes := native_app_glue
+this.export.libdirs := out/native_app_glue
+this.export.libs := native_app_glue
+
+$(build)
