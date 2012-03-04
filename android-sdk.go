@@ -39,7 +39,13 @@ func (sdk *_androidsdk) setupModule(p *parser, args []string, vars map[string]st
 
         d := filepath.Dir(p.l.file)
         sources, err := findFiles(filepath.Join(d, "src"), `\.java$`, -1)
-        for i, _ := range sources { sources[i] = sources[i][len(d)+1:] }
+        for i, _ := range sources {
+                if strings.HasPrefix(sources[i], d) {
+                        sources[i] = sources[i][len(d)+1:]
+                }
+        }
+
+        //fmt.Printf("sources: (%v) %v\n", d, sources)
 
         if err != nil {
                 errorf(0, fmt.Sprintf("can't find Java sources in `%v'", d))
@@ -249,7 +255,7 @@ func androidsdkCreateEmptyPackage(name string) bool {
                 return false
         }
 
-        c := &excmd{ name:"jar", dir:filepath.Dir(name), slient:androidsdkSlientSome, }
+        c := &excmd{ name:"jar", dir:filepath.Dir(name), slient:true/*androidsdkSlientSome*/, }
         if !c.run("EmptyPackage", "cf", filepath.Base(name), "dummy") {
                 return false
         }
@@ -258,7 +264,7 @@ func androidsdkCreateEmptyPackage(name string) bool {
                 errorf(0, "remove: %v (%v)\n", "dummy", e)
         }
 
-        c = &excmd{ name:"zip", dir:filepath.Dir(name), slient:androidsdkSlientSome, }
+        c = &excmd{ name:"zip", dir:filepath.Dir(name), slient:true/*androidsdkSlientSome*/, }
         if !c.run("EmptyPackage", "-qd", filepath.Base(name), "dummy") {
                 return false
         }
@@ -297,6 +303,38 @@ func (ic *androidsdkGenTar) targets(prequisites []*action) (targets []string, ne
         return
 }
 
+func androidsdkGetKeystore() string {
+        var canditates []string
+
+        find := func() string {
+                for _, s := range canditates {
+                        if fi, e := os.Stat(s); e == nil && !fi.IsDir() {
+                                return s
+                        }
+                }
+                return ""
+        }
+
+        if s, e := exec.LookPath("smart"); e == nil {
+                canditates = []string{
+                        filepath.Join(filepath.Dir(s), "data", "androidsdk", "keystore"),
+                }
+                if s = find(); s != "" { return s }
+        }
+
+        if wd, e := os.Getwd(); e == nil {
+                for {
+                        //fmt.Printf("wd: %v\n", wd)
+                        canditates = []string{
+                                filepath.Join(wd, ".androidsdk", "keystore"),
+                        }
+                        if s := find(); s != "" { return s }
+                        if s := filepath.Dir(wd); wd == s || s == "" { break } else { wd = s }
+                }
+        }
+        return ""
+}
+
 func (ic *androidsdkGenApk) execute(targets []string, prequisites []string) bool {
         outclasses := filepath.Join(ic.out, "classes")
 
@@ -318,6 +356,9 @@ func (ic *androidsdkGenApk) execute(targets []string, prequisites []string) bool
                 errorf(0, "no classes for `%v'", targets)
         }
 
+        if *flag_v || *flag_V {
+                fmt.Printf("smart: preparing classes.dex for %v...\n", targets)
+        }
         c := &excmd{ name:"dx", dir:outclasses, slient:androidsdkSlientSome, path: filepath.Join(androidsdk, "platform-tools", "dx"), }
         if !c.run("classes.dex", args...) {
                 errorf(0, "dex: %v\n", "classes.dex")
@@ -340,7 +381,7 @@ func (ic *androidsdkGenApk) execute(targets []string, prequisites []string) bool
         if ic.res != "" { args = append(args, "-S", ic.res) }
         if ic.assets != "" { args = append(args, "-A", ic.assets) }
         if *flag_v || *flag_V {
-                fmt.Printf("smart: resources in %v...\n", targets)
+                fmt.Printf("smart: pack resources for %v...\n", targets)
         }
         if !c.run("package resources", args...) {
                 errorf(0, "pack classes: %v", targets)
@@ -348,7 +389,7 @@ func (ic *androidsdkGenApk) execute(targets []string, prequisites []string) bool
 
         args = []string{ "add", "-k", filepath.Join(ic.out, "unsigned.apk"), filepath.Join(ic.out, "classes.dex") }
         if *flag_v || *flag_V {
-                fmt.Printf("smart: classes in %v...\n", targets)
+                fmt.Printf("smart: pack classes for %v...\n", targets)
         }
         if !c.run("package dex file", args...) {
                 errorf(0, "pack classes: %v", targets)
@@ -356,29 +397,29 @@ func (ic *androidsdkGenApk) execute(targets []string, prequisites []string) bool
 
         fmt.Printf("TODO: package JNI files\n")
 
+        keystore := androidsdkGetKeystore()
+        if keystore == "" {
+                errorf(0, "can't find keystore for sigining APK")
+                //fmt.Printf("smart: no keystore for sigining %v\n", targets)
+                //return true
+        }
+
+        if *flag_v || *flag_V {
+                fmt.Printf("smart: signing %v (%v)...\n", targets, keystore)
+        }
+
         if e := copyFile(filepath.Join(ic.out, "unsigned.apk"), filepath.Join(ic.out, "signed.apk")); e != nil {
                 return false
         }
 
-        args = []string{}
-
-        d := filepath.Dir(os.Args[0])
-        keystore := filepath.Join(d, "data", "androidsdk", "keystore")
-        //keypass := filepath.Join(d, "data", "androidsdk", "keypass")
-        //storepass := filepath.Join(d, "data", "androidsdk", "storepass")
-        //if fi, e := os.Stat(keystore); e == nil && !fi.IsDir() { args = append(args, "-keystore", keystore) }
-        //if fi, e := os.Stat(keypass); e == nil && !fi.IsDir() { args = append(args, "-keypass", keypass) }
-        //if fi, e := os.Stat(storepass); e == nil && !fi.IsDir() { args = append(args, "-storepass", storepass) }
-        if fi, e := os.Stat(keystore); e == nil && !fi.IsDir() {
-                args = append(args, "-keystore", keystore, "-keypass", "smart.android", "-storepass", "smart.android")
-        }
-        args = append(args, filepath.Join(ic.out, "signed.apk"), "cert")
-
-        if *flag_v || *flag_V {
-                fmt.Printf("smart: signing %v...\n", targets)
+        args = []string{
+                "-keystore", keystore,
+                "-keypass", "smart.android",
+                "-storepass", "smart.android",
+                filepath.Join(ic.out, "signed.apk"), "cert",
         }
 
-        c = &excmd{ name:"jarsigner", slient:true/*androidsdkSlientSome*/, }
+        c = &excmd{ name:"jarsigner", slient:false/*androidsdkSlientSome*/, }
         if !c.run("sign package", args...) {
                 os.Remove(filepath.Join(ic.out, "signed.apk"))
                 return false

@@ -25,7 +25,7 @@ var generalMetaFiles = []*filerule{
         { "cvs", ^os.ModeType, `^CVS$` },
 }
 var (
-        flag_a = flag.Bool("a", false, "automode")
+        //flag_a = flag.Bool("a", false, "automode")
         flag_g = flag.Bool("g", true, "ignore names like \".git\", \".svn\", etc.")
         flag_o = flag.String("o", "", "output directory")
         flag_v = flag.Bool("v", false, "prompt command")
@@ -45,8 +45,8 @@ func (e *smarterror) String() string {
 
 func errorf(num int, f string, a ...interface{}) {
         panic(&smarterror{
-        number: num,
-        message: fmt.Sprintf(f, a...),
+                number: num,
+                message: fmt.Sprintf(f, a...),
         })
 }
 
@@ -192,6 +192,7 @@ type action struct {
         targets []string
         prequisites []*action
         command command
+        intermediate bool // indicates that the targets are intermediate
 }
 
 func (a *action) update() (updated bool, updatedTargets []string) {
@@ -314,9 +315,9 @@ func (a *action) clean() {
 
 func newAction(target string, c command, pre ...*action) *action {
         a := &action{
-        command: c,
-        targets: []string{ target },
-        prequisites: pre,
+                command: c,
+                targets: []string{ target },
+                prequisites: pre,
         }
         return a
 }
@@ -523,16 +524,6 @@ func run(vars map[string]string, cmds []string) {
                 fmt.Printf("error: %v\n", err)
         }
 
-        if *flag_a {
-                /*
-                for _, stub := range toolsets {
-                        stub.auto(cmds)
-                }
-                */
-        } else {
-                // ...
-        }
-
         var buildDeps func(p *parser, mod *module) int
         var buildMod func(p *parser, mod *module) bool
         buildMod = func(p *parser, mod *module) bool {
@@ -559,7 +550,7 @@ func run(vars map[string]string, cmds []string) {
                 return mod.built
         }
         buildDeps = func(p *parser, mod *module) (num int) {
-                for _, u := range mod.using { if buildMod(p, u) { num += 1} }
+                for _, u := range mod.using { if buildMod(p, u) { num += 1 } }
                 return
         }
 
@@ -571,8 +562,7 @@ func run(vars map[string]string, cmds []string) {
                 }
         }
 
-        var updateDeps func(mod *module)
-        var updateMod func(mod *module)
+        var updateMod, updateDeps func(mod *module)
         updateMod = func(mod *module) {
                 updateDeps(mod)
                 if !mod.updated {
