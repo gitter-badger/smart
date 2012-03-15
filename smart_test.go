@@ -214,11 +214,14 @@ func testToolsetAndroidSDK(t *testing.T) {
         if fi, e := os.Stat("out/foo_androidsdk_use_jar/classes/org/smart/test/R$string.class"); fi == nil || e != nil { t.Errorf("failed: %v", e); return }
         if fi, e := os.Stat("out/foo_androidsdk_use_jar/classes.dex"); fi == nil || e != nil { t.Errorf("failed: %v", e); return }
         if fi, e := os.Stat("out/foo_androidsdk_use_jar/unsigned.apk"); fi == nil || e != nil { t.Errorf("failed: %v", e); return }
+        if fi, e := os.Stat("out/foo_androidsdk_use_jar/signed.apk"); fi == nil || e != nil { t.Errorf("failed: %v", e); return }
         if fi, e := os.Stat("out/foo_androidsdk_use_jar/foo_androidsdk_use_jar.apk"); fi == nil || e != nil { t.Errorf("failed: %v", e); return }
         if fi, e := os.Stat("out/foo_androidsdk_apk"); fi == nil || e != nil || !fi.IsDir() { t.Errorf("failed: %v", e); return }
         if fi, e := os.Stat("out/foo_androidsdk_apk/res"); fi == nil || e != nil || !fi.IsDir() { t.Errorf("failed: %v", e); return }
         if fi, e := os.Stat("out/foo_androidsdk_apk/classes"); fi == nil || e != nil || !fi.IsDir() { t.Errorf("failed: %v", e); return }
         if fi, e := os.Stat("out/foo_androidsdk_apk/classes.dex"); fi == nil || e != nil { t.Errorf("failed: %v", e); return }
+        if fi, e := os.Stat("out/foo_androidsdk_apk/unsigned.apk"); fi == nil || e != nil { t.Errorf("failed: %v", e); return }
+        if fi, e := os.Stat("out/foo_androidsdk_apk/signed.apk"); fi == nil || e != nil { t.Errorf("failed: %v", e); return }
         if fi, e := os.Stat("out/foo_androidsdk_apk/foo_androidsdk_apk.apk"); fi == nil || e != nil { t.Errorf("failed: %v", e); return }
 
         os.RemoveAll("out")

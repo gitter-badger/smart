@@ -82,9 +82,11 @@ type excmd struct {
         dir string
         mkdir string
         precall func() bool
-        postcall func(*bytes.Buffer)
+        postcall func(so, se *bytes.Buffer)
         cmd func() bool
         ia32 bool
+        stdout, stderr *bytes.Buffer
+        stdin io.Reader
 }
 
 func (c *excmd) run(target string, args ...string) bool {
@@ -97,7 +99,11 @@ func (c *excmd) run(target string, args ...string) bool {
                 }
         }
 
-        var buf bytes.Buffer
+        if c.stdout == nil { c.stdout = new(bytes.Buffer) }
+        if c.stderr == nil { c.stderr = new(bytes.Buffer) }
+        c.stdout.Reset()
+        c.stderr.Reset()
+
         updated := false
         if c.name == "" {
                 if c.cmd != nil {
@@ -108,7 +114,8 @@ func (c *excmd) run(target string, args ...string) bool {
                 }
         } else {
                 cmd := exec.Command(c.name, args...)
-                cmd.Stdout, cmd.Stderr = &buf, &buf
+                cmd.Stdout, cmd.Stderr = c.stdout, c.stderr //&buf, &buf
+                if c.stdin != nil { cmd.Stdin = c.stdin }
                 if c.path != "" { cmd.Path = c.path }
                 if c.dir != "" { cmd.Dir = c.dir }
 
@@ -128,7 +135,8 @@ func (c *excmd) run(target string, args ...string) bool {
                         switch runtime.GOARCH {
                         case "amd64":
                                 cmd = exec.Command("linux32", append([]string{ cmd.Path }, args...)...)
-                                cmd.Stdout, cmd.Stderr = &buf, &buf
+                                cmd.Stdout, cmd.Stderr = c.stdout, c.stderr //&buf, &buf
+                                if c.stdin != nil { cmd.Stdin = c.stdin }
                                 //fmt.Printf("%v\n", strings.Join(cmd.Args, " "))
                         }
                 }
@@ -140,13 +148,20 @@ func (c *excmd) run(target string, args ...string) bool {
                 if err := cmd.Run(); err == nil {
                         updated = true
                 } else {
+                        so, se := c.stdout.String(), c.stderr.String()
                         fmt.Printf("smart:0: %v:\n", err)
-                        fmt.Printf("%v\n", buf.String())
+                        if so != "" && se != "" {
+                                fmt.Printf("%v\n====\n%v\n", so, se)
+                        } else if so != "" && se == "" {
+                                fmt.Printf("%v\n", so)
+                        } else if so == "" && se != "" {
+                                fmt.Printf("%v\n", se)
+                        }
                         errorf(0, "failed executing command \"%v\"", c.name)
                 }
 
                 if c.postcall != nil {
-                        c.postcall(&buf)
+                        c.postcall(c.stdout, c.stderr)
                 }
         }
 
@@ -417,11 +432,16 @@ func traverse(d string, fun traverseCallback) (err error) {
 
         defer fd.Close()
 
-        names, err := fd.Readdirnames(100)
-        if err != nil {
-                //fmt.Printf("Readdirnames: %v, %v\n", err, d)
-                if err == io.EOF { err = nil }
-                return
+        var names []string
+        for {
+                if ns, e := fd.Readdirnames(50); e != nil {
+                        if e == io.EOF { names = append(names, ns...) }
+                        break
+                } else if 0 < len(ns) {
+                        names = append(names, ns...)
+                } else {
+                        break
+                }
         }
 
         var fi os.FileInfo
@@ -503,6 +523,7 @@ func run(vars map[string]string, cmds []string) {
                 if e := recover(); e != nil {
                         if se, ok := e.(*smarterror); ok {
                                 fmt.Printf("smart:%v: %v\n", se.number, se)
+                                os.Exit(-1)
                         } else {
                                 panic(e)
                         }
