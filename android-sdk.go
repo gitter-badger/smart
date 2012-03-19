@@ -221,7 +221,7 @@ type androidsdkGenClasses struct{
 func (ic *androidsdkGenClasses) targets(prequisites []*action) (targets []string, needsUpdate bool) {
         targets, outdates, _ := computeInterTargets(filepath.Join(ic.out, "classes"), `\.class$`, prequisites)
         needsUpdate = len(targets) == 0 || 0 < outdates
-        fmt.Printf("classes: %v\n", targets);
+        //fmt.Printf("classes: %v\n", targets);
         return
 }
 func (ic *androidsdkGenClasses) execute(targets []string, prequisites []string) bool {
