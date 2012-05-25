@@ -1,7 +1,7 @@
 package main
 
 import (
-        "./smart"
+        "./pkg/smart"
 )
 
 func main() {
