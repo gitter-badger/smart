@@ -12,12 +12,12 @@ import (
 
 func TestTraverse(t *testing.T) {
         m := map[string]bool{}
-        err := traverse("main", func(fn string, fi os.FileInfo) bool {
+        err := traverse(".", func(fn string, fi os.FileInfo) bool {
                 m[fi.Name()] = true
                 return true
         })
-        if err != nil { t.Errorf("error: %v", err) }
-        if !m["main.go"] { t.Error("main.go not found") }
+        if err != nil { t.Errorf("%v", err) }
+        if !m["smart.go"] { t.Error("smart.go not found") }
 }
 
 func computeTestRunParams() (vars map[string]string, cmds []string) {
