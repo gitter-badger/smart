@@ -28,15 +28,18 @@ func builtinInfo(p *parser, args []string) string {
 }
 
 func builtinModule(p *parser, args []string) string {
+/*
         var name, toolsetName, kind string
         if 0 < len(args) { name = strings.TrimSpace(args[0]) }
         if 1 < len(args) { toolsetName = strings.TrimSpace(args[1]) }
         if 2 < len(args) { kind = strings.TrimSpace(args[2]) }
         if name == "" {
-                p.setModule(nil)
+                //p.setModule(nil)
                 return ""
         }
+*/
 
+/*
         var toolset toolset
         if ts, ok := toolsets[toolsetName]; !ok {
                 //p.lineno -= 1; p.colno = p.prevColno + 1
@@ -86,10 +89,12 @@ func builtinModule(p *parser, args []string) string {
         }
 
         toolset.setupModule(p, args[3:], vars)
+*/
         return ""
 }
 
 func builtinBuild(p *parser, args []string) string {
+/*
         var m *module
         if m = p.module; m == nil { errorf(0, "no module defined") }
 
@@ -98,10 +103,12 @@ func builtinBuild(p *parser, args []string) string {
         }
 
         moduleBuildList = append(moduleBuildList, pendedBuild{m, p, args})
+*/
         return ""
 }
 
 func builtinUse(p *parser, args []string) string {
+/*
         if p.module == nil { errorf(0, "no module defined") }
         if p.module.toolset == nil { errorf(0, "no toolset for `%v'", p.module.name) }
 
@@ -124,5 +131,6 @@ func builtinUse(p *parser, args []string) string {
                         p.module.toolset.useModule(p, m)
                 }
         }
+*/
         return ""
 }

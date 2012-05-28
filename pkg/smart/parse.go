@@ -8,7 +8,7 @@ import (
         "unicode/utf8"
         "io/ioutil"
         "os"
-        "path/filepath"
+        //"path/filepath"
         //"reflect"
         "strings"
 )
@@ -102,7 +102,7 @@ func (l *lex) peek() (r rune) {
 
 func (l *lex) get() bool {
         if len(l.s) == l.pos { return false }
-        if len(l.s) < l.pos { errorf(-2, "over reading (at %v)", l.pos) }
+        if len(l.s) < l.pos { /*errorf(-2, "over reading (at %v)", l.pos)*/ }
 
         l.rune, l.runeLen = utf8.DecodeRune(l.s[l.pos:])
         l.pos = l.pos+l.runeLen
@@ -110,7 +110,7 @@ func (l *lex) get() bool {
         case l.rune == 0:
                 return false //errorf(-2, "zero reading (at %v)", l.pos)
         case l.rune == utf8.RuneError:
-                errorf(-2, "invalid UTF8 encoding")
+                //errorf(-2, "invalid UTF8 encoding")
         case l.rune == '\n':
                 l.lineno, l.prevColno, l.colno = l.lineno+1, l.colno, 0
         case l.runeLen > 1:
@@ -124,11 +124,11 @@ func (l *lex) get() bool {
 func (l *lex) unget() {
         switch {
         case l.rune == 0:
-                errorf(0, "wrong invocation of unget")
+                //errorf(0, "wrong invocation of unget")
         case l.pos == 0:
-                errorf(0, "get to the beginning of the bytes")
+                //errorf(0, "get to the beginning of the bytes")
         case l.pos < 0:
-                errorf(0, "get to the front of beginning of the bytes")
+                //errorf(0, "get to the front of beginning of the bytes")
                 //case l.lineno == 1 && l.colno <= 1: return
         }
         if l.rune == '\n' {
@@ -193,7 +193,7 @@ func (l *lex) parseSpaces(off int) *node {
 
 func (l *lex) parseCall() *node {
         n, rr := l.new(node_call, -1), rune(0)
-        if !l.get() { errorf(0, "unexpected end of file: '%v'", string(l.s[n.pos:l.pos])) }
+        if !l.get() { /*errorf(0, "unexpected end of file: '%v'", string(l.s[n.pos:l.pos]))*/ }
         switch l.rune {
         case '(': rr = ')'
         case '{': rr = '}'
@@ -203,7 +203,7 @@ func (l *lex) parseCall() *node {
         }
         nn, t, parentheses := l.new(node_text, 0), l.new(node_text, 0), []rune{}
 out_loop: for {
-                if !l.get() { errorf(0, "unexpected end of file: '%v'", string(l.s[n.pos:l.pos])) }
+                if !l.get() { /*errorf(0, "unexpected end of file: '%v'", string(l.s[n.pos:l.pos]))*/ }
                 switch {
                 default: t.end = l.pos
                 case l.rune == 0: 
@@ -253,7 +253,7 @@ func (l *lex) parseAssign(at nodeType) *node {
         case node_assign:
         case node_question_assign: fallthrough
         case node_simple_assign: off = -2
-        default: errorf(0, "unknown assignment")
+        //default: errorf(0, "unknown assignment")
         }
 
         for cn, c := range l.list {
@@ -267,7 +267,7 @@ func (l *lex) parseAssign(at nodeType) *node {
         }
 
         if len(l.list) == 0 {
-                errorf(0, "illigal assignment with no variable name")
+                //errorf(0, "illigal assignment with no variable name")
         }
 
         // the name
@@ -393,18 +393,21 @@ main_loop:
 
 type parser struct {
         l lex
-        module *module
+        //module *module
         line bytes.Buffer // line accumulator
         variables map[string]*variable
 }
 
+/*
 func (p *parser) setModule(m *module) (prev *module) {
         prev = p.module
         p.module = m
         return
 }
+*/
 
 func (p *parser) getModuleSources() (sources []string) {
+/*
         if p.module == nil {
                 return
         }
@@ -417,6 +420,7 @@ func (p *parser) getModuleSources() (sources []string) {
                         sources[i] = filepath.Join(dir, sources[i])
                 }
         }
+*/
         return
 }
 
@@ -425,7 +429,7 @@ func (p *parser) expand(str string) string {
         var exp func(s []byte) (out string, l int)
         var getRune = func(s []byte) (r rune, l int) {
                 if r, l = utf8.DecodeRune(s); r == utf8.RuneError || l <= 0 {
-                        errorf(1, "bad UTF8 encoding")
+                        ///errorf(1, "bad UTF8 encoding")
                 }
                 return
         }
@@ -472,7 +476,7 @@ func (p *parser) expand(str string) string {
                                         //fmt.Printf("inner: %v, %v, %v, %v\n", string(s), ll, ss, rs)
                                         continue
                                 } else {
-                                        errorf(1, string(s))
+                                        //errorf(1, string(s))
                                 }
                         case '(': t.WriteRune(r); parentheses = append(parentheses, ')')
                         case '{': t.WriteRune(r); parentheses = append(parentheses, '}')
@@ -507,7 +511,7 @@ func (p *parser) expand(str string) string {
                 s = s[l:]
                 if r == '$' {
                         if ss, ll := exp(s); ll <= 0 {
-                                errorf(0, "bad variable")
+                                //errorf(0, "bad variable")
                         } else {
                                 s = s[ll:]
                                 buf.WriteString(ss)
@@ -538,6 +542,7 @@ func (p *parser) call(name string, args ...string) string {
                 }
                 return ""
         case name == "this":
+/*
                 if p.module != nil {
                         return p.module.name
                 } else {
@@ -545,6 +550,7 @@ func (p *parser) call(name string, args ...string) string {
                 }
         case strings.HasPrefix(name, "this.") && p.module != nil:
                 vars = p.module.variables
+*/
         }
 
         if vars != nil {
@@ -565,9 +571,11 @@ func (p *parser) setVariable(name, value string) (v *variable) {
         }
 
         vars := p.variables
+/*
         if strings.HasPrefix(name, "this.") && p.module != nil {
                 vars = p.module.variables
         }
+*/
         if vars == nil {
                 fmt.Printf("%v:warning: no \"this\" module\n", &loc)
                 return
@@ -597,8 +605,8 @@ func (p *parser) expandNode(n *node) string {
 
         if len(n.children) == 0 {
                 switch n.kind {
-                case node_comment: errorf(0, "can't expand comment: %v", p.l.str(n))
-                case node_call: errorf(0, "invalid call: %v", p.l.str(n))
+                //case node_comment: errorf(0, "can't expand comment: %v", p.l.str(n))
+                //case node_call: errorf(0, "invalid call: %v", p.l.str(n))
                 case node_continual: return " "
                 }
                 //fmt.Printf("%v:%v:%v: %v '%v' (%v)\n", p.l.file, n.lineno, n.colno, n.kind, p.l.str(n), len(n.children))
@@ -648,7 +656,7 @@ func (p *parser) processNode(n *node) (err error) {
         case node_call:
                 //fmt.Printf("%v:%v:%v: call %v\n", p.l.file, n.lineno, n.colno, p.l.str(n))
                 if s := p.expandNode(n); s != "" {
-                        errorf(0, "illigal: %v (%v)", s, p.l.str(n))
+                        //errorf(0, "illigal: %v (%v)", s, p.l.str(n))
                 }
         }
         return
@@ -694,11 +702,13 @@ func parse(conf string) (p *parser, err error) {
 
         defer func() {
                 if e := recover(); e != nil {
+/*
                         if se, ok := e.(*smarterror); ok {
                                 fmt.Printf("%v: %v\n", p.l.location(), se)
                         } else {
                                 panic(e)
                         }
+*/
                 }
         }()
 
