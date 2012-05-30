@@ -3,7 +3,7 @@ package smart
 import (
         //"fmt"
         "strings"
-        //"path/filepath"
+        "path/filepath"
 )
 
 func init() {
@@ -14,18 +14,39 @@ func init() {
 type gcc struct {
         //target []*Target
         //objects []*Target
+        target *Target
 }
 
+/*
 func (gcc *gcc) NewTarget(dir, name string) (t *Target) {
         t = new(Target)
         t.Name = name
         t.IsFile = true
         return
 }
+*/
 
-func (gcc *gcc) AddFile(t *Target, s *Target) {
-        if !strings.HasSuffix(s.Name, ".c") {
-                return
+func (gcc *gcc) Supports(dir, name string) bool {
+        if strings.HasSuffix(name, ".c") {
+                return true
+        }
+        if strings.HasSuffix(name, ".cpp") {
+                return true
+        }
+        return false
+}
+
+func (gcc *gcc) AddFile(dir string, s *Target) {
+        t := gcc.target
+        if t == nil {
+                t = new(Target)
+                t.IsFile = true
+                if dir == "" {
+                        t.Name = filepath.Base(Top)
+                } else {
+                        t.Name = filepath.Base(dir)
+                }
+                gcc.target = t
         }
 
         o := new(Target)
@@ -37,7 +58,9 @@ func (gcc *gcc) AddFile(t *Target, s *Target) {
         //fmt.Printf("add: %v, %v\n", t, o)
 }
 
-func (gcc *gcc) Build(t *Target) error {
+func (gcc *gcc) Build() error {
+        t := gcc.target
+
         gen := func(object *Target) error {
                 return gcc.generate(object)
         }

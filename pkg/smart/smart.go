@@ -38,9 +38,10 @@ func (t *Target) String() string {
 }
 
 type BuildTool interface {
-        NewTarget(dir, name string) (t *Target)
-        AddFile(t *Target, f *Target)
-        Build(t *Target) error
+        //NewTarget(dir, name string) (t *Target)
+        Supports(dir, name string) bool
+        AddFile(dir string, f *Target)
+        Build() error
 }
 
 func AddBuildTool(tool BuildTool) {
@@ -57,17 +58,7 @@ func build(tool BuildTool) (e error) {
                 }
         }
 
-        target := tool.NewTarget(Top, filepath.Base(Top))
-
-        add := func(d string, names []string) {
-                var sd string
-
-                if strings.HasPrefix(d, Top) {
-                        sd = d[len(Top):]
-                } else {
-                        sd = d
-                }
-
+        add := func(sd string, names []string) {
                 for _, name := range names {
                         if strings.HasPrefix(name, ".") {
                                 continue
@@ -76,15 +67,24 @@ func build(tool BuildTool) (e error) {
                                 continue
                         }
 
-                        s := new(Target)
-                        s.Name = filepath.Join(sd, name)
-                        s.IsFile = true
-                        s.IsScanned = true
-                        tool.AddFile(target, s)
+                        if tool.Supports(sd, name) {
+                                s := new(Target)
+                                s.Name = filepath.Join(sd, name)
+                                s.IsFile = true
+                                s.IsScanned = true
+                                tool.AddFile(sd, s)
+                        }
                 }
         }
 
         read := func(d string) error {
+                var sd string
+                if strings.HasPrefix(d, Top) {
+                        sd = d[len(Top):]
+                } else {
+                        sd = d
+                }
+
                 fd, e := os.Open(d)
                 if e != nil {
                         return e
@@ -94,7 +94,7 @@ func build(tool BuildTool) (e error) {
                 for {
                         names, e = fd.Readdirnames(50)
                         if 0 < len(names) {
-                                add(d, names)
+                                add(sd, names)
                         }
                         if e != nil {
                                 return e
@@ -107,7 +107,7 @@ func build(tool BuildTool) (e error) {
                 return
         }
 
-        return tool.Build(target)
+        return tool.Build()
 }
 
 // generate calls gen in goroutines on each target, and call cb if any
