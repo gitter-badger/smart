@@ -29,7 +29,8 @@ type Target struct {
         Name string
         Depends []*Target
         IsFile bool
-        IsBuilt bool
+        IsIntermediate bool
+        IsGoal bool
         IsScanned bool
 }
 
@@ -37,15 +38,49 @@ func (t *Target) String() string {
         return t.Name
 }
 
+func (t *Target) Add(name string) *Target {
+        f := new(Target)
+        f.Name = name
+        t.Depends = append(t.Depends, f)
+        return f
+}
+
+func (t *Target) AddFile(name string) *Target {
+        f := t.Add(name)
+        f.IsFile = true
+        return f
+}
+
+func (t *Target) AddIntermediate(name string, source *Target) *Target {
+        i := t.Add(name)
+        i.IsIntermediate = true
+        if source != nil {
+                i.Depends = append(i.Depends, source)
+        }
+        return i
+}
+
+func (t *Target) AddIntermediateFile(name string, source *Target) *Target {
+        i := t.AddIntermediate(name, source)
+        i.IsFile = true
+        return i
+}
+
+func NewFileGoal(name string) (t *Target) {
+        t = new(Target)
+        t.IsFile = true
+        t.IsGoal = true
+        t.Name = name
+        return
+}
+
 type BuildTool interface {
-        //NewTarget(dir, name string) (t *Target)
         Supports(dir, name string) bool
         AddFile(dir string, f *Target)
         Build() error
 }
 
 func AddBuildTool(tool BuildTool) {
-        
 }
 
 // build scans source files under the current working directory and
@@ -110,9 +145,9 @@ func build(tool BuildTool) (e error) {
         return tool.Build()
 }
 
-// generate calls gen in goroutines on each target, and call cb if any
-// such goroutine finished. If any error occurs, it will be returned.
-func generate(targets []*Target, gen func(*Target) error, cb func(*Target)) error {
+// generate calls gen in goroutines on each target. If any error occurs, it will
+// be returned.
+func generate(targets []*Target, gen func(*Target) error) error {
         type meta struct { t *Target; e error }
         ch := make(chan meta)
 
@@ -134,8 +169,6 @@ func generate(targets []*Target, gen func(*Target) error, cb func(*Target)) erro
                 m := <-ch
                 if m.e != nil {
                         fmt.Printf("%v\n", m.e)
-                } else if cb != nil {
-                        cb(m.t)
                 }
         }
 

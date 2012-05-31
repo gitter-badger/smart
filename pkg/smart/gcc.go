@@ -12,19 +12,8 @@ func init() {
 }
 
 type gcc struct {
-        //target []*Target
-        //objects []*Target
         target *Target
 }
-
-/*
-func (gcc *gcc) NewTarget(dir, name string) (t *Target) {
-        t = new(Target)
-        t.Name = name
-        t.IsFile = true
-        return
-}
-*/
 
 func (gcc *gcc) Supports(dir, name string) bool {
         if strings.HasSuffix(name, ".c") {
@@ -37,38 +26,29 @@ func (gcc *gcc) Supports(dir, name string) bool {
 }
 
 func (gcc *gcc) AddFile(dir string, s *Target) {
-        t := gcc.target
-        if t == nil {
-                t = new(Target)
-                t.IsFile = true
+        if gcc.target == nil {
+                var name string
                 if dir == "" {
-                        t.Name = filepath.Base(Top)
+                        name = filepath.Base(Top)
                 } else {
-                        t.Name = filepath.Base(dir)
+                        name = filepath.Base(dir)
                 }
-                gcc.target = t
+                gcc.target = NewFileGoal(name)
         }
-
-        o := new(Target)
-        o.Depends = append(o.Depends, s)
-        o.Name = s.Name + ".o"
-
-        t.Depends = append(t.Depends, o)
-
-        //fmt.Printf("add: %v, %v\n", t, o)
+        gcc.target.AddIntermediateFile(s.Name+".o", s)
 }
 
 func (gcc *gcc) Build() error {
         t := gcc.target
+        if t == nil {
+                return nil
+        }
 
         gen := func(object *Target) error {
                 return gcc.generate(object)
         }
-        done := func(object *Target) {
-                //fmt.Printf("compiled: %v\n", object)
-        }
 
-        if e := generate(t.Depends, gen, done); e != nil {
+        if e := generate(t.Depends, gen); e != nil {
                 return e
         }
 
