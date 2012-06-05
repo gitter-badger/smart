@@ -145,34 +145,62 @@ func build(tool BuildTool) (e error) {
         return tool.Build()
 }
 
-// generate calls gen in goroutines on each target. If any error occurs, it will
-// be returned.
-func generate(targets []*Target, gen func(*Target) error) error {
+// generate calls gen in goroutines on each target. If any error occurs,
+// it will be returned with the updated targets.
+func generate(targets []*Target, gen func(*Target) error) (error, []*Target) {
+        if len(targets) == 0 {
+                return nil, nil
+        }
+
         type meta struct { t *Target; e error }
         ch := make(chan meta)
 
-        var hit func(t *Target)
-        hit = func(t *Target) {
-                /*
-                for _, d := range t.Depends {
-                        hit(d)
+        g := func(t *Target) {
+                var err error
+                needGen := true
+
+                if 0 < len(t.Depends) {
+                        if e, u := generate(t.Depends, gen); e == nil {
+                                needGen = needGen || 0 < len(u)
+                        } else {
+                                needGen, err = false, e
+                        }
                 }
-                */
-                ch <- meta{ t, gen(t) }
+
+                if needGen {
+                        err = gen(t)
+                }
+
+                ch <- meta{ t, err }
         }
+
+        gn := len(targets)
 
         for _, t := range targets {
-                go hit(t)
+                if t.IsFile {
+                        switch {
+                        case t.IsScanned:
+                                gn -= 1
+                                continue
+                        case t.IsIntermediate:
+                                // TODO: Check existence of the target
+                        }
+                }
+
+                go g(t)
         }
 
-        for n := 0; n < len(targets); n += 1 {
-                m := <-ch
-                if m.e != nil {
+        updated := make([]*Target, gn)
+
+        for ; 0 < gn; gn -= 1 {
+                if m := <-ch; m.e == nil {
+                        updated = append(updated, m.t)
+                } else {
                         fmt.Printf("%v\n", m.e)
                 }
         }
 
-        return nil
+        return nil, updated
 }
 
 // run executes the command specified by cmd with arguments by args.

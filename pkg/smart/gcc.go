@@ -48,7 +48,7 @@ func (gcc *gcc) Build() error {
                 return gcc.generate(object)
         }
 
-        if e := generate(t.Depends, gen); e != nil {
+        if e, _ := generate(t.Depends, gen); e != nil {
                 return e
         }
 
@@ -62,5 +62,6 @@ func (gcc *gcc) Build() error {
 }
 
 func (gcc *gcc) generate(object *Target) error {
+        if len(object.Depends) == 0 { return nil }
         return run("gcc", "-o", object.Name, "-c", object.Depends[0].Name)
 }
