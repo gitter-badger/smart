@@ -83,3 +83,41 @@ func TestBuildSimple(t *testing.T) {
 
         chdir(t, "-")
 }
+
+func TestBuildCombineObject(t *testing.T) {
+        chdir(t, "+testdata/gcc/combine")
+        checkd(t, "sub")
+        checkf(t, "sub/sub1.c")
+        checkf(t, "sub/sub2.c")
+        checkf(t, "main.c")
+
+        c := &gcc{}
+
+        if e := build(c); e != nil {
+                t.Errorf("build: %v", e)
+        }
+
+        checkf(t, "main.c.o")
+        checkf(t, "sub/sub1.c.o")
+        checkf(t, "sub/sub2.c.o")
+        checkf(t, "sub.o")
+
+        out := bytes.NewBuffer(nil)
+        p := exec.Command("./combine")
+        p.Stdout = out
+        p.Stderr = out
+        if e := p.Run(); e != nil {
+                t.Errorf("combine: %v", e)
+        }
+        if string(out.Bytes()) != "1 + 2 = 3\n" {
+                t.Errorf("combine: %v", string(out.Bytes()))
+        }
+
+        os.Remove("main.c.o")
+        os.Remove("sub.o")
+        os.Remove("sub/sub1.c.o")
+        os.Remove("sub/sub2.c.o")
+        os.Remove("combine")
+
+        chdir(t, "-")
+}

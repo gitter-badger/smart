@@ -87,14 +87,13 @@ func AddBuildTool(tool BuildTool) {
 // add file names to the specified build tool and then launch it's
 // build method.
 func build(tool BuildTool) (e error) {
-        if Top == "" {
-                if Top, e = os.Getwd(); e != nil {
-                        return
-                }
+        if Top, e = os.Getwd(); e != nil {
+                return
         }
 
         add := func(sd string, names []string) {
                 for _, name := range names {
+                        //fmt.Printf("%v/%v/%v\n", Top, sd, name)
                         if strings.HasPrefix(name, ".") {
                                 continue
                         }
@@ -161,9 +160,21 @@ func generate(targets []*Target, gen func(*Target) error) (error, []*Target) {
 
                 if 0 < len(t.Depends) {
                         if e, u := generate(t.Depends, gen); e == nil {
+                                //fmt.Printf("%v: %v, %v\n", t, t.Depends, u)
                                 needGen = needGen || 0 < len(u)
                         } else {
                                 needGen, err = false, e
+                        }
+                }
+
+                if t.IsFile {
+                        switch {
+                        case t.IsScanned:
+                                needGen = false
+                        case t.IsIntermediate:
+                                if _, e := os.Stat(t.Name); e != nil {
+                                        needGen = true
+                                }
                         }
                 }
 
@@ -177,16 +188,6 @@ func generate(targets []*Target, gen func(*Target) error) (error, []*Target) {
         gn := len(targets)
 
         for _, t := range targets {
-                if t.IsFile {
-                        switch {
-                        case t.IsScanned:
-                                gn -= 1
-                                continue
-                        case t.IsIntermediate:
-                                // TODO: Check existence of the target
-                        }
-                }
-
                 go g(t)
         }
 
