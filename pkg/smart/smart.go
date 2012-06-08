@@ -86,7 +86,7 @@ func AddBuildTool(tool BuildTool) {
 // build scans source files under the current working directory and
 // add file names to the specified build tool and then launch it's
 // build method.
-func build(tool BuildTool) (e error) {
+func scan(tool BuildTool) (e error) {
         if Top, e = os.Getwd(); e != nil {
                 return
         }
@@ -141,7 +141,8 @@ func build(tool BuildTool) (e error) {
                 return
         }
 
-        return tool.Build()
+        e = nil
+        return
 }
 
 // generate calls gen in goroutines on each target. If any error occurs,

@@ -57,8 +57,44 @@ func TestBuildSimple(t *testing.T) {
         checkf(t, "simple.c")
 
         c := &gcc{}
+        if e := scan(c); e != nil {
+                t.Errorf("scan: %v", e)
+        }
 
-        if e := build(c); e != nil {
+        if c.target.Name != "simple" { t.Errorf("bad name: %s", c.target.Name) }
+        if len(c.target.Depends) != 2 {
+                t.Errorf("not 2 depends: %v", c.target.Depends)
+        } else {
+                if !c.target.IsFile { t.Errorf("not file: %v", c.target) }
+                if !c.target.IsGoal { t.Errorf("not goal: %v", c.target) }
+
+                d1 := c.target.Depends[0]
+                d2 := c.target.Depends[1]
+                if !d1.IsFile { t.Errorf("not file: %v", d1) }
+                if !d1.IsIntermediate { t.Errorf("not intermediate: %v", d1) }
+                if !d2.IsFile { t.Errorf("not file: %v", d1) }
+                if !d2.IsIntermediate { t.Errorf("not intermediate: %v", d1) }
+                if d1.Name != "say.c.o" { t.Errorf("bad name: %s", d1.Name) }
+                if d2.Name != "simple.c.o" { t.Errorf("bad name: %s", d2.Name) }
+                if len(d1.Depends) != 1 {
+                        t.Errorf("not 1 depend: %v", d1.Depends)
+                } else {
+                        d := d1.Depends[0]
+                        if d.Name != "say.c" { t.Errorf("bad name: %s", d.Name) }
+                        if !d.IsFile { t.Errorf("not file: %v", d) }
+                        if !d.IsScanned { t.Errorf("not scanned: %v", d) }
+                }
+                if len(d2.Depends) != 1 {
+                        t.Errorf("not 1 depend: %v", d2.Depends)
+                } else {
+                        d := d2.Depends[0]
+                        if d.Name != "simple.c" { t.Errorf("bad name: %s", d.Name) }
+                        if !d.IsFile { t.Errorf("not file: %v", d) }
+                        if !d.IsScanned { t.Errorf("not scanned: %v", d) }
+                }
+        }
+
+        if e := c.Build(); e != nil {
                 t.Errorf("build: %v", e)
         }
 
@@ -92,8 +128,17 @@ func TestBuildCombineObject(t *testing.T) {
         checkf(t, "main.c")
 
         c := &gcc{}
+        if e := scan(c); e != nil {
+                t.Errorf("scan: %v", e)
+        }
 
-        if e := build(c); e != nil {
+        subo := c.target.AddIntermediateFile("sub.o", nil)
+        sub1o := subo.AddIntermediateFile("sub/sub1.c.o", nil)
+        sub2o := subo.AddIntermediateFile("sub/sub2.c.o", nil)
+        sub1o.AddFile("sub/sub1.c")
+        sub2o.AddFile("sub/sub2.c")
+
+        if e := c.Build(); e != nil {
                 t.Errorf("build: %v", e)
         }
 

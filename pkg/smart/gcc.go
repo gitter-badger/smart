@@ -1,6 +1,7 @@
 package smart
 
 import (
+        "errors"
         //"fmt"
         "strings"
         "path/filepath"
@@ -62,6 +63,34 @@ func (gcc *gcc) Build() error {
 }
 
 func (gcc *gcc) generate(object *Target) error {
-        if len(object.Depends) == 0 { return nil }
-        return run("gcc", "-o", object.Name, "-c", object.Depends[0].Name)
+        dl := len(object.Depends)
+        switch (dl) {
+        case 0: break
+        case 1:
+                d0 := object.Depends[0]
+                switch {
+                case strings.HasSuffix(d0.Name, ".o"):
+                        // TODO: error
+                case strings.HasSuffix(d0.Name, ".cc"): fallthrough
+                case strings.HasSuffix(d0.Name, ".cpp"): fallthrough
+                case strings.HasSuffix(d0.Name, ".cxx"): fallthrough
+                case strings.HasSuffix(d0.Name, ".C"):
+                        return run("g++", "-o", object.Name, "-c", d0.Name)
+                case strings.HasSuffix(d0.Name, ".c"):
+                        return run("gcc", "-o", object.Name, "-c", d0.Name)
+                }
+        default:
+                // gcc -o out.o -c -combine a.c b.c
+                args := []string{
+                        "-r", "-o", object.Name,
+                }
+                for _, d := range object.Depends {
+                        if !strings.HasSuffix(d.Name, ".o") {
+                                return errors.New("unexpected file type: "+d.String())
+                        }
+                        args = append(args, d.Name)
+                }
+                return run("ld", args...)
+        }
+        return nil
 }
