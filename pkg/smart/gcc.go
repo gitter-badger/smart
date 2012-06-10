@@ -2,7 +2,7 @@ package smart
 
 import (
         "errors"
-        //"fmt"
+        "fmt"
         "strings"
         "path/filepath"
 )
@@ -13,30 +13,86 @@ func init() {
 }
 
 type gcc struct {
+        top string
         target *Target
 }
 
-func (gcc *gcc) Supports(dir, name string) bool {
-        if strings.HasSuffix(name, ".c") {
-                return true
-        }
-        if strings.HasSuffix(name, ".cpp") {
+type gccColl struct {
+        gcc *gcc
+        target *Target
+}
+
+func (gcc *gcc) SetTop(top string) {
+        gcc.top = top
+}
+
+func (gcc *gcc) checkSuffix(name string) bool {
+        switch {
+        case strings.HasSuffix(name, ".c"): fallthrough
+        case strings.HasSuffix(name, ".cpp"):
                 return true
         }
         return false
 }
 
-func (gcc *gcc) AddFile(dir string, s *Target) {
+func (gcc *gcc) ensureTarget(dir string) bool {
         if gcc.target == nil {
                 var name string
                 if dir == "" {
-                        name = filepath.Base(Top)
+                        name = filepath.Base(gcc.top)
                 } else {
                         name = filepath.Base(dir)
                 }
                 gcc.target = NewFileGoal(name)
         }
-        gcc.target.AddIntermediateFile(s.Name+".o", s)
+        return gcc.target != nil
+}
+
+func (gcc *gcc) AddDir(dir string) (t *Target) {
+        if !gcc.ensureTarget(dir) {
+                // TODO: error report
+                return nil
+        }
+
+        switch {
+        case strings.HasSuffix(dir, ".o"):
+                t = NewFileGoal(filepath.Join(dir, "_.o"))
+        case strings.HasSuffix(dir, ".a"):
+                fallthrough
+        case strings.HasSuffix(dir, ".so"):
+                name := filepath.Base(dir)
+                if !strings.HasPrefix(dir, "lib") {
+                        name = "lib"+name
+                }
+                t = NewFileGoal(filepath.Join(dir, name))
+        }
+
+        scan(&gccColl{ gcc, t }, gcc.top, dir)
+        //fmt.Printf("scan: %v %v\n", dir, t.Depends)
+
+        t = gcc.target.Add(t)
+
+        //fmt.Printf("TODO: AddDir: %v\n", t)
+        return t
+}
+
+func (gcc *gcc) AddFile(dir, name string) *Target {
+        if !gcc.checkSuffix(name) {
+                // TODO: error report
+                return nil
+        }
+
+        if !gcc.ensureTarget(dir) {
+                // TODO: error report
+                return nil
+        }
+
+        o := gcc.target.AddIntermediateFile(name+".o", name)
+        if o == nil {
+                // TODO: error report
+                return nil
+        }
+        return o.Depends[0]
 }
 
 func (gcc *gcc) Build() error {
@@ -80,17 +136,35 @@ func (gcc *gcc) generate(object *Target) error {
                         return run("gcc", "-o", object.Name, "-c", d0.Name)
                 }
         default:
-                // gcc -o out.o -c -combine a.c b.c
-                args := []string{
-                        "-r", "-o", object.Name,
-                }
+                var deps []string
                 for _, d := range object.Depends {
                         if !strings.HasSuffix(d.Name, ".o") {
                                 return errors.New("unexpected file type: "+d.String())
                         }
-                        args = append(args, d.Name)
+                        deps = append(deps, d.Name)
                 }
-                return run("ld", args...)
+                return run("ld", append([]string{ "-r", "-o", object.Name, }, deps...)...)
         }
         return nil
+}
+
+func (coll *gccColl) AddDir(dir string) *Target {
+        fmt.Printf("TODO: gccColl.AddDir: %v\n", dir)
+        return nil
+}
+
+func (coll *gccColl) AddFile(dir, name string) *Target {
+        if !coll.gcc.checkSuffix(name) {
+                // TODO: error report
+                return nil
+        }
+
+        name = filepath.Join(dir, name)
+
+        o := coll.target.AddIntermediateFile(name+".o", name)
+        if o == nil {
+                // TODO: error report
+                return nil
+        }
+        return o.Depends[0]
 }

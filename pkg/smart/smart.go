@@ -17,8 +17,6 @@ import (
         */
 )
 
-var Top string
-
 const (
         TargetFlagFile int = 1
         TargetFlagBuilt = 2
@@ -38,11 +36,19 @@ func (t *Target) String() string {
         return t.Name
 }
 
-func (t *Target) Add(name string) *Target {
-        f := new(Target)
-        f.Name = name
-        t.Depends = append(t.Depends, f)
-        return f
+func (t *Target) Add(i interface {}) (f *Target) {
+        if i != nil {
+                switch d := i.(type) {
+                case string:
+                        f = New(d)
+                case *Target:
+                        f = d
+                }
+                if f != nil {
+                        t.Depends = append(t.Depends, f)
+                }
+        }
+        return
 }
 
 func (t *Target) AddFile(name string) *Target {
@@ -60,40 +66,81 @@ func (t *Target) AddIntermediate(name string, source *Target) *Target {
         return i
 }
 
-func (t *Target) AddIntermediateFile(name string, source *Target) *Target {
-        i := t.AddIntermediate(name, source)
-        i.IsFile = true
-        return i
+func (t *Target) AddIntermediateFile(name string, source interface{}) *Target {
+        if source == nil {
+                i := t.AddIntermediate(name, nil)
+                i.IsFile = true
+                return i
+        }
+        switch s := source.(type) {
+        case *Target:
+                i := t.AddIntermediate(name, s)
+                i.IsFile = true
+                return i
+        case string:
+                i := t.AddIntermediate(name, nil)
+                i.IsFile = true
+                i.AddFile(s)
+                return i
+        }
+        return nil
 }
 
-func NewFileGoal(name string) (t *Target) {
+func New(name string) (t *Target) {
         t = new(Target)
-        t.IsFile = true
-        t.IsGoal = true
         t.Name = name
         return
 }
 
+func NewIntermediate(name string) (t *Target) {
+        t = New(name)
+        t.IsIntermediate = true
+        return
+}
+
+func NewGoal(name string) (t *Target) {
+        t = New(name)
+        t.IsGoal = true
+        return
+}
+
+func NewFile(name string) (t *Target) {
+        t = New(name)
+        t.IsFile = true
+        return
+}
+
+func NewFileGoal(name string) (t *Target) {
+        t = NewFile(name)
+        t.IsGoal = true
+        return
+}
+
+func NewFileIntermediate(name string) (t *Target) {
+        t = NewFile(name)
+        t.IsIntermediate = true
+        return
+}
+
+type Collector interface {
+        AddFile(dir, name string) *Target
+        AddDir(dir string) *Target
+}
+
 type BuildTool interface {
-        Supports(dir, name string) bool
-        AddFile(dir string, f *Target)
+        Collector
+        SetTop(top string)
         Build() error
 }
 
 func AddBuildTool(tool BuildTool) {
 }
 
-// build scans source files under the current working directory and
-// add file names to the specified build tool and then launch it's
-// build method.
-func scan(tool BuildTool) (e error) {
-        if Top, e = os.Getwd(); e != nil {
-                return
-        }
-
+// scan scans source files under the current working directory and
+// add file names to the specified build tool.
+func scan(coll Collector, top, dir string) (e error) {
         add := func(sd string, names []string) {
                 for _, name := range names {
-                        //fmt.Printf("%v/%v/%v\n", Top, sd, name)
                         if strings.HasPrefix(name, ".") {
                                 continue
                         }
@@ -101,20 +148,27 @@ func scan(tool BuildTool) (e error) {
                                 continue
                         }
 
-                        if tool.Supports(sd, name) {
-                                s := new(Target)
-                                s.Name = filepath.Join(sd, name)
-                                s.IsFile = true
+                        dname := filepath.Join(sd, name)
+
+                        if fi, e := os.Stat(dname); fi == nil || e != nil {
+                                fmt.Printf("error: %v\n", e); continue
+                        } else {
+                                if fi.IsDir() {
+                                        coll.AddDir(dname)
+                                        continue
+                                }
+                        }
+
+                        if s := coll.AddFile(sd, name); s != nil {
                                 s.IsScanned = true
-                                tool.AddFile(sd, s)
                         }
                 }
         }
 
         read := func(d string) error {
                 var sd string
-                if strings.HasPrefix(d, Top) {
-                        sd = d[len(Top):]
+                if strings.HasPrefix(d, top) {
+                        sd = d[len(top):]
                 } else {
                         sd = d
                 }
@@ -134,10 +188,11 @@ func scan(tool BuildTool) (e error) {
                                 return e
                         }
                 }
+
                 return nil
         }
 
-        if e = read(Top); e != nil && e != io.EOF {
+        if e = read(dir); e != nil && e != io.EOF {
                 return
         }
 
