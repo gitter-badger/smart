@@ -1,11 +1,13 @@
 package smart
 
 import (
+        "bufio"
         "fmt"
         "io"
         "os"
         "os/exec"
         "path/filepath"
+        "regexp"
         "strings"
 /*
         "bytes"
@@ -136,6 +138,46 @@ type BuildTool interface {
 func AddBuildTool(tool BuildTool) {
 }
 
+func meta(name string) {
+        f, e := os.Open(name)
+        if e != nil {
+                return
+        }
+
+        defer f.Close()
+
+        var lineComment = regexp.MustCompile(`^\s*//`)
+        var lineMeta = regexp.MustCompile(`^\s*//\s*#smart\s+`)
+        var lineCall = regexp.MustCompile(`([a-z_\-]+)\s*\(\s*(.+?)\s*\)\s*;?`)
+
+        lineno := 0
+        b := bufio.NewReader(f)
+outfor: for {
+                var line []byte
+                for {
+                        l, isPrefix, e := b.ReadLine()
+                        if e == io.EOF { break outfor }
+                        if l[0] != '/' { break outfor }
+                        
+                        line = append(line, l...)
+                        if !isPrefix { break }
+                }
+
+                lineno += 1
+
+                if !lineComment.Match(line) { break }
+
+                if loc := lineMeta.FindIndex(line); loc != nil {
+                        line = line[loc[1]:]
+                        //fmt.Printf("%s:%d:%d:TODO: %v (%v)\n", name, lineno, loc[1], string(line), loc)
+                }
+
+                if loc := lineCall.FindSubmatch(line); loc != nil {
+                        fmt.Printf("%s:%d:TODO: %v %v %v\n", name, lineno, string(loc[0]), string(loc[1]), string(loc[2]))
+                }
+        }
+}
+
 // scan scans source files under the current working directory and
 // add file names to the specified build tool.
 func scan(coll Collector, top, dir string) (e error) {
@@ -161,6 +203,8 @@ func scan(coll Collector, top, dir string) (e error) {
 
                         if s := coll.AddFile(sd, name); s != nil {
                                 s.IsScanned = true
+
+                                meta(dname)
                         }
                 }
         }

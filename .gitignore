@@ -4,3 +4,4 @@ make/tests/work
 smart.a
 *~
 *.6
+*.o

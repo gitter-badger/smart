@@ -84,13 +84,13 @@ func TestBuildSimple(t *testing.T) {
                 if !d1.IsIntermediate { t.Errorf("not intermediate: %v", d1) }
                 if !d2.IsFile { t.Errorf("not file: %v", d1) }
                 if !d2.IsIntermediate { t.Errorf("not intermediate: %v", d1) }
-                if d1.Name != "say.c.o" { t.Errorf("bad name: %s", d1.Name) }
-                if d2.Name != "simple.c.o" { t.Errorf("bad name: %s", d2.Name) }
+                if d1.Name != "say.c.o" && d1.Name != "simple.c.o" { t.Errorf("bad name: %s", d1.Name) }
+                if d2.Name != "say.c.o" && d2.Name != "simple.c.o" { t.Errorf("bad name: %s", d2.Name) }
                 if len(d1.Depends) != 1 {
                         t.Errorf("not 1 depend: %v", d1.Depends)
                 } else {
                         d := d1.Depends[0]
-                        if d.Name != "say.c" { t.Errorf("bad name: %s", d.Name) }
+                        if d.Name != "say.c" && d.Name != "simple.c" { t.Errorf("bad name: %s", d.Name) }
                         if !d.IsFile { t.Errorf("not file: %v", d) }
                         if !d.IsScanned { t.Errorf("not scanned: %v", d) }
                 }
@@ -98,7 +98,7 @@ func TestBuildSimple(t *testing.T) {
                         t.Errorf("not 1 depend: %v", d2.Depends)
                 } else {
                         d := d2.Depends[0]
-                        if d.Name != "simple.c" { t.Errorf("bad name: %s", d.Name) }
+                        if d.Name != "say.c" && d.Name != "simple.c" { t.Errorf("bad name: %s", d.Name) }
                         if !d.IsFile { t.Errorf("not file: %v", d) }
                         if !d.IsScanned { t.Errorf("not scanned: %v", d) }
                 }

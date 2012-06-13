@@ -1,6 +1,7 @@
+// #smart use(foo.so, bar.a)
 #include <stdio.h>
-#include <shared/foo.h>
-#include <static/bar.h>
+#include <foo/foo.h>
+#include <bar/bar.h>
 int main(int argc, char**argv) {
   foo();
   bar();
