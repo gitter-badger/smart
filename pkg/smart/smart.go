@@ -19,11 +19,52 @@ import (
         */
 )
 
+/*
 const (
         TargetFlagFile int = 1
         TargetFlagBuilt = 2
         TargetFlagScanned = 4
 )
+*/
+
+const (
+        ACTION_NOP Action = iota
+        ACTION_USE
+        ACTION_COMBINE
+)
+
+type Action int
+
+func (a Action) String() string {
+        switch (a) {
+        case ACTION_NOP: return "nop"
+        case ACTION_USE: return "use"
+        case ACTION_COMBINE: return "combine"
+        }
+        return ""
+}
+
+var actions map[string]Action
+var regComment = regexp.MustCompile(`^\s*//`)
+var regMeta = regexp.MustCompile(`^\s*//\s*#smart\s+`)
+var regCall = regexp.MustCompile(`([a-z_\-]+)\s*\(\s*(([^"]|"(\\"|[^"])")+?)\s*\)\s*;?`)
+var regArg = regexp.MustCompile(`\s*(([^,"]|"(\\"|[^"])")*)(,|\s*$)`)
+
+func init() {
+        actions = map[string]Action {
+                "use": ACTION_USE,
+                "combine": ACTION_COMBINE,
+        }
+}
+
+type MetaInfo struct {
+        Action Action
+        Args []string
+}
+
+func (mi *MetaInfo) String() string {
+        return fmt.Sprintf("%v(%v)", mi.Action, strings.Join(mi.Args, ","))
+}
 
 type Target struct {
         Name string
@@ -32,6 +73,7 @@ type Target struct {
         IsIntermediate bool
         IsGoal bool
         IsScanned bool
+        Meta []*MetaInfo
 }
 
 func (t *Target) String() string {
@@ -138,17 +180,13 @@ type BuildTool interface {
 func AddBuildTool(tool BuildTool) {
 }
 
-func meta(name string) {
+func meta(name string) (info []*MetaInfo) {
         f, e := os.Open(name)
         if e != nil {
                 return
         }
 
         defer f.Close()
-
-        var lineComment = regexp.MustCompile(`^\s*//`)
-        var lineMeta = regexp.MustCompile(`^\s*//\s*#smart\s+`)
-        var lineCall = regexp.MustCompile(`([a-z_\-]+)\s*\(\s*(.+?)\s*\)\s*;?`)
 
         lineno := 0
         b := bufio.NewReader(f)
@@ -165,17 +203,33 @@ outfor: for {
 
                 lineno += 1
 
-                if !lineComment.Match(line) { break }
+                if !regComment.Match(line) { break }
 
-                if loc := lineMeta.FindIndex(line); loc != nil {
+                if loc := regMeta.FindIndex(line); loc != nil {
                         line = line[loc[1]:]
                         //fmt.Printf("%s:%d:%d:TODO: %v (%v)\n", name, lineno, loc[1], string(line), loc)
                 }
 
-                if loc := lineCall.FindSubmatch(line); loc != nil {
-                        fmt.Printf("%s:%d:TODO: %v %v %v\n", name, lineno, string(loc[0]), string(loc[1]), string(loc[2]))
+                if ma := regCall.FindAllSubmatch(line, -1); ma != nil {
+                        for _, m := range ma {
+                                //fmt.Printf("%s:%d:TODO: (%d) '%v' '%v'\n", name, lineno, len(m), string(m[1]), string(m[2]))
+                                fn, action, ok := string(m[1]), ACTION_NOP, false
+                                if action, ok = actions[fn]; !ok {
+                                        continue
+                                }
+
+                                mi := &MetaInfo{ Action:action }
+                                if aa := regArg.FindAllSubmatch(m[2], -1); aa != nil {
+                                        for _, a := range aa {
+                                                //fmt.Printf("%s:%d:TODO: %v '%v'\n", name, lineno, fn, string(a[1]))
+                                                mi.Args = append(mi.Args, string(a[1]))
+                                        }
+                                }
+                                info = append(info, mi)
+                        }
                 }
         }
+        return
 }
 
 // scan scans source files under the current working directory and
@@ -203,8 +257,10 @@ func scan(coll Collector, top, dir string) (e error) {
 
                         if s := coll.AddFile(sd, name); s != nil {
                                 s.IsScanned = true
-
-                                meta(dname)
+                                s.Meta = meta(dname)
+                                if s.Meta != nil {
+                                        fmt.Printf("TODO: %s: %v\n", dname, s.Meta)
+                                }
                         }
                 }
         }
