@@ -63,10 +63,17 @@ type MetaInfo struct {
 }
 
 func (mi *MetaInfo) String() string {
-        return fmt.Sprintf("%v(%v)", mi.Action, strings.Join(mi.Args, ","))
+        //return fmt.Sprintf("%v(%v)", mi.Action, strings.Join(mi.Args, ","))
+        return fmt.Sprintf("%v%v", mi.Action, mi.Args)
+}
+
+type NameValues struct {
+        Name string
+        Values []string
 }
 
 type Target struct {
+        Type string
         Name string
         Depends []*Target
         IsFile bool
@@ -74,10 +81,77 @@ type Target struct {
         IsGoal bool
         IsScanned bool
         Meta []*MetaInfo
+        Args []*NameValues
+        Exports []*NameValues
+        Properties map[string]string
 }
 
 func (t *Target) String() string {
         return t.Name
+}
+
+func (t *Target) add(l []*NameValues, name string, args ...string) ([]*NameValues, *NameValues) {
+        for _, nv := range l {
+                if nv.Name == name {
+                        nv.Values = append(nv.Values, args...)
+                        return l, nv
+                }
+        }
+
+        nv := &NameValues{ name, args }
+        l = append(l, nv)
+        return l, nv
+}
+
+func (t *Target) AddArgs(name string, args ...string) (nv *NameValues) {
+        t.Args, nv = t.add(t.Args, name, args...)
+        return nv
+}
+
+func (t *Target) AddExports(name string, args ...string) (nv *NameValues) {
+        t.Exports, nv = t.add(t.Exports, name, args...)
+        return nv
+}
+
+func (t *Target) join(l []*NameValues, n string) (res []string) {
+        for _, nv := range l {
+                if nv.Name == n {
+                        for _, s := range nv.Values {
+                                res = append(res, n+s)
+                        }
+                }
+        }
+        return
+}
+
+func (t *Target) joinAll(l []*NameValues) (res []string) {
+        for _, nv := range l {
+                if len(nv.Values) == 0 {
+                        res = append(res, nv.Name)
+                        continue
+                }
+
+                for _, s := range nv.Values {
+                        res = append(res, nv.Name+s)
+                }
+        }
+        return
+}
+
+func (t *Target) JoinAllArgs() (res []string) {
+        return t.joinAll(t.Args)
+}
+
+func (t *Target) JoinAllExports() (res []string) {
+        return t.joinAll(t.Exports)
+}
+
+func (t *Target) JoinArgs(n string) []string {
+        return t.join(t.Args, n)
+}
+
+func (t *Target) JoinExports(n string) []string {
+        return t.join(t.Exports, n)
 }
 
 func (t *Target) Add(i interface {}) (f *Target) {
@@ -133,6 +207,7 @@ func (t *Target) AddIntermediateFile(name string, source interface{}) *Target {
 func New(name string) (t *Target) {
         t = new(Target)
         t.Name = name
+        t.Properties = make(map[string]string)
         return
 }
 
@@ -172,12 +247,26 @@ type Collector interface {
 }
 
 type BuildTool interface {
-        Collector
+        NewCollector(t *Target) Collector
         SetTop(top string)
+        Generate(t *Target) error
         Build() error
 }
 
-func AddBuildTool(tool BuildTool) {
+type err struct {
+        what string
+}
+
+func (e *err) Error() string {
+        return e.what
+}
+
+func NewError(what string) error {
+        return &err{ what }
+}
+
+func NewErrorf(what string, args ...interface{}) error {
+        return &err{ fmt.Sprintf(what, args...) }
 }
 
 func meta(name string) (info []*MetaInfo) {
@@ -302,7 +391,7 @@ func scan(coll Collector, top, dir string) (e error) {
 
 // generate calls gen in goroutines on each target. If any error occurs,
 // it will be returned with the updated targets.
-func generate(targets []*Target, gen func(*Target) error) (error, []*Target) {
+func Generate(tool BuildTool, targets []*Target) (error, []*Target) {
         if len(targets) == 0 {
                 return nil, nil
         }
@@ -315,7 +404,7 @@ func generate(targets []*Target, gen func(*Target) error) (error, []*Target) {
                 needGen := true
 
                 if 0 < len(t.Depends) {
-                        if e, u := generate(t.Depends, gen); e == nil {
+                        if e, u := Generate(tool, t.Depends); e == nil {
                                 //fmt.Printf("%v: %v, %v\n", t, t.Depends, u)
                                 needGen = needGen || 0 < len(u)
                         } else {
@@ -335,7 +424,7 @@ func generate(targets []*Target, gen func(*Target) error) (error, []*Target) {
                 }
 
                 if needGen {
-                        err = gen(t)
+                        err = tool.Generate(t)
                 }
 
                 ch <- meta{ t, err }

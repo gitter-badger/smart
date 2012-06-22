@@ -67,7 +67,7 @@ func TestBuildSimple(t *testing.T) {
         checkf(t, "simple.c")
 
         c := newGcc()
-        if e := scan(c, c.top, c.top); e != nil {
+        if e := scan(c.NewCollector(nil), c.top, c.top); e != nil {
                 t.Errorf("scan: %v", e)
         }
 
@@ -138,7 +138,7 @@ func TestBuildCombineObjects(t *testing.T) {
         checkf(t, "main.c")
 
         c := newGcc()
-        if e := scan(c, c.top, c.top); e != nil {
+        if e := scan(c.NewCollector(nil), c.top, c.top); e != nil {
                 t.Errorf("scan: %v", e)
         }
 
@@ -233,18 +233,23 @@ func TestBuildComplex(t *testing.T) {
         checkf(t, "main.c")
 
         c := newGcc()
-        if e := scan(c, c.top, c.top); e != nil {
+        if e := scan(c.NewCollector(nil), c.top, c.top); e != nil {
                 t.Errorf("scan: %v", e)
         }
 
         if c.target == nil { t.Errorf("no target"); return }
-        if c.target.Name != "complex" { t.Errorf("bad name: %s", c.target.Name) }
+        if c.target.Name != "complex" { t.Errorf("bad target: %s", c.target.Name) }
 
         if e := c.Build(); e != nil {
                 t.Errorf("build: %v", e)
         }
 
+        checkf(t, "complex")
         checkf(t, "main.c.o")
+        checkf(t, "bar.a/bar.c.o")
+        checkf(t, "bar.a/libbar.a")
+        checkf(t, "foo.so/foo.c.o")
+        checkf(t, "foo.so/libfoo.so")
 
         out := bytes.NewBuffer(nil)
         p := exec.Command("./complex")
@@ -253,10 +258,14 @@ func TestBuildComplex(t *testing.T) {
         if e := p.Run(); e != nil {
                 t.Errorf("complex: %v", e)
         }
-        if string(out.Bytes()) != "1 + 2 = 3\n" {
+        if string(out.Bytes()) != "foobar\n" {
                 t.Errorf("complex: %v", string(out.Bytes()))
         }
 
+        os.Remove("bar.a/bar.c.o")
+        os.Remove("bar.a/libbar.a")
+        os.Remove("foo.so/foo.c.o")
+        os.Remove("foo.so/libfoo.so")
         os.Remove("main.c.o")
         os.Remove("complex")
 
