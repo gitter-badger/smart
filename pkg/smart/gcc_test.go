@@ -104,8 +104,9 @@ func TestBuildSimple(t *testing.T) {
                 }
         }
 
-        if e := c.Build(); e != nil {
+        if e, _ := Generate(c, c.Goals()); e != nil {
                 t.Errorf("build: %v", e)
+                return
         }
 
         checkf(t, "say.c.o")
@@ -197,8 +198,9 @@ func TestBuildCombineObjects(t *testing.T) {
                 }
         }
 
-        if e := c.Build(); e != nil {
+        if e, _ := Generate(c, c.Goals()); e != nil {
                 t.Errorf("build: %v", e)
+                return
         }
 
         checkf(t, "main.c.o")
@@ -249,8 +251,9 @@ func TestBuildSublibdir(t *testing.T) {
         if c.target == nil { t.Errorf("no target"); return }
         if c.target.Name != "sub_lib_dir" { t.Errorf("bad target: %s", c.target.Name) }
 
-        if e := c.Build(); e != nil {
+        if e, _ := Generate(c, c.Goals()); e != nil {
                 t.Errorf("build: %v", e)
+                return
         }
 
         checkf(t, "sub_lib_dir")

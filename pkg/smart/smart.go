@@ -250,7 +250,7 @@ type BuildTool interface {
         NewCollector(t *Target) Collector
         SetTop(top string)
         Generate(t *Target) error
-        Build() error
+        Goals() []*Target
 }
 
 type err struct {
@@ -389,7 +389,17 @@ func scan(coll Collector, top, dir string) (e error) {
         return
 }
 
-// generate calls gen in goroutines on each target. If any error occurs,
+// run executes the command specified by cmd with arguments by args.
+func run(cmd string, args ...string) error {
+        fmt.Printf("%s\n", cmd + " " + strings.Join(args, " "))
+        p := exec.Command(cmd, args...)
+        p.Stdout = os.Stdout
+        p.Stderr = os.Stderr
+        p.Start()
+        return p.Wait()
+}
+
+// Generate calls tool.Generate in goroutines on each target. If any error occurs,
 // it will be returned with the updated targets.
 func Generate(tool BuildTool, targets []*Target) (error, []*Target) {
         if len(targets) == 0 {
@@ -449,17 +459,23 @@ func Generate(tool BuildTool, targets []*Target) (error, []*Target) {
         return nil, updated
 }
 
-// run executes the command specified by cmd with arguments by args.
-func run(cmd string, args ...string) error {
-        fmt.Printf("%s\n", cmd + " " + strings.Join(args, " "))
-        p := exec.Command(cmd, args...)
-        p.Stdout = os.Stdout
-        p.Stderr = os.Stderr
-        p.Start()
-        return p.Wait()
-}
+// Build launches a build process on a tool.
+func Build(tool BuildTool) (e error) {
+        var top string
 
-func Build() error {
-        // TODO...
-        return nil
+        if top, e = os.Getwd(); e != nil {
+                return
+        }
+
+        tool.SetTop(top)
+
+        if e = scan(tool.NewCollector(nil), top, top); e != nil {
+                return
+        }
+
+        if e, _ = Generate(tool, tool.Goals()); e != nil {
+                return
+        }
+
+        return
 }

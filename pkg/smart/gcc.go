@@ -20,17 +20,8 @@ func (gcc *gcc) SetTop(top string) {
         gcc.top = top
 }
 
-func (gcc *gcc) Build() error {
-        t := gcc.target
-        if t == nil {
-                return nil
-        }
-
-        if e, _ := Generate(gcc, []*Target{ t }); e != nil {
-                return e
-        }
-
-        return nil
+func (gcc *gcc) Goals() []*Target {
+        return []*Target{ gcc.target }
 }
 
 func (gcc *gcc) NewCollector(t *Target) Collector {
