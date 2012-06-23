@@ -53,7 +53,7 @@ func (gcc *gcc) compile(t *Target) error {
         case 0: return NewErrorf("no depends: %v\n", t)
         case 1:
                 cc, d0 := "", t.Depends[0]
-                if s, ok := t.Properties["CC"]; ok && s != "" {
+                if s, ok := t.Variables["CC"]; ok && s != "" {
                         cc = s
                 } else {
                         return NewErrorf("unknown file type: %v", d0.Name)
@@ -98,7 +98,7 @@ func (gcc *gcc) archive(t *Target) error {
                 return NewErrorf("no objects for archive: %v", t)
         }
 
-        if s, ok := t.Properties["AR"]; ok && s != "" {
+        if s, ok := t.Variables["AR"]; ok && s != "" {
                 ar = s
         }
 
@@ -131,7 +131,7 @@ func (gcc *gcc) link(t *Target) error {
         args = append(args, t.JoinArgs("-L")...)
         args = append(args, t.JoinArgs("-l")...)
 
-        if s, ok := t.Properties["LD"]; ok && s != "" {
+        if s, ok := t.Variables["LD"]; ok && s != "" {
                 ld = s
         }
 
@@ -231,8 +231,8 @@ func (coll *gccCollector) AddFile(dir, name string) *Target {
         }
 
         o.Type = ".o"
-        o.Properties["CC"] = cc
-        coll.target.Properties["LD"] = cc
+        o.Variables["CC"] = cc
+        coll.target.Variables["LD"] = cc
 
         if coll.target.Type == ".so" {
                 o.AddArgs("-fPIC")

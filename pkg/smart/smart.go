@@ -83,7 +83,7 @@ type Target struct {
         Meta []*MetaInfo
         Args []*NameValues
         Exports []*NameValues
-        Properties map[string]string
+        Variables map[string]string
 }
 
 func (t *Target) String() string {
@@ -101,16 +101,6 @@ func (t *Target) add(l []*NameValues, name string, args ...string) ([]*NameValue
         nv := &NameValues{ name, args }
         l = append(l, nv)
         return l, nv
-}
-
-func (t *Target) AddArgs(name string, args ...string) (nv *NameValues) {
-        t.Args, nv = t.add(t.Args, name, args...)
-        return nv
-}
-
-func (t *Target) AddExports(name string, args ...string) (nv *NameValues) {
-        t.Exports, nv = t.add(t.Exports, name, args...)
-        return nv
 }
 
 func (t *Target) join(l []*NameValues, n string) (res []string) {
@@ -136,6 +126,16 @@ func (t *Target) joinAll(l []*NameValues) (res []string) {
                 }
         }
         return
+}
+
+func (t *Target) AddArgs(name string, args ...string) (nv *NameValues) {
+        t.Args, nv = t.add(t.Args, name, args...)
+        return nv
+}
+
+func (t *Target) AddExports(name string, args ...string) (nv *NameValues) {
+        t.Exports, nv = t.add(t.Exports, name, args...)
+        return nv
 }
 
 func (t *Target) JoinAllArgs() (res []string) {
@@ -207,7 +207,7 @@ func (t *Target) AddIntermediateFile(name string, source interface{}) *Target {
 func New(name string) (t *Target) {
         t = new(Target)
         t.Name = name
-        t.Properties = make(map[string]string)
+        t.Variables = make(map[string]string)
         return
 }
 

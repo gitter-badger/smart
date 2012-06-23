@@ -118,8 +118,7 @@ func TestBuildSimple(t *testing.T) {
         p.Stderr = out
         if e := p.Run(); e != nil {
                 t.Errorf("simple: %v", e)
-        }
-        if string(out.Bytes()) != "smart.gcc.test.simple\n" {
+        } else if string(out.Bytes()) != "smart.gcc.test.simple\n" {
                 t.Errorf("simple: %v", string(out.Bytes()))
         }
 
@@ -214,8 +213,7 @@ func TestBuildCombineObjects(t *testing.T) {
         p.Stderr = out
         if e := p.Run(); e != nil {
                 t.Errorf("combine: %v", e)
-        }
-        if string(out.Bytes()) != "1 + 2 = 3\n" {
+        } else if string(out.Bytes()) != "1 + 2 = 3\n" {
                 t.Errorf("combine: %v", string(out.Bytes()))
         }
 
@@ -228,9 +226,20 @@ func TestBuildCombineObjects(t *testing.T) {
         chdir(t, "-")
 }
 
-func TestBuildComplex(t *testing.T) {
-        chdir(t, "+testdata/gcc/complex")
+func TestBuildSublibdir(t *testing.T) {
+        chdir(t, "+testdata/gcc/sub_lib_dir")
         checkf(t, "main.c")
+        checkd(t, "bar.a")
+        checkf(t, "bar.a/bar.c")
+        checkd(t, "foo.so")
+        checkf(t, "foo.so/foo.c")
+
+        os.Remove("bar.a/bar.c.o")
+        os.Remove("bar.a/libbar.a")
+        os.Remove("foo.so/foo.c.o")
+        os.Remove("foo.so/libfoo.so")
+        os.Remove("main.c.o")
+        os.Remove("sub_lib_dir")
 
         c := newGcc()
         if e := scan(c.NewCollector(nil), c.top, c.top); e != nil {
@@ -238,13 +247,13 @@ func TestBuildComplex(t *testing.T) {
         }
 
         if c.target == nil { t.Errorf("no target"); return }
-        if c.target.Name != "complex" { t.Errorf("bad target: %s", c.target.Name) }
+        if c.target.Name != "sub_lib_dir" { t.Errorf("bad target: %s", c.target.Name) }
 
         if e := c.Build(); e != nil {
                 t.Errorf("build: %v", e)
         }
 
-        checkf(t, "complex")
+        checkf(t, "sub_lib_dir")
         checkf(t, "main.c.o")
         checkf(t, "bar.a/bar.c.o")
         checkf(t, "bar.a/libbar.a")
@@ -252,14 +261,13 @@ func TestBuildComplex(t *testing.T) {
         checkf(t, "foo.so/libfoo.so")
 
         out := bytes.NewBuffer(nil)
-        p := exec.Command("./complex")
+        p := exec.Command("./sub_lib_dir")
         p.Stdout = out
         p.Stderr = out
         if e := p.Run(); e != nil {
-                t.Errorf("complex: %v", e)
-        }
-        if string(out.Bytes()) != "foobar\n" {
-                t.Errorf("complex: %v", string(out.Bytes()))
+                t.Errorf("sub_lib_dir: %v", e)
+        } else if string(out.Bytes()) != "foobar\n" {
+                t.Errorf("sub_lib_dir: %v", string(out.Bytes()))
         }
 
         os.Remove("bar.a/bar.c.o")
@@ -267,7 +275,7 @@ func TestBuildComplex(t *testing.T) {
         os.Remove("foo.so/foo.c.o")
         os.Remove("foo.so/libfoo.so")
         os.Remove("main.c.o")
-        os.Remove("complex")
+        os.Remove("sub_lib_dir")
 
         chdir(t, "-")
 }
