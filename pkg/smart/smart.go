@@ -460,12 +460,16 @@ func graph() {
         fmt.Printf("goals: %v\n", goals)
         */
 
-        for _, g := range goals {
-                //fmt.Printf("usees: %v->%v\n", g, g.Usees)
-                for _, d := range g.Depends {
-                        d.ParentUsees = append(d.ParentUsees, g.Usees...)
+        var apply func(ts []*Target)
+        apply = func(ts []*Target) {
+                for _, t := range ts {
+                        apply(t.Depends)
+                        for _, d := range t.Depends {
+                                d.ParentUsees = append(d.ParentUsees, t.Usees...)
+                        }
                 }
         }
+        apply(goals)
 }
 
 // run executes the command specified by cmd with arguments by args.

@@ -230,6 +230,12 @@ func TestBuildCombineObjects(t *testing.T) {
         chdir(t, "-")
 }
 
+func lddrx(s string) *regexp.Regexp {
+        s = `\n\s*(` + s
+        s += `\s*=>\s*([^\s]+))\s*\(` //)
+        return regexp.MustCompile(s)
+}
+
 func TestBuildSublibdir(t *testing.T) {
         chdir(t, "+testdata/gcc/sub_lib_dir")
         checkf(t, "main.c")
@@ -274,7 +280,7 @@ func TestBuildSublibdir(t *testing.T) {
         if e := p.Run(); e != nil {
                 t.Errorf("ldd: %v", e)
         } else {
-                re := regexp.MustCompile(`\n\s*(libfoo.so\s*=>\s*([^\s]+))\s*\(`)
+                re := lddrx("libfoo.so")
                 if s := re.FindStringSubmatch(string(out.Bytes())); s != nil && 3 == len(s) {
                         if "foo.so/libfoo.so" != s[2] {
                                 t.Errorf("ldd(sub_lib_dir): %v", s[1])
@@ -300,6 +306,151 @@ func TestBuildSublibdir(t *testing.T) {
         os.Remove("foo.so/libfoo.so")
         os.Remove("main.c.o")
         os.Remove("sub_lib_dir")
+
+        chdir(t, "-")
+}
+
+func TestBuildSublibdirs(t *testing.T) {
+        chdir(t, "+testdata/gcc/sub_lib_dirs")
+        checkf(t, "main.c")
+        checkd(t, "foo.so")
+        checkf(t, "foo.so/foo.h")
+        checkf(t, "foo.so/foo.c")
+        checkd(t, "foo.so/oo.so")
+        checkf(t, "foo.so/oo.so/oo.h")
+        checkf(t, "foo.so/oo.so/oo.c")
+        checkd(t, "foo.so/oo.so/bar.so")
+        checkf(t, "foo.so/oo.so/bar.so/bar.h")
+        checkf(t, "foo.so/oo.so/bar.so/bar.c")
+        checkd(t, "foo.so/oo.so/bar.so/ln.so")
+        checkf(t, "foo.so/oo.so/bar.so/ln.so/ln.h")
+        checkf(t, "foo.so/oo.so/bar.so/ln.so/ln.c")
+
+        os.Remove("main.c.o")
+        os.Remove("sub_lib_dirs")
+        os.Remove("foo.so/foo.c.o")
+        os.Remove("foo.so/libfoo.so")
+        os.Remove("foo.so/oo.so/oo.c.o")
+        os.Remove("foo.so/oo.so/liboo.so")
+        os.Remove("foo.so/oo.so/bar.so/bar.c.o")
+        os.Remove("foo.so/oo.so/bar.so/libbar.so")
+        os.Remove("foo.so/oo.so/bar.so/ln.so/ln.c.o")
+        os.Remove("foo.so/oo.so/bar.so/ln.so/libln.so")
+
+        c := newTestGcc()
+        if e := scan(c.NewCollector(nil), c.top, c.top); e != nil {
+                t.Errorf("scan: %v", e)
+        }
+
+        graph();
+
+        if c.target == nil { t.Errorf("no target"); return }
+        if c.target.Name != "sub_lib_dirs" { t.Errorf("bad target: %s", c.target.Name) }
+
+        if e, _ := Generate(c, c.Goals()); e != nil {
+                t.Errorf("build: %v", e)
+                return
+        }
+
+        checkf(t, "main.c.o")
+        checkf(t, "sub_lib_dirs")
+        checkf(t, "foo.so/foo.c.o")
+        checkf(t, "foo.so/libfoo.so")
+        checkf(t, "foo.so/oo.so/oo.c.o")
+        checkf(t, "foo.so/oo.so/liboo.so")
+        checkf(t, "foo.so/oo.so/bar.so/bar.c.o")
+        checkf(t, "foo.so/oo.so/bar.so/libbar.so")
+        checkf(t, "foo.so/oo.so/bar.so/ln.so/ln.c.o")
+        checkf(t, "foo.so/oo.so/bar.so/ln.so/libln.so")
+
+        out := bytes.NewBuffer(nil)
+        p := exec.Command("ldd", "sub_lib_dirs")
+        p.Stdout = out
+        p.Stderr = out
+        if e := p.Run(); e != nil {
+                t.Errorf("ldd: %v", e)
+        } else {
+                re := lddrx("libfoo.so")
+                if s := re.FindStringSubmatch(string(out.Bytes())); s != nil && 3 == len(s) {
+                        if "foo.so/libfoo.so" != s[2] {
+                                t.Errorf("ldd(sub_lib_dirs): %v", s[1])
+                        }
+                } else {
+                        t.Errorf("ldd(sub_lib_dirs): %v", string(out.Bytes()))
+                }
+        }
+
+        out.Reset()
+        p = exec.Command("ldd", "foo.so/libfoo.so")
+        p.Stdout = out
+        p.Stderr = out
+        if e := p.Run(); e != nil {
+                t.Errorf("ldd: %v", e)
+        } else {
+                re := lddrx("liboo.so")
+                if s := re.FindStringSubmatch(string(out.Bytes())); s != nil && 3 == len(s) {
+                        if "foo.so/oo.so/liboo.so" != s[2] {
+                                t.Errorf("ldd(foo.so/libfoo.so): %v", s[1])
+                        }
+                } else {
+                        t.Errorf("ldd(foo.so/libfoo.so): %v", string(out.Bytes()))
+                }
+        }
+
+        out.Reset()
+        p = exec.Command("ldd", "foo.so/oo.so/liboo.so")
+        p.Stdout = out
+        p.Stderr = out
+        if e := p.Run(); e != nil {
+                t.Errorf("ldd: %v", e)
+        } else {
+                re := lddrx("libbar.so")
+                if s := re.FindStringSubmatch(string(out.Bytes())); s != nil && 3 == len(s) {
+                        if "foo.so/oo.so/bar.so/libbar.so" != s[2] {
+                                t.Errorf("ldd(foo.so/oo.so/liboo.so): %v", s[1])
+                        }
+                } else {
+                        t.Errorf("ldd(foo.so/oo.so/liboo.so): %v", string(out.Bytes()))
+                }
+        }
+
+        out.Reset()
+        p = exec.Command("ldd", "foo.so/oo.so/bar.so/libbar.so")
+        p.Stdout = out
+        p.Stderr = out
+        if e := p.Run(); e != nil {
+                t.Errorf("ldd: %v", e)
+        } else {
+                re := lddrx("libln.so")
+                if s := re.FindStringSubmatch(string(out.Bytes())); s != nil && 3 == len(s) {
+                        if "foo.so/oo.so/bar.so/ln.so/libln.so" != s[2] {
+                                t.Errorf("ldd(foo.so/oo.so/bar.so/libbar.so): %v", s[1])
+                        }
+                } else {
+                        t.Errorf("ldd(foo.so/oo.so/bar.so/libbar.so): %v", string(out.Bytes()))
+                }
+        }
+
+        out.Reset()
+        p = exec.Command("./sub_lib_dirs")
+        p.Stdout = out
+        p.Stderr = out
+        if e := p.Run(); e != nil {
+                t.Errorf("sub_lib_dirs: %v", e)
+        } else if string(out.Bytes()) != "foooobar\n" {
+                t.Errorf("sub_lib_dirs: %v", string(out.Bytes()))
+        }
+
+        os.Remove("main.c.o")
+        os.Remove("sub_lib_dirs")
+        os.Remove("foo.so/foo.c.o")
+        os.Remove("foo.so/libfoo.so")
+        os.Remove("foo.so/oo.so/oo.c.o")
+        os.Remove("foo.so/oo.so/liboo.so")
+        os.Remove("foo.so/oo.so/bar.so/bar.c.o")
+        os.Remove("foo.so/oo.so/bar.so/libbar.so")
+        os.Remove("foo.so/oo.so/bar.so/ln.so/ln.c.o")
+        os.Remove("foo.so/oo.so/bar.so/ln.so/libln.so")
 
         chdir(t, "-")
 }
