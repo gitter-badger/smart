@@ -44,22 +44,32 @@ func (a Action) String() string {
         return ""
 }
 
+var _regComment = regexp.MustCompile(`^\s*//`)
+var _regMeta = regexp.MustCompile(`^\s*//\s*#smart\s+`)
+var _regCall = regexp.MustCompile(`([a-z_\-]+)\s*\(\s*(([^"]|"(\\"|[^"])")+?)\s*\)\s*;?`)
+var _regArg = regexp.MustCompile(`\s*(([^,"]|"(\\"|[^"])")*)(,|\s*$)`)
+var targets map[string]*Target
 var actions map[string]Action
-var regComment = regexp.MustCompile(`^\s*//`)
-var regMeta = regexp.MustCompile(`^\s*//\s*#smart\s+`)
-var regCall = regexp.MustCompile(`([a-z_\-]+)\s*\(\s*(([^"]|"(\\"|[^"])")+?)\s*\)\s*;?`)
-var regArg = regexp.MustCompile(`\s*(([^,"]|"(\\"|[^"])")*)(,|\s*$)`)
 
 func init() {
+        targets = make(map[string]*Target)
         actions = map[string]Action {
+                "nop": ACTION_NOP,
                 "use": ACTION_USE,
                 "combine": ACTION_COMBINE,
         }
 }
 
+// T maps name to the coresponding target.
+func T(name string) *Target {
+        t, _ := targets[name]
+        return t
+}
+
 type MetaInfo struct {
         Action Action
         Args []string
+        Lineno int
 }
 
 func (mi *MetaInfo) String() string {
@@ -76,10 +86,14 @@ type Target struct {
         Type string
         Name string
         Depends []*Target
+        Usees []*Target
+        ParentUsees []*Target
         IsFile bool
         IsIntermediate bool
         IsGoal bool
         IsScanned bool
+        IsDirTarget bool // target is made by AddDir
+        IsGenerated bool
         Meta []*MetaInfo
         Args []*NameValues
         Exports []*NameValues
@@ -154,6 +168,31 @@ func (t *Target) JoinExports(n string) []string {
         return t.join(t.Exports, n)
 }
 
+func (t *Target) joinUseesArgs(usees []*Target, n string) (res []string) {
+        for _, u := range usees {
+                res = append(res, u.JoinExports(n)...)
+        }
+        return
+}
+
+func (t *Target) JoinUseesArgs(n string) []string {
+        return t.joinUseesArgs(t.Usees, n)
+}
+
+func (t *Target) JoinParentUseesArgs(n string) []string {
+        return t.joinUseesArgs(t.ParentUsees, n)
+}
+
+func (t *Target) Use(usee *Target) {
+        for _, u := range t.Usees {
+                if usee == u {
+                        goto out
+                }
+        }
+        t.Usees = append(t.Usees, usee)
+out:
+}
+
 func (t *Target) Add(i interface {}) (f *Target) {
         if i != nil {
                 switch d := i.(type) {
@@ -208,6 +247,7 @@ func New(name string) (t *Target) {
         t = new(Target)
         t.Name = name
         t.Variables = make(map[string]string)
+        targets[name] = t
         return
 }
 
@@ -292,14 +332,14 @@ outfor: for {
 
                 lineno += 1
 
-                if !regComment.Match(line) { break }
+                if !_regComment.Match(line) { break }
 
-                if loc := regMeta.FindIndex(line); loc != nil {
+                if loc := _regMeta.FindIndex(line); loc != nil {
                         line = line[loc[1]:]
                         //fmt.Printf("%s:%d:%d:TODO: %v (%v)\n", name, lineno, loc[1], string(line), loc)
                 }
 
-                if ma := regCall.FindAllSubmatch(line, -1); ma != nil {
+                if ma := _regCall.FindAllSubmatch(line, -1); ma != nil {
                         for _, m := range ma {
                                 //fmt.Printf("%s:%d:TODO: (%d) '%v' '%v'\n", name, lineno, len(m), string(m[1]), string(m[2]))
                                 fn, action, ok := string(m[1]), ACTION_NOP, false
@@ -307,13 +347,18 @@ outfor: for {
                                         continue
                                 }
 
-                                mi := &MetaInfo{ Action:action }
-                                if aa := regArg.FindAllSubmatch(m[2], -1); aa != nil {
+                                mi := &MetaInfo{
+                                        Action:action,
+                                        Lineno:lineno,
+                                }
+
+                                if aa := _regArg.FindAllSubmatch(m[2], -1); aa != nil {
                                         for _, a := range aa {
                                                 //fmt.Printf("%s:%d:TODO: %v '%v'\n", name, lineno, fn, string(a[1]))
                                                 mi.Args = append(mi.Args, string(a[1]))
                                         }
                                 }
+
                                 info = append(info, mi)
                         }
                 }
@@ -339,13 +384,15 @@ func scan(coll Collector, top, dir string) (e error) {
                                 fmt.Printf("error: %v\n", e); continue
                         } else {
                                 if fi.IsDir() {
-                                        coll.AddDir(dname)
+                                        if s := coll.AddDir(dname); s != nil {
+                                                s.IsDirTarget = true
+                                                targets[dname] = s
+                                        }
                                 } else if s := coll.AddFile(sd, name); s != nil {
                                         s.IsScanned = true
                                         s.Meta = meta(dname)
-                                        if s.Meta != nil {
-                                                fmt.Printf("TODO: %s: %v\n", dname, s.Meta)
-                                        }
+                                        //fmt.Printf("meta: %s: %v\n", dname, s.Meta)
+                                        targets[dname] = s
                                 }
                         }
                 }
@@ -378,12 +425,47 @@ func scan(coll Collector, top, dir string) (e error) {
                 return nil
         }
 
-        if e = read(dir); e != nil && e != io.EOF {
-                return
+        if e = read(dir); e == io.EOF {
+                e = nil
         }
 
-        e = nil
         return
+}
+
+// graph draws dependency graph of targets.
+func graph() {
+        //fmt.Printf("scanned: %v\n", targets)
+
+        var dirs []*Target
+        var files []*Target
+        var goals []*Target
+        for _, t := range targets {
+                //fmt.Printf("scan: %v -> %v (%v, %v)\n", k, t, t.IsFile, t.IsDirTarget)
+                if t.IsDirTarget {
+                        for _, d := range dirs {
+                                if d == t { goto next }
+                        }
+                        dirs = append(dirs, t)
+                } else if t.IsGoal {
+                        goals = append(goals, t)
+                } else {
+                        files = append(files, t)
+                }
+        next:
+        }
+
+        /*
+        fmt.Printf("dirs: %v\n", dirs)
+        fmt.Printf("files: %v\n", files)
+        fmt.Printf("goals: %v\n", goals)
+        */
+
+        for _, g := range goals {
+                //fmt.Printf("usees: %v->%v\n", g, g.Usees)
+                for _, d := range g.Depends {
+                        d.ParentUsees = append(d.ParentUsees, g.Usees...)
+                }
+        }
 }
 
 // run executes the command specified by cmd with arguments by args.
@@ -407,12 +489,16 @@ func Generate(tool BuildTool, targets []*Target) (error, []*Target) {
         ch := make(chan meta)
 
         g := func(t *Target) {
+                if t.IsGenerated {
+                        ch <- meta{ t, nil }
+                        return
+                }
+
                 var err error
-                needGen := true
+                var needGen = true
 
                 if 0 < len(t.Depends) {
                         if e, u := Generate(tool, t.Depends); e == nil {
-                                //fmt.Printf("%v: %v, %v\n", t, t.Depends, u)
                                 needGen = needGen || 0 < len(u)
                         } else {
                                 needGen, err = false, e
@@ -431,7 +517,9 @@ func Generate(tool BuildTool, targets []*Target) (error, []*Target) {
                 }
 
                 if needGen {
-                        err = tool.Generate(t)
+                        if err = tool.Generate(t); err == nil {
+                                t.IsGenerated = true
+                        }
                 }
 
                 ch <- meta{ t, err }
@@ -440,7 +528,9 @@ func Generate(tool BuildTool, targets []*Target) (error, []*Target) {
         gn := len(targets)
 
         for _, t := range targets {
-                go g(t)
+                if !t.IsGenerated {
+                        go g(t)
+                }
         }
 
         updated := make([]*Target, gn)
@@ -469,6 +559,8 @@ func Build(tool BuildTool) (e error) {
         if e = scan(tool.NewCollector(nil), top, top); e != nil {
                 return
         }
+
+        graph() // draw dependency graph.
 
         if e, _ = Generate(tool, tool.Goals()); e != nil {
                 return

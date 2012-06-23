@@ -39,41 +39,39 @@ func (gcc *gcc) Generate(t *Target) error {
 }
 
 func (gcc *gcc) compile(t *Target) error {
+        cc, args := "cc", []string{ "-o", t.Name, }
+
         dl := len(t.Depends)
         switch (dl) {
         case 0: return NewErrorf("no depends: %v\n", t)
         case 1:
-                cc, d0 := "", t.Depends[0]
+                d0 := t.Depends[0]
                 if s, ok := t.Variables["CC"]; ok && s != "" {
                         cc = s
                 } else {
                         return NewErrorf("unknown file type: %v", d0.Name)
                 }
 
-                args := []string{ "-o", t.Name, }
                 args = append(args, t.JoinAllArgs()...)
+                args = append(args, t.JoinUseesArgs("-I")...)
+                args = append(args, t.JoinParentUseesArgs("-I")...)
                 args = append(args, "-c", d0.Name)
-                return run(cc, args...)
 
         default:
-                var deps []string
+                cc, args = "ld", append(args, "-r")
                 for _, d := range t.Depends {
                         if !strings.HasSuffix(d.Name, ".o") {
                                 return NewErrorf("unexpected file type: %v", d)
                         }
-                        deps = append(deps, d.Name)
+                        args = append(args, d.Name)
                 }
-                return run("ld", append([]string{ "-r", "-o", t.Name, }, deps...)...)
         }
 
-        return nil
+        return run(cc, args...)
 }
 
 func (gcc *gcc) archive(t *Target) error {
-        //fmt.Printf("archive: %v\n", t)
-        
-        ar := "ar"
-        args := []string{ "crs", t.Name, }
+        ar, args := "ar", []string{ "crs", t.Name, }
 
         al := len(args)
         for _, d := range t.Depends {
@@ -110,8 +108,8 @@ func (gcc *gcc) link(t *Target) error {
                 switch d.Type {
                 case ".a": fallthrough
                 case ".so":
-                        args = append(args, d.JoinExports("-L")...)
-                        args = append(args, d.JoinExports("-l")...)
+                        //args = append(args, d.JoinExports("-L")...)
+                        //args = append(args, d.JoinExports("-l")...)
                 case ".o":
                         args = append(args, d.Name)
                 default:
@@ -119,8 +117,12 @@ func (gcc *gcc) link(t *Target) error {
                 }
         }
 
+        args = append(args, t.JoinArgs("-Wl,-rpath=")...)
         args = append(args, t.JoinArgs("-L")...)
         args = append(args, t.JoinArgs("-l")...)
+        args = append(args, t.JoinUseesArgs("-Wl,-rpath=")...)
+        args = append(args, t.JoinUseesArgs("-L")...)
+        args = append(args, t.JoinUseesArgs("-l")...)
 
         if s, ok := t.Variables["LD"]; ok && s != "" {
                 ld = s
@@ -174,12 +176,15 @@ func (coll *gccCollector) AddDir(dir string) (t *Target) {
                 t.Type = ext
 
                 l := len(name) - len(ext)
+                t.AddExports("-I", dir)
                 t.AddExports("-L", dir)
                 t.AddExports("-l", name[3:l])
+                if strings.HasSuffix(dir, ".so") {
+                        rpath := dir //filepath.Join(coll.gcc.top, dir)
+                        t.AddExports("-Wl,-rpath=", rpath)
+                }
 
-                //coll.target.AddArgs("-I", dir)
-
-                //fmt.Printf("TODO: -L%v -l%v\n", dir, name[3:l])
+                coll.target.Use(t)
         }
 
         if t != nil {

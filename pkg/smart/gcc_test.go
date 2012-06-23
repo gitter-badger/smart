@@ -5,6 +5,7 @@ import (
         "fmt"
         "os"
         "os/exec"
+        "regexp"
         "strings"
         "testing"
         //"path/filepath"
@@ -52,13 +53,14 @@ func checkd(t *testing.T, fn string) {
         }
 }
 
-func newGcc() *gcc {
+func newTestGcc() *gcc {
         tool := &gcc{}
         if top, e := os.Getwd(); e != nil {
                 // TODO: error report
         } else {
                 tool.SetTop(top)
         }
+        targets = make(map[string]*Target)
         return tool
 }
 
@@ -66,7 +68,7 @@ func TestBuildSimple(t *testing.T) {
         chdir(t, "+testdata/gcc/simple")
         checkf(t, "simple.c")
 
-        c := newGcc()
+        c := newTestGcc()
         if e := scan(c.NewCollector(nil), c.top, c.top); e != nil {
                 t.Errorf("scan: %v", e)
         }
@@ -137,7 +139,7 @@ func TestBuildCombineObjects(t *testing.T) {
         checkf(t, "sub.o/sub2.c")
         checkf(t, "main.c")
 
-        c := newGcc()
+        c := newTestGcc()
         if e := scan(c.NewCollector(nil), c.top, c.top); e != nil {
                 t.Errorf("scan: %v", e)
         }
@@ -243,10 +245,12 @@ func TestBuildSublibdir(t *testing.T) {
         os.Remove("main.c.o")
         os.Remove("sub_lib_dir")
 
-        c := newGcc()
+        c := newTestGcc()
         if e := scan(c.NewCollector(nil), c.top, c.top); e != nil {
                 t.Errorf("scan: %v", e)
         }
+
+        graph();
 
         if c.target == nil { t.Errorf("no target"); return }
         if c.target.Name != "sub_lib_dir" { t.Errorf("bad target: %s", c.target.Name) }
@@ -264,7 +268,24 @@ func TestBuildSublibdir(t *testing.T) {
         checkf(t, "foo.so/libfoo.so")
 
         out := bytes.NewBuffer(nil)
-        p := exec.Command("./sub_lib_dir")
+        p := exec.Command("ldd", "sub_lib_dir")
+        p.Stdout = out
+        p.Stderr = out
+        if e := p.Run(); e != nil {
+                t.Errorf("ldd: %v", e)
+        } else {
+                re := regexp.MustCompile(`\n\s*(libfoo.so\s*=>\s*([^\s]+))\s*\(`)
+                if s := re.FindStringSubmatch(string(out.Bytes())); s != nil && 3 == len(s) {
+                        if "foo.so/libfoo.so" != s[2] {
+                                t.Errorf("ldd(sub_lib_dir): %v", s[1])
+                        }
+                } else {
+                        t.Errorf("ldd(sub_lib_dir): %v", string(out.Bytes()))
+                }
+        }
+
+        out.Reset()
+        p = exec.Command("./sub_lib_dir")
         p.Stdout = out
         p.Stderr = out
         if e := p.Run(); e != nil {

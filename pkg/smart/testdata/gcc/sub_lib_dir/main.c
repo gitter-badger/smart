@@ -1,4 +1,3 @@
-// #smart use(foo.so, bar.a)
 #include <stdio.h>
 #include <foo.h>
 #include <bar.h>

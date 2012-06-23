@@ -1,4 +1,3 @@
-// #smart combine(sub.o)
 #include <stdio.h>
 extern int sub1();
 extern int sub2();
