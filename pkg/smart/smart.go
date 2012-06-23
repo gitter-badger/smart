@@ -340,15 +340,12 @@ func scan(coll Collector, top, dir string) (e error) {
                         } else {
                                 if fi.IsDir() {
                                         coll.AddDir(dname)
-                                        continue
-                                }
-                        }
-
-                        if s := coll.AddFile(sd, name); s != nil {
-                                s.IsScanned = true
-                                s.Meta = meta(dname)
-                                if s.Meta != nil {
-                                        fmt.Printf("TODO: %s: %v\n", dname, s.Meta)
+                                } else if s := coll.AddFile(sd, name); s != nil {
+                                        s.IsScanned = true
+                                        s.Meta = meta(dname)
+                                        if s.Meta != nil {
+                                                fmt.Printf("TODO: %s: %v\n", dname, s.Meta)
+                                        }
                                 }
                         }
                 }

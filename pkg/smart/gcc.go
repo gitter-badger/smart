@@ -177,7 +177,7 @@ func (coll *gccCollector) AddDir(dir string) (t *Target) {
                 t.AddExports("-L", dir)
                 t.AddExports("-l", name[3:l])
 
-                coll.target.AddArgs("-I", dir)
+                //coll.target.AddArgs("-I", dir)
 
                 //fmt.Printf("TODO: -L%v -l%v\n", dir, name[3:l])
         }
