@@ -4,6 +4,7 @@ import (
         "bufio"
         "fmt"
         "io"
+        "io/ioutil"
         "os"
         "os/exec"
         "path/filepath"
@@ -62,8 +63,10 @@ func init() {
 
 // T maps name to the coresponding target.
 func T(name string) *Target {
-        t, _ := targets[name]
-        return t
+        if t, ok := targets[name]; ok {
+                return t
+        }
+        return nil
 }
 
 type MetaInfo struct {
@@ -88,10 +91,11 @@ type Target struct {
         Depends []*Target
         Usees []*Target
         ParentUsees []*Target
-        IsFile bool
-        IsIntermediate bool
-        IsGoal bool
-        IsScanned bool
+        IsFile bool // file (non-dir) target
+        IsDir bool // directory target
+        IsIntermediate bool // opposite to 'goal'
+        IsGoal bool // final target, opposite to 'intermediate'
+        IsScanned bool // target is made by scan() or find()
         IsDirTarget bool // target is made by AddDir
         IsGenerated bool
         Meta []*MetaInfo
@@ -214,33 +218,34 @@ func (t *Target) AddFile(name string) *Target {
         return f
 }
 
-func (t *Target) AddIntermediate(name string, source *Target) *Target {
+func (t *Target) AddDir(name string) *Target {
+        f := t.Add(name)
+        f.IsDir = true
+        return f
+}
+
+func (t *Target) AddIntermediate(name string, source interface{}) *Target {
         i := t.Add(name)
         i.IsIntermediate = true
-        if source != nil {
-                i.Depends = append(i.Depends, source)
-        }
+        i.Add(source)
         return i
 }
 
 func (t *Target) AddIntermediateFile(name string, source interface{}) *Target {
-        if source == nil {
-                i := t.AddIntermediate(name, nil)
-                i.IsFile = true
-                return i
-        }
+        i := t.AddIntermediate(name, nil)
+        i.IsFile = true
         switch s := source.(type) {
-        case *Target:
-                i := t.AddIntermediate(name, s)
-                i.IsFile = true
-                return i
-        case string:
-                i := t.AddIntermediate(name, nil)
-                i.IsFile = true
-                i.AddFile(s)
-                return i
+        case *Target: i.Add(source)
+        case string: i.AddFile(s)
         }
-        return nil
+        return i
+}
+
+func (t *Target) AddIntermediateDir(name string, source interface{}) *Target {
+        i := t.AddIntermediateFile(name, source)
+        i.IsFile = false
+        i.IsDir = true
+        return i
 }
 
 func New(name string) (t *Target) {
@@ -281,6 +286,24 @@ func NewFileIntermediate(name string) (t *Target) {
         return
 }
 
+func NewDir(name string) (t *Target) {
+        t = New(name)
+        t.IsDir = true
+        return
+}
+
+func NewDirGoal(name string) (t *Target) {
+        t = NewDir(name)
+        t.IsGoal = true
+        return
+}
+
+func NewDirIntermediate(name string) (t *Target) {
+        t = NewDir(name)
+        t.IsIntermediate = true
+        return
+}
+
 type Collector interface {
         AddFile(dir, name string) *Target
         AddDir(dir string) *Target
@@ -309,10 +332,34 @@ func NewErrorf(what string, args ...interface{}) error {
         return &err{ fmt.Sprintf(what, args...) }
 }
 
-func meta(name string) (info []*MetaInfo) {
-        f, e := os.Open(name)
+func readFile(fn string) []byte {
+        if f, e := os.Open(fn); e == nil {
+                defer f.Close()
+                if b, e := ioutil.ReadAll(f); e == nil {
+                        return b
+                }
+        }
+        return nil
+}
+
+func copyFile(s, d string) (err error) {
+        var f1, f2 *os.File
+        if f1, err = os.Open(s); err == nil {
+                defer f1.Close()
+                if f2, err = os.Create(d); err == nil {
+                        defer f2.Close()
+                        if _, err = io.Copy(f2, f1); err != nil {
+                                os.Remove(d)
+                        }
+                }
+        }
+        return
+}
+
+func forEachLine(filename string, fun func(lineno int, line []byte) bool) error {
+        f, e := os.Open(filename)
         if e != nil {
-                return
+                return e
         }
 
         defer f.Close()
@@ -321,18 +368,30 @@ func meta(name string) (info []*MetaInfo) {
         b := bufio.NewReader(f)
 outfor: for {
                 var line []byte
-                for {
+        readfor:for {
                         l, isPrefix, e := b.ReadLine()
-                        if e == io.EOF { break outfor }
-                        if l[0] != '/' { break outfor }
-                        
-                        line = append(line, l...)
-                        if !isPrefix { break }
+                        switch {
+                        case e == io.EOF: break outfor
+                        case e != nil: return e
+                        default:
+                                line = append(line, l...)
+                                if !isPrefix { break readfor }
+                        }
                 }
 
                 lineno += 1
 
-                if !_regComment.Match(line) { break }
+                if !fun(lineno, line) {
+                        break
+                }
+        }
+
+        return nil
+}
+
+func meta(name string) (info []*MetaInfo) {
+        forEachLine(name, func(lineno int, line []byte) bool {
+                if !_regComment.Match(line) { return false }
 
                 if loc := _regMeta.FindIndex(line); loc != nil {
                         line = line[loc[1]:]
@@ -362,7 +421,8 @@ outfor: for {
                                 info = append(info, mi)
                         }
                 }
-        }
+                return true
+        })
         return
 }
 
@@ -432,6 +492,67 @@ func scan(coll Collector, top, dir string) (e error) {
         return
 }
 
+type traverseCallback func(depth int, dname string, fi os.FileInfo) bool
+
+// traverse iterate each name under a directory recursively.
+func traverse(depth int, d string, fun traverseCallback) (err error) {
+        fd, err := os.Open(d)
+        if err != nil {
+                return
+        }
+
+        defer fd.Close()
+
+        var fi os.FileInfo
+readloop:
+        for {
+                names, e := fd.Readdirnames(50)
+                switch {
+                case e == io.EOF: break readloop
+                case e != nil: err = e; break readloop
+                }
+
+        nameloop:
+                for _, name := range names {
+                        dname := filepath.Join(d, name)
+                        if fi, err = os.Stat(dname); err != nil || fi == nil {
+                                return
+                        }
+
+                        if !fun(depth, dname, fi) {
+                                break readloop
+                        }
+
+                        if fi.IsDir() {
+                                if err = traverse(depth+1, dname, fun); err != nil {
+                                        return
+                                }
+                                continue nameloop
+                        }
+                }
+        }
+        return
+}
+
+// find 
+func find(d string, sre string, coll Collector) error {
+        re, e := regexp.Compile(sre)
+        if e != nil {
+                return e
+        }
+        return traverse(0, d, func(depth int, dname string, fi os.FileInfo) bool {
+                if re.MatchString(dname) {
+                        if !fi.IsDir() {
+                                t := coll.AddFile(filepath.Dir(dname), filepath.Base(dname))
+                                if t != nil {
+                                        t.IsScanned = true
+                                }
+                        }
+                }
+                return true
+        })
+}
+
 // graph draws dependency graph of targets.
 func graph() {
         //fmt.Printf("scanned: %v\n", targets)
@@ -474,10 +595,29 @@ func graph() {
 
 // run executes the command specified by cmd with arguments by args.
 func run(cmd string, args ...string) error {
+        return runInDir(cmd, "", args...)
+}
+
+func runInDir(cmd, dir string, args ...string) error {
         fmt.Printf("%s\n", cmd + " " + strings.Join(args, " "))
         p := exec.Command(cmd, args...)
         p.Stdout = os.Stdout
         p.Stderr = os.Stderr
+        if dir != "" { p.Dir = dir }
+        p.Start()
+        return p.Wait()
+}
+
+func run32(cmd string, args ...string) error {
+        return run32InDir(cmd, "", args...)
+}
+
+func run32InDir(cmd, dir string, args ...string) error {
+        args = append([]string{ cmd }, args...)
+        p := exec.Command("linux32", args...)
+        p.Stdout = os.Stdout
+        p.Stderr = os.Stderr
+        if dir != "" { p.Dir = dir }
         p.Start()
         return p.Wait()
 }
@@ -492,33 +632,39 @@ func Generate(tool BuildTool, targets []*Target) (error, []*Target) {
         type meta struct { t *Target; e error }
         ch := make(chan meta)
 
-        g := func(t *Target) {
+        gen := func(t *Target) {
+                //fmt.Printf("gen: %v (%v)\n", t, t.IsGenerated)
+
                 if t.IsGenerated {
                         ch <- meta{ t, nil }
                         return
                 }
 
                 var err error
-                var needGen = true
+                var needGen = false
 
                 if 0 < len(t.Depends) {
                         if e, u := Generate(tool, t.Depends); e == nil {
                                 needGen = needGen || 0 < len(u)
                         } else {
-                                needGen, err = false, e
+                                needGen, err = needGen || false, e
                         }
                 }
 
-                if t.IsFile {
+                if t.IsFile || t.IsDir {
                         switch {
                         case t.IsScanned:
-                                needGen = false
-                        case t.IsIntermediate:
+                                needGen = needGen || false
+                        default:
                                 if _, e := os.Stat(t.Name); e != nil {
-                                        needGen = true
+                                        needGen = needGen || true
+                                } else {
+                                        needGen = needGen || false
                                 }
                         }
                 }
+
+                //fmt.Printf("gen: %v (%v, %v)\n", t, t.IsGenerated, needGen)
 
                 if needGen {
                         if err = tool.Generate(t); err == nil {
@@ -533,7 +679,7 @@ func Generate(tool BuildTool, targets []*Target) (error, []*Target) {
 
         for _, t := range targets {
                 if !t.IsGenerated {
-                        go g(t)
+                        go gen(t)
                 }
         }
 
