@@ -85,7 +85,12 @@ func (sdk *asdk) compileJava(t *Target) error {
 
         os.RemoveAll(t.Name) // clean all in out/classes
         os.MkdirAll(t.Name, 0755) // make empty out/classes
-        return run("javac", args...)
+
+        fmt.Printf("compile -o %v %v\n", t.Name, t.Depends)
+        p := exec.Command("javac", args...)
+        p.Stdout = os.Stdout
+        p.Stderr = os.Stderr
+        return p.Run() //run("javac", args...)
 }
 
 func (sdk *asdk) compileResource(t *Target) error {
@@ -107,7 +112,11 @@ func (sdk *asdk) compileResource(t *Target) error {
         }
 
         // Produces R.java under t.Name
-        return run("aapt", args...)
+        fmt.Printf("compile -o %v assets+resources\n", t)
+        p := exec.Command("aapt", args...)
+        p.Stdout = os.Stdout
+        p.Stderr = os.Stderr
+        return p.Run() //return run("aapt", args...)
 }
 
 func (sdk *asdk) dx(t *Target) error {
@@ -126,7 +135,12 @@ func (sdk *asdk) dx(t *Target) error {
 
         args = append(args, "--dex", "--output="+t.Name)
         args = append(args, classes.Name)
-        return run("dx", args...)
+
+        fmt.Printf("dex -o %v %v\n", t, classes)
+        p := exec.Command("dx", args...)
+        p.Stdout = os.Stdout
+        p.Stderr = os.Stderr
+        return p.Run() //run("dx", args...)
 }
 
 func (sdk *asdk) getKeystore() (keystore, keypass, storepass string) {
@@ -186,12 +200,24 @@ func (sdk *asdk) createEmptyPackage(pkg string) error {
 
         defer os.Remove(dummy)
 
-        if e := runInDir("jar", dir, "cf", name, "dummy"); e != nil {
+        fmt.Printf("pack -o %v <new>\n", pkg)
+        p := exec.Command("jar", "cf", name, "dummy")
+        p.Stdout = os.Stdout
+        p.Stderr = os.Stderr
+        p.Dir = dir
+        if e := p.Run(); e != nil {
                 return e
         }
-        if e := runInDir("zip", dir, "-qd", name, "dummy"); e != nil {
+
+        p = exec.Command("zip", "-qd", name, "dummy")
+        p.Stdout = os.Stdout
+        p.Stderr = os.Stderr
+        p.Dir = dir
+        if e := p.Run(); e != nil {
                 os.Remove(name)
+                return e
         }
+
         return nil
 }
 
@@ -275,12 +301,18 @@ func (sdk *asdk) packUnsigned(t *Target) (e error) {
         //args = append(args, "--min-sdk-version", "7")
         //args = append(args, "--target-sdk-version", "7")
 
-        if e = run("aapt", args...); e != nil {
+        fmt.Printf("pack -o %v assets+resources\n", t)
+        p := exec.Command("aapt", args...)
+        p.Stderr = os.Stderr
+        if e = p.Run(); e != nil {
                 return
         }
 
-        args = []string{ "add", "-k", apkName, dexName, }
-        if e = runInDir("aapt", dexDir, args...); e != nil {
+        fmt.Printf("pack -o %v %v\n", t, dex)
+        p = exec.Command("aapt", "add", "-k", apkName, dexName)
+        p.Stderr = os.Stderr
+        p.Dir = dexDir
+        if e = p.Run(); e != nil {
                 return
         }
 
