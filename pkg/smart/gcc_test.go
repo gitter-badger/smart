@@ -463,37 +463,64 @@ func TestSmartBuild(t *testing.T) {
         checkf(t, "foo.so/oo.so/bar.so/ln.so/ln.h")
         checkf(t, "foo.so/oo.so/bar.so/ln.so/ln.c")
 
-        os.Remove("main.c.o")
-        os.Remove("sub_lib_dirs")
-        os.Remove("foo.so/foo.c.o")
-        os.Remove("foo.so/libfoo.so")
-        os.Remove("foo.so/oo.so/oo.c.o")
-        os.Remove("foo.so/oo.so/liboo.so")
-        os.Remove("foo.so/oo.so/bar.so/bar.c.o")
-        os.Remove("foo.so/oo.so/bar.so/libbar.so")
-        os.Remove("foo.so/oo.so/bar.so/ln.so/ln.c.o")
-        os.Remove("foo.so/oo.so/bar.so/ln.so/libln.so")
+        inters := []string{
+                "main.c.o",
+                "sub_lib_dirs",
+                "foo.so/foo.c.o",
+                "foo.so/libfoo.so",
+                "foo.so/oo.so/oo.c.o",
+                "foo.so/oo.so/liboo.so",
+                "foo.so/oo.so/bar.so/bar.c.o",
+                "foo.so/oo.so/bar.so/libbar.so",
+                "foo.so/oo.so/bar.so/ln.so/ln.c.o",
+                "foo.so/oo.so/bar.so/ln.so/libln.so",
+        }
+
+        removeInters := func() { for _, s := range inters { os.Remove(s) } }
+        removeInters()
 
         c := newTestGcc()
 
         if e := Build(c); e != nil {
-                t.Errorf("scan: %v", e)
+                t.Errorf("build: %v", e)
                 return
         }
+
+        defer removeInters()
 
         if c.target == nil { t.Errorf("no target"); return }
         if c.target.Name != "sub_lib_dirs" { t.Errorf("bad target: %s", c.target.Name) }
 
-        checkf(t, "main.c.o")
-        checkf(t, "sub_lib_dirs")
-        checkf(t, "foo.so/foo.c.o")
-        checkf(t, "foo.so/libfoo.so")
-        checkf(t, "foo.so/oo.so/oo.c.o")
-        checkf(t, "foo.so/oo.so/liboo.so")
-        checkf(t, "foo.so/oo.so/bar.so/bar.c.o")
-        checkf(t, "foo.so/oo.so/bar.so/libbar.so")
-        checkf(t, "foo.so/oo.so/bar.so/ln.so/ln.c.o")
-        checkf(t, "foo.so/oo.so/bar.so/ln.so/libln.so")
+        for _, s := range inters { checkf(t, s) }
+
+        fiinters := make(map[string]os.FileInfo)
+        fisources := make(map[string]os.FileInfo)
+        for _, s := range inters {
+                var fi1, fi2 os.FileInfo
+                if fi, e := os.Stat(s); e != nil {
+                        t.Errorf("stat: %v: %v", s, e)
+                } else {
+                        fiinters[s] = fi
+                        fi1 = fi
+                }
+
+                if !strings.HasSuffix(s, ".c.o") {
+                        continue
+                }
+
+                s = s[0:len(s)-2]
+
+                if fi, e := os.Stat(s); e != nil {
+                        t.Errorf("stat: %v: %v", s, e)
+                } else {
+                        fisources[s] = fi
+                        fi2 = fi
+                }
+
+                if !fi1.ModTime().After(fi2.ModTime()) {
+                        t.Errorf("time: `%v' !after `%v'", fi1.Name(), fi2.Name())
+                }
+        }
 
         out := bytes.NewBuffer(nil)
         p := exec.Command("ldd", "sub_lib_dirs")
@@ -573,14 +600,36 @@ func TestSmartBuild(t *testing.T) {
                 t.Errorf("sub_lib_dirs: %v", string(out.Bytes()))
         }
 
-        os.Remove("main.c.o")
-        os.Remove("sub_lib_dirs")
-        os.Remove("foo.so/foo.c.o")
-        os.Remove("foo.so/libfoo.so")
-        os.Remove("foo.so/oo.so/oo.c.o")
-        os.Remove("foo.so/oo.so/liboo.so")
-        os.Remove("foo.so/oo.so/bar.so/bar.c.o")
-        os.Remove("foo.so/oo.so/bar.so/libbar.so")
-        os.Remove("foo.so/oo.so/bar.so/ln.so/ln.c.o")
-        os.Remove("foo.so/oo.so/bar.so/ln.so/libln.so")
+        //////////////////////////////////////////////////
+        // Try rebuild:
+
+        oldTargets := targets
+        targets = make(map[string]*Target)
+        c.target = nil
+        c.top = ""
+
+        if e := Build(c); e != nil {
+                t.Errorf("rebuild: %v", e)
+                return
+        }
+
+        for k, ta := range targets {
+                if ot, ok := oldTargets[k]; !ok {
+                        t.Errorf("rebuild: mismatched: %v", k)
+                } else if ot.Name != ta.Name {
+                        t.Errorf("rebuild: mismatched: %v != %v", ot, ta)
+                }
+        }
+
+        for _, s := range inters {
+                if fi, e := os.Stat(s); e != nil {
+                        t.Errorf("stat: %v: %v", s, e)
+                } else {
+                        if i, ok := fiinters[s]; !ok {
+                                t.Errorf("FileInfo: %v", s)
+                        } else if i.ModTime() != fi.ModTime() {
+                                t.Errorf("ModTime: mismatched: %v", s)
+                        }
+                }
+        }
 }
