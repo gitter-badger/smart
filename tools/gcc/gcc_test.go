@@ -1,8 +1,10 @@
-package smart
+package smart_gcc
 
 import (
+        "../../pkg/smart"
+        ".."
         "bytes"
-        "fmt"
+        //"fmt"
         "os"
         "os/exec"
         "regexp"
@@ -11,48 +13,6 @@ import (
         //"path/filepath"
 )
 
-func getwd(t *testing.T) string {
-        if s, e := os.Getwd(); e == nil {
-                return s
-        } else {
-                t.Errorf("Getwd: %v", e)
-        }
-        return ""
-}
-
-var topdir string
-var workdir [][]string
-func chdir(t *testing.T, d string) error {
-        if d == "-" && 0 < len(workdir) {
-                a := workdir[len(workdir)-1]
-                d = a[0]
-                fmt.Printf("test: Leaving directory `%s'\n", a[1])
-        } else if strings.HasPrefix(d, "+") {
-                d = d[1:]
-                workdir = append(workdir, []string{ getwd(t), d })
-                fmt.Printf("test: Entering directory `%s'\n", d)
-        }
-        if e := os.Chdir(d); e != nil {
-                t.Errorf("Chdir: %v", e)
-                return e
-        }
-        return nil
-}
-
-func checkf(t *testing.T, fn string) {
-        if fi, e := os.Stat(fn); fi == nil || e != nil {
-                t.Errorf("%v", e)
-        }
-}
-
-func checkd(t *testing.T, fn string) {
-        if fi, e := os.Stat(fn); fi == nil || e != nil {
-                t.Errorf("%v", e)
-        } else if !fi.IsDir() {
-                t.Errorf("NotDir: %v", fi)
-        }
-}
-
 func newTestGcc() *gcc {
         tool := &gcc{}
         if top, e := os.Getwd(); e != nil {
@@ -60,16 +20,16 @@ func newTestGcc() *gcc {
         } else {
                 tool.SetTop(top)
         }
-        targets = make(map[string]*Target)
+        smart.ResetTargets()
         return tool
 }
 
 func TestBuildSimple(t *testing.T) {
-        chdir(t, "+testdata/gcc/simple"); defer chdir(t, "-")
-        checkf(t, "simple.c")
+        tt.Chdir(t, "+testdata/simple"); defer tt.Chdir(t, "-")
+        tt.Checkf(t, "simple.c")
 
         c := newTestGcc()
-        if e := scan(c.NewCollector(nil), c.top, c.top); e != nil {
+        if e := smart.Scan(c.NewCollector(nil), c.top, c.top); e != nil {
                 t.Errorf("scan: %v", e)
         }
 
@@ -106,14 +66,14 @@ func TestBuildSimple(t *testing.T) {
                 }
         }
 
-        if e, _ := Generate(c, c.Goals()); e != nil {
+        if e, _ := smart.Generate(c, c.Goals()); e != nil {
                 t.Errorf("build: %v", e)
                 return
         }
 
-        checkf(t, "say.c.o")
-        checkf(t, "simple.c.o")
-        checkf(t, "simple");
+        tt.Checkf(t, "say.c.o")
+        tt.Checkf(t, "simple.c.o")
+        tt.Checkf(t, "simple");
 
         out := bytes.NewBuffer(nil)
         p := exec.Command("./simple")
@@ -131,14 +91,14 @@ func TestBuildSimple(t *testing.T) {
 }
 
 func TestBuildCombineObjects(t *testing.T) {
-        chdir(t, "+testdata/gcc/combine"); defer chdir(t, "-")
-        checkd(t, "sub.o")
-        checkf(t, "sub.o/sub1.c")
-        checkf(t, "sub.o/sub2.c")
-        checkf(t, "main.c")
+        tt.Chdir(t, "+testdata/combine"); defer tt.Chdir(t, "-")
+        tt.Checkd(t, "sub.o")
+        tt.Checkf(t, "sub.o/sub1.c")
+        tt.Checkf(t, "sub.o/sub2.c")
+        tt.Checkf(t, "main.c")
 
         c := newTestGcc()
-        if e := scan(c.NewCollector(nil), c.top, c.top); e != nil {
+        if e := smart.Scan(c.NewCollector(nil), c.top, c.top); e != nil {
                 t.Errorf("scan: %v", e)
         }
 
@@ -198,16 +158,16 @@ func TestBuildCombineObjects(t *testing.T) {
                 }
         }
 
-        if e, _ := Generate(c, c.Goals()); e != nil {
+        if e, _ := smart.Generate(c, c.Goals()); e != nil {
                 t.Errorf("build: %v", e)
                 return
         }
 
-        checkf(t, "main.c.o")
-        checkf(t, "sub.o/sub1.c.o")
-        checkf(t, "sub.o/sub2.c.o")
-        checkf(t, "sub.o/_.o")
-        checkd(t, "sub.o")
+        tt.Checkf(t, "main.c.o")
+        tt.Checkf(t, "sub.o/sub1.c.o")
+        tt.Checkf(t, "sub.o/sub2.c.o")
+        tt.Checkf(t, "sub.o/_.o")
+        tt.Checkd(t, "sub.o")
 
         out := bytes.NewBuffer(nil)
         p := exec.Command("./combine")
@@ -233,12 +193,12 @@ func lddrx(s string) *regexp.Regexp {
 }
 
 func TestBuildSublibdir(t *testing.T) {
-        chdir(t, "+testdata/gcc/sub_lib_dir"); defer chdir(t, "-")
-        checkf(t, "main.c")
-        checkd(t, "bar.a")
-        checkf(t, "bar.a/bar.c")
-        checkd(t, "foo.so")
-        checkf(t, "foo.so/foo.c")
+        tt.Chdir(t, "+testdata/sub_lib_dir"); defer tt.Chdir(t, "-")
+        tt.Checkf(t, "main.c")
+        tt.Checkd(t, "bar.a")
+        tt.Checkf(t, "bar.a/bar.c")
+        tt.Checkd(t, "foo.so")
+        tt.Checkf(t, "foo.so/foo.c")
 
         os.Remove("bar.a/bar.c.o")
         os.Remove("bar.a/libbar.a")
@@ -248,26 +208,26 @@ func TestBuildSublibdir(t *testing.T) {
         os.Remove("sub_lib_dir")
 
         c := newTestGcc()
-        if e := scan(c.NewCollector(nil), c.top, c.top); e != nil {
+        if e := smart.Scan(c.NewCollector(nil), c.top, c.top); e != nil {
                 t.Errorf("scan: %v", e)
         }
 
-        graph();
+        smart.Graph();
 
         if c.target == nil { t.Errorf("no target"); return }
         if c.target.Name != "sub_lib_dir" { t.Errorf("bad target: %s", c.target.Name) }
 
-        if e, _ := Generate(c, c.Goals()); e != nil {
+        if e, _ := smart.Generate(c, c.Goals()); e != nil {
                 t.Errorf("build: %v", e)
                 return
         }
 
-        checkf(t, "sub_lib_dir")
-        checkf(t, "main.c.o")
-        checkf(t, "bar.a/bar.c.o")
-        checkf(t, "bar.a/libbar.a")
-        checkf(t, "foo.so/foo.c.o")
-        checkf(t, "foo.so/libfoo.so")
+        tt.Checkf(t, "sub_lib_dir")
+        tt.Checkf(t, "main.c.o")
+        tt.Checkf(t, "bar.a/bar.c.o")
+        tt.Checkf(t, "bar.a/libbar.a")
+        tt.Checkf(t, "foo.so/foo.c.o")
+        tt.Checkf(t, "foo.so/libfoo.so")
 
         out := bytes.NewBuffer(nil)
         p := exec.Command("ldd", "sub_lib_dir")
@@ -305,20 +265,20 @@ func TestBuildSublibdir(t *testing.T) {
 }
 
 func TestBuildSublibdirs(t *testing.T) {
-        chdir(t, "+testdata/gcc/sub_lib_dirs"); defer chdir(t, "-")
-        checkf(t, "main.c")
-        checkd(t, "foo.so")
-        checkf(t, "foo.so/foo.h")
-        checkf(t, "foo.so/foo.c")
-        checkd(t, "foo.so/oo.so")
-        checkf(t, "foo.so/oo.so/oo.h")
-        checkf(t, "foo.so/oo.so/oo.c")
-        checkd(t, "foo.so/oo.so/bar.so")
-        checkf(t, "foo.so/oo.so/bar.so/bar.h")
-        checkf(t, "foo.so/oo.so/bar.so/bar.c")
-        checkd(t, "foo.so/oo.so/bar.so/ln.so")
-        checkf(t, "foo.so/oo.so/bar.so/ln.so/ln.h")
-        checkf(t, "foo.so/oo.so/bar.so/ln.so/ln.c")
+        tt.Chdir(t, "+testdata/sub_lib_dirs"); defer tt.Chdir(t, "-")
+        tt.Checkf(t, "main.c")
+        tt.Checkd(t, "foo.so")
+        tt.Checkf(t, "foo.so/foo.h")
+        tt.Checkf(t, "foo.so/foo.c")
+        tt.Checkd(t, "foo.so/oo.so")
+        tt.Checkf(t, "foo.so/oo.so/oo.h")
+        tt.Checkf(t, "foo.so/oo.so/oo.c")
+        tt.Checkd(t, "foo.so/oo.so/bar.so")
+        tt.Checkf(t, "foo.so/oo.so/bar.so/bar.h")
+        tt.Checkf(t, "foo.so/oo.so/bar.so/bar.c")
+        tt.Checkd(t, "foo.so/oo.so/bar.so/ln.so")
+        tt.Checkf(t, "foo.so/oo.so/bar.so/ln.so/ln.h")
+        tt.Checkf(t, "foo.so/oo.so/bar.so/ln.so/ln.c")
 
         os.Remove("main.c.o")
         os.Remove("sub_lib_dirs")
@@ -332,30 +292,30 @@ func TestBuildSublibdirs(t *testing.T) {
         os.Remove("foo.so/oo.so/bar.so/ln.so/libln.so")
 
         c := newTestGcc()
-        if e := scan(c.NewCollector(nil), c.top, c.top); e != nil {
+        if e := smart.Scan(c.NewCollector(nil), c.top, c.top); e != nil {
                 t.Errorf("scan: %v", e)
         }
 
-        graph();
+        smart.Graph();
 
         if c.target == nil { t.Errorf("no target"); return }
         if c.target.Name != "sub_lib_dirs" { t.Errorf("bad target: %s", c.target.Name) }
 
-        if e, _ := Generate(c, c.Goals()); e != nil {
+        if e, _ := smart.Generate(c, c.Goals()); e != nil {
                 t.Errorf("build: %v", e)
                 return
         }
 
-        checkf(t, "main.c.o")
-        checkf(t, "sub_lib_dirs")
-        checkf(t, "foo.so/foo.c.o")
-        checkf(t, "foo.so/libfoo.so")
-        checkf(t, "foo.so/oo.so/oo.c.o")
-        checkf(t, "foo.so/oo.so/liboo.so")
-        checkf(t, "foo.so/oo.so/bar.so/bar.c.o")
-        checkf(t, "foo.so/oo.so/bar.so/libbar.so")
-        checkf(t, "foo.so/oo.so/bar.so/ln.so/ln.c.o")
-        checkf(t, "foo.so/oo.so/bar.so/ln.so/libln.so")
+        tt.Checkf(t, "main.c.o")
+        tt.Checkf(t, "sub_lib_dirs")
+        tt.Checkf(t, "foo.so/foo.c.o")
+        tt.Checkf(t, "foo.so/libfoo.so")
+        tt.Checkf(t, "foo.so/oo.so/oo.c.o")
+        tt.Checkf(t, "foo.so/oo.so/liboo.so")
+        tt.Checkf(t, "foo.so/oo.so/bar.so/bar.c.o")
+        tt.Checkf(t, "foo.so/oo.so/bar.so/libbar.so")
+        tt.Checkf(t, "foo.so/oo.so/bar.so/ln.so/ln.c.o")
+        tt.Checkf(t, "foo.so/oo.so/bar.so/ln.so/libln.so")
 
         out := bytes.NewBuffer(nil)
         p := exec.Command("ldd", "sub_lib_dirs")
@@ -448,20 +408,20 @@ func TestBuildSublibdirs(t *testing.T) {
 }
 
 func TestSmartBuild(t *testing.T) {
-        chdir(t, "+testdata/gcc/sub_lib_dirs"); defer chdir(t, "-")
-        checkf(t, "main.c")
-        checkd(t, "foo.so")
-        checkf(t, "foo.so/foo.h")
-        checkf(t, "foo.so/foo.c")
-        checkd(t, "foo.so/oo.so")
-        checkf(t, "foo.so/oo.so/oo.h")
-        checkf(t, "foo.so/oo.so/oo.c")
-        checkd(t, "foo.so/oo.so/bar.so")
-        checkf(t, "foo.so/oo.so/bar.so/bar.h")
-        checkf(t, "foo.so/oo.so/bar.so/bar.c")
-        checkd(t, "foo.so/oo.so/bar.so/ln.so")
-        checkf(t, "foo.so/oo.so/bar.so/ln.so/ln.h")
-        checkf(t, "foo.so/oo.so/bar.so/ln.so/ln.c")
+        tt.Chdir(t, "+testdata/sub_lib_dirs"); defer tt.Chdir(t, "-")
+        tt.Checkf(t, "main.c")
+        tt.Checkd(t, "foo.so")
+        tt.Checkf(t, "foo.so/foo.h")
+        tt.Checkf(t, "foo.so/foo.c")
+        tt.Checkd(t, "foo.so/oo.so")
+        tt.Checkf(t, "foo.so/oo.so/oo.h")
+        tt.Checkf(t, "foo.so/oo.so/oo.c")
+        tt.Checkd(t, "foo.so/oo.so/bar.so")
+        tt.Checkf(t, "foo.so/oo.so/bar.so/bar.h")
+        tt.Checkf(t, "foo.so/oo.so/bar.so/bar.c")
+        tt.Checkd(t, "foo.so/oo.so/bar.so/ln.so")
+        tt.Checkf(t, "foo.so/oo.so/bar.so/ln.so/ln.h")
+        tt.Checkf(t, "foo.so/oo.so/bar.so/ln.so/ln.c")
 
         inters := []string{
                 "main.c.o",
@@ -481,7 +441,7 @@ func TestSmartBuild(t *testing.T) {
 
         c := newTestGcc()
 
-        if e := Build(c); e != nil {
+        if e := smart.Build(c); e != nil {
                 t.Errorf("build: %v", e)
                 return
         }
@@ -491,7 +451,7 @@ func TestSmartBuild(t *testing.T) {
         if c.target == nil { t.Errorf("no target"); return }
         if c.target.Name != "sub_lib_dirs" { t.Errorf("bad target: %s", c.target.Name) }
 
-        for _, s := range inters { checkf(t, s) }
+        for _, s := range inters { tt.Checkf(t, s) }
 
         fiinters := make(map[string]os.FileInfo)
         fisources := make(map[string]os.FileInfo)
@@ -603,17 +563,17 @@ func TestSmartBuild(t *testing.T) {
         //////////////////////////////////////////////////
         // Try rebuild:
 
-        oldTargets := targets
-        targets = make(map[string]*Target)
+        oldTargets := smart.All()
+        smart.ResetTargets()
         c.target = nil
         c.top = ""
 
-        if e := Build(c); e != nil {
+        if e := smart.Build(c); e != nil {
                 t.Errorf("rebuild: %v", e)
                 return
         }
 
-        for k, ta := range targets {
+        for k, ta := range smart.All() {
                 if ot, ok := oldTargets[k]; !ok {
                         t.Errorf("rebuild: mismatched: %v", k)
                 } else if ot.Name != ta.Name {

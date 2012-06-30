@@ -61,6 +61,14 @@ func init() {
         }
 }
 
+func ResetTargets() {
+        targets = make(map[string]*Target)
+}
+
+func All() map[string]*Target {
+        return targets
+}
+
 // T maps name to the coresponding target.
 func T(name string) *Target {
         if t, ok := targets[name]; ok {
@@ -332,7 +340,7 @@ func NewErrorf(what string, args ...interface{}) error {
         return &err{ fmt.Sprintf(what, args...) }
 }
 
-func readFile(fn string) []byte {
+func ReadFile(fn string) []byte {
         if f, e := os.Open(fn); e == nil {
                 defer f.Close()
                 if b, e := ioutil.ReadAll(f); e == nil {
@@ -342,7 +350,7 @@ func readFile(fn string) []byte {
         return nil
 }
 
-func copyFile(s, d string) (err error) {
+func CopyFile(s, d string) (err error) {
         var f1, f2 *os.File
         if f1, err = os.Open(s); err == nil {
                 defer f1.Close()
@@ -356,7 +364,7 @@ func copyFile(s, d string) (err error) {
         return
 }
 
-func forEachLine(filename string, fun func(lineno int, line []byte) bool) error {
+func ForEachLine(filename string, fun func(lineno int, line []byte) bool) error {
         f, e := os.Open(filename)
         if e != nil {
                 return e
@@ -390,7 +398,7 @@ outfor: for {
 }
 
 func meta(name string) (info []*MetaInfo) {
-        forEachLine(name, func(lineno int, line []byte) bool {
+        ForEachLine(name, func(lineno int, line []byte) bool {
                 if !_regComment.Match(line) { return false }
 
                 if loc := _regMeta.FindIndex(line); loc != nil {
@@ -428,7 +436,7 @@ func meta(name string) (info []*MetaInfo) {
 
 // scan scans source files under the current working directory and
 // add file names to the specified build tool.
-func scan(coll Collector, top, dir string) (e error) {
+func Scan(coll Collector, top, dir string) (e error) {
         add := func(sd string, names []string) {
                 for _, name := range names {
                         if strings.HasPrefix(name, ".") {
@@ -535,7 +543,7 @@ readloop:
 }
 
 // find 
-func find(d string, sre string, coll Collector) error {
+func Find(d string, sre string, coll Collector) error {
         re, e := regexp.Compile(sre)
         if e != nil {
                 return e
@@ -554,7 +562,7 @@ func find(d string, sre string, coll Collector) error {
 }
 
 // graph draws dependency graph of targets.
-func graph() {
+func Graph() {
         //fmt.Printf("scanned: %v\n", targets)
 
         var dirs []*Target
@@ -594,11 +602,11 @@ func graph() {
 }
 
 // run executes the command specified by cmd with arguments by args.
-func run(cmd string, args ...string) error {
-        return runInDir(cmd, "", args...)
+func Run(cmd string, args ...string) error {
+        return RunInDir(cmd, "", args...)
 }
 
-func runInDir(cmd, dir string, args ...string) error {
+func RunInDir(cmd, dir string, args ...string) error {
         fmt.Printf("%s\n", cmd + " " + strings.Join(args, " "))
         p := exec.Command(cmd, args...)
         p.Stdout = os.Stdout
@@ -608,11 +616,11 @@ func runInDir(cmd, dir string, args ...string) error {
         return p.Wait()
 }
 
-func run32(cmd string, args ...string) error {
-        return run32InDir(cmd, "", args...)
+func Run32(cmd string, args ...string) error {
+        return Run32InDir(cmd, "", args...)
 }
 
-func run32InDir(cmd, dir string, args ...string) error {
+func Run32InDir(cmd, dir string, args ...string) error {
         fmt.Printf("%s\n", filepath.Base(cmd) + " " + strings.Join(args, " "))
         args = append([]string{ cmd }, args...)
         p := exec.Command("linux32", args...)
@@ -707,11 +715,11 @@ func Build(tool BuildTool) (e error) {
 
         tool.SetTop(top)
 
-        if e = scan(tool.NewCollector(nil), top, top); e != nil {
+        if e = Scan(tool.NewCollector(nil), top, top); e != nil {
                 return
         }
 
-        graph() // draw dependency graph.
+        Graph() // draw dependency graph.
 
         if e, _ = Generate(tool, tool.Goals()); e != nil {
                 return

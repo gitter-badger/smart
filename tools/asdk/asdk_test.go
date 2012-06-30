@@ -1,6 +1,8 @@
-package smart
+package smart_asdk
 
 import (
+        "../../pkg/smart"
+        ".."
         "bytes"
         "os"
         "os/exec"
@@ -14,54 +16,54 @@ func newTestAsdk() *asdk {
         } else {
                 tool.SetTop(top)
         }
-        targets = make(map[string]*Target)
+        smart.ResetTargets()
         return tool
 }
 
 func TestBuildAPK(t *testing.T) {
-        chdir(t, "+testdata/asdk/APK"); defer chdir(t, "-")
-        checkf(t, "AndroidManifest.xml")
-        checkd(t, "res")
-        checkd(t, "res/layout")
-        checkf(t, "res/layout/main.xml")
-        checkd(t, "res/values")
-        checkf(t, "res/values/strings.xml")
-        checkd(t, "src")
-        checkd(t, "src/org")
-        checkd(t, "src/org/smart")
-        checkd(t, "src/org/smart/test")
-        checkd(t, "src/org/smart/test/ASDK")
-        checkf(t, "src/org/smart/test/ASDK/Foo.java")
+        tt.Chdir(t, "+testdata/APK"); defer tt.Chdir(t, "-")
+        tt.Checkf(t, "AndroidManifest.xml")
+        tt.Checkd(t, "res")
+        tt.Checkd(t, "res/layout")
+        tt.Checkf(t, "res/layout/main.xml")
+        tt.Checkd(t, "res/values")
+        tt.Checkf(t, "res/values/strings.xml")
+        tt.Checkd(t, "src")
+        tt.Checkd(t, "src/org")
+        tt.Checkd(t, "src/org/smart")
+        tt.Checkd(t, "src/org/smart/test")
+        tt.Checkd(t, "src/org/smart/test/ASDK")
+        tt.Checkf(t, "src/org/smart/test/ASDK/Foo.java")
 
         os.RemoveAll("out")
         os.RemoveAll("org.smart.test.ASDK.apk")
 
         sdk := newTestAsdk()
-        if e := Build(sdk); e != nil {
+        if e := smart.Build(sdk); e != nil {
                 t.Errorf("build: %v", e)
         }
 
-        checkf(t, "org.smart.test.ASDK.apk")
-        checkd(t, "out")
-        checkf(t, "out/_.signed")
-        checkf(t, "out/_.unsigned")
-        checkd(t, "out/classes")
-        checkf(t, "out/classes.dex")
-        checkd(t, "out/classes/org")
-        checkd(t, "out/classes/org/smart")
-        checkd(t, "out/classes/org/smart/test")
-        checkd(t, "out/classes/org/smart/test/ASDK")
-        checkf(t, "out/classes/org/smart/test/ASDK/Foo.class")
-        checkf(t, "out/classes/org/smart/test/ASDK/R.class")
-        checkf(t, "out/classes/org/smart/test/ASDK/R$attr.class")
-        checkf(t, "out/classes/org/smart/test/ASDK/R$layout.class")
-        checkf(t, "out/classes/org/smart/test/ASDK/R$string.class")
-        checkd(t, "out/res")
-        checkd(t, "out/res/org")
-        checkd(t, "out/res/org/smart")
-        checkd(t, "out/res/org/smart/test")
-        checkd(t, "out/res/org/smart/test/ASDK")
-        checkf(t, "out/res/org/smart/test/ASDK/R.java")
+        tt.Checkf(t, "org.smart.test.ASDK.apk")
+        tt.Checkd(t, "out")
+        tt.Checkf(t, "out/_.signed")
+        tt.Checkf(t, "out/_.unsigned")
+        tt.Checkd(t, "out/classes")
+        tt.Checkf(t, "out/classes.dex")
+        tt.Checkd(t, "out/classes/org")
+        tt.Checkd(t, "out/classes/org/smart")
+        tt.Checkd(t, "out/classes/org/smart/test")
+        tt.Checkd(t, "out/classes/org/smart/test/ASDK")
+        tt.Checkf(t, "out/classes/org/smart/test/ASDK/Foo.class")
+        tt.Checkf(t, "out/classes/org/smart/test/ASDK/R.class")
+        tt.Checkf(t, "out/classes/org/smart/test/ASDK/R$attr.class")
+        tt.Checkf(t, "out/classes/org/smart/test/ASDK/R$layout.class")
+        tt.Checkf(t, "out/classes/org/smart/test/ASDK/R$string.class")
+        tt.Checkd(t, "out/res")
+        tt.Checkd(t, "out/res/org")
+        tt.Checkd(t, "out/res/org/smart")
+        tt.Checkd(t, "out/res/org/smart/test")
+        tt.Checkd(t, "out/res/org/smart/test/ASDK")
+        tt.Checkf(t, "out/res/org/smart/test/ASDK/R.java")
 
         v := func(name string) {
                 out := bytes.NewBuffer(nil)
@@ -84,24 +86,24 @@ func TestBuildAPK(t *testing.T) {
 }
 
 func TestBuildUseJAR(t *testing.T) {
-        chdir(t, "+testdata/asdk/use-jar"); defer chdir(t, "-")
-        checkf(t, "AndroidManifest.xml")
-        checkd(t, "res")
-        checkd(t, "res/layout")
-        checkf(t, "res/layout/main.xml")
-        checkd(t, "res/values")
-        checkf(t, "res/values/strings.xml")
-        checkd(t, "src")
-        checkd(t, "src/org")
-        checkd(t, "src/org/smart")
-        checkd(t, "src/org/smart/test")
-        checkf(t, "src/org/smart/test/Foobar.java")
+        tt.Chdir(t, "+testdata/use-jar"); defer tt.Chdir(t, "-")
+        tt.Checkf(t, "AndroidManifest.xml")
+        tt.Checkd(t, "res")
+        tt.Checkd(t, "res/layout")
+        tt.Checkf(t, "res/layout/main.xml")
+        tt.Checkd(t, "res/values")
+        tt.Checkf(t, "res/values/strings.xml")
+        tt.Checkd(t, "src")
+        tt.Checkd(t, "src/org")
+        tt.Checkd(t, "src/org/smart")
+        tt.Checkd(t, "src/org/smart/test")
+        tt.Checkf(t, "src/org/smart/test/Foobar.java")
 
         os.RemoveAll("out")
         os.RemoveAll("org.smart.test.apk")
 
         sdk := newTestAsdk()
-        if e := Build(sdk); e != nil {
+        if e := smart.Build(sdk); e != nil {
                 t.Errorf("build: %v", e)
         }
 }

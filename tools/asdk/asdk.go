@@ -1,6 +1,7 @@
-package smart
+package smart_asdk
 
 import (
+        "../../pkg/smart"
         "bytes"
         "fmt"
         "os"
@@ -32,7 +33,7 @@ func init() {
 
 type asdk struct {
         top, out, outRes, outClasses string
-        target, signed, unsigned, dex, classes *Target
+        target, signed, unsigned, dex, classes *smart.Target
 }
 
 func (sdk *asdk) SetTop(d string) {
@@ -42,18 +43,18 @@ func (sdk *asdk) SetTop(d string) {
         sdk.outClasses = filepath.Join(sdk.out, "classes")
 }
 
-func (sdk *asdk) Goals() (a []*Target) {
+func (sdk *asdk) Goals() (a []*smart.Target) {
         if sdk.target != nil {
-                a = []*Target{ sdk.target }
+                a = []*smart.Target{ sdk.target }
         }
         return
 }
 
-func (sdk *asdk) NewCollector(t *Target) Collector {
+func (sdk *asdk) NewCollector(t *smart.Target) smart.Collector {
         return &asdkCollector{ sdk:sdk, target:t }
 }
 
-func (sdk *asdk) Generate(t *Target) error {
+func (sdk *asdk) Generate(t *smart.Target) error {
         //fmt.Printf("Generate: %v (goal:%v, inter:%v; file:%v, dir:%v)\n", t, t.IsGoal, t.IsIntermediate, t.IsFile, t.IsDir)
 
         // .dex+res --(pack)--> .unsigned --(sign)--> .signed --(align)--> .apk
@@ -70,7 +71,7 @@ func (sdk *asdk) Generate(t *Target) error {
         return nil
 }
 
-func (sdk *asdk) compileJava(t *Target) (e error) {
+func (sdk *asdk) compileJava(t *smart.Target) (e error) {
         //assert(t.IsDir)
 
         classpath := filepath.Join(asdkRoot, "platforms", asdkPlatform, "android.jar")
@@ -101,7 +102,7 @@ func (sdk *asdk) compileJava(t *Target) (e error) {
         return
 }
 
-func (sdk *asdk) compileResource(t *Target) (e error) {
+func (sdk *asdk) compileResource(t *smart.Target) (e error) {
         //assert(t.IsDir)
 
         args := []string{
@@ -127,12 +128,12 @@ func (sdk *asdk) compileResource(t *Target) (e error) {
         return
 }
 
-func (sdk *asdk) dx(t *Target) error {
-        var classes *Target
+func (sdk *asdk) dx(t *smart.Target) error {
+        var classes *smart.Target
         if len(t.Depends) == 1 {
                 classes = t.Depends[0]
         } else {
-                return NewErrorf("expect 1 depend: %v->%v\n", t, t.Depends)
+                return smart.NewErrorf("expect 1 depend: %v->%v\n", t, t.Depends)
         }
 
         var args []string
@@ -156,7 +157,7 @@ func (sdk *asdk) getKeystore() (keystore, keypass, storepass string) {
         defaultPass := "smart.android"
 
         readpass := func(s, sn string) string {
-                b := readFile(filepath.Join(filepath.Dir(s), sn))
+                b := smart.ReadFile(filepath.Join(filepath.Dir(s), sn))
                 if b == nil {
                         return defaultPass
                 }
@@ -226,19 +227,19 @@ func (sdk *asdk) createEmptyPackage(pkg string) error {
         return nil
 }
 
-func (sdk *asdk) sign(t *Target) (e error) {
+func (sdk *asdk) sign(t *smart.Target) (e error) {
         if (1 != len(t.Depends)) {
-                return NewErrorf("expect 1 depend: %v", t.Depends)
+                return smart.NewErrorf("expect 1 depend: %v", t.Depends)
         }
 
         unsigned := t.Depends[0]
 
         keystore, keypass, storepass := sdk.getKeystore()
         if keystore == "" || keypass == "" || storepass == "" {
-                //return NewErrorf("no available keystore")
+                //return smart.NewErrorf("no available keystore")
         }
 
-        if e = copyFile(unsigned.Name, t.Name); e != nil {
+        if e = smart.CopyFile(unsigned.Name, t.Name); e != nil {
                 return
         }
 
@@ -262,9 +263,9 @@ func (sdk *asdk) sign(t *Target) (e error) {
         return p.Run()
 }
 
-func (sdk *asdk) align(t *Target) (e error) {
+func (sdk *asdk) align(t *smart.Target) (e error) {
         if (1 != len(t.Depends)) {
-                return NewErrorf("expect 1 depend: %v", t.Depends)
+                return smart.NewErrorf("expect 1 depend: %v", t.Depends)
         }
 
         signed := t.Depends[0]
@@ -278,9 +279,9 @@ func (sdk *asdk) align(t *Target) (e error) {
         return p.Run() //run32(zipalign, args...)
 }
 
-func (sdk *asdk) packUnsigned(t *Target) (e error) {
+func (sdk *asdk) packUnsigned(t *smart.Target) (e error) {
         if len(t.Depends) != 1 {
-                return NewErrorf("expect 1 depends: %v->%v", t, t.Depends)
+                return smart.NewErrorf("expect 1 depends: %v->%v", t, t.Depends)
         }
 
         if e = sdk.createEmptyPackage(t.Name); e != nil {
@@ -326,7 +327,7 @@ func (sdk *asdk) packUnsigned(t *Target) (e error) {
         return
 }
 
-func (sdk *asdk) packJar(t *Target) (e error) {
+func (sdk *asdk) packJar(t *smart.Target) (e error) {
         fmt.Printf("TODO: packJar: %v\n", t)
 
         os.RemoveAll(t.Name) // clean all in out/classes
@@ -379,12 +380,12 @@ func (sdk *asdk) packJar(t *Target) (e error) {
 
 type asdkCollector struct {
         sdk *asdk
-        target, signed, unsigned, dex, classes *Target
+        target, signed, unsigned, dex, classes *smart.Target
 }
 
 func (coll *asdkCollector) extractPackageName(am string) (pkg string, tagline int) {
         tagline = -1
-        forEachLine(am, func(lineno int, line []byte) bool {
+        smart.ForEachLine(am, func(lineno int, line []byte) bool {
                 if _regAsdkAMTag.Match(line) {
                         tagline = lineno
                         return true
@@ -477,18 +478,18 @@ func (coll *asdkCollector) extractStaticLibsClasses(outclasses string, libs []st
         return
 }
 
-func (coll *asdkCollector) AddDir(dir string) (t *Target) {
+func (coll *asdkCollector) AddDir(dir string) (t *smart.Target) {
         //fmt.Printf("%v\n", dir)
 
         switch dir {
         case "out": return nil
         case "src":
-                find(dir, `^.*?\.java$`, coll)
+                smart.Find(dir, `^.*?\.java$`, coll)
         case "res": fallthrough
         case "assets":
-                res := T(coll.sdk.outRes)
+                res := smart.T(coll.sdk.outRes)
                 if res == nil {
-                        res = NewDirIntermediate(coll.sdk.outRes)
+                        res = smart.NewDirIntermediate(coll.sdk.outRes)
                 }
 
                 t = res.AddDir(dir)
@@ -522,7 +523,7 @@ func (coll *asdkCollector) AddDir(dir string) (t *Target) {
                         //fmt.Printf("AddDir: %v -> %v (%v:%v)\n", dir, t, unsigned, unsigned.Depends)
 
                         if t != nil {
-                                scan(coll.sdk.NewCollector(t), coll.sdk.top, dir)
+                                smart.Scan(coll.sdk.NewCollector(t), coll.sdk.top, dir)
                         }
                 }
         }
@@ -530,14 +531,14 @@ func (coll *asdkCollector) AddDir(dir string) (t *Target) {
         return
 }
 
-func (coll *asdkCollector) AddFile(dir, name string) (t *Target) {
+func (coll *asdkCollector) AddFile(dir, name string) (t *smart.Target) {
         dname := filepath.Join(dir, name)
         //fmt.Printf("file: %v\n", dname)
 
         if coll.target == nil && dir == "" && name == "AndroidManifest.xml" {
                 pkg, tagline := coll.extractPackageName(name)
                 if 0 < tagline && pkg != "" {
-                        coll.target = NewFileGoal(pkg + ".apk")
+                        coll.target = smart.NewFileGoal(pkg + ".apk")
                         coll.target.Variables["package"] = pkg
                         coll.signed = coll.target.AddIntermediateFile(filepath.Join(coll.sdk.out, "_.signed"), nil)
                         coll.unsigned = coll.signed.AddIntermediateFile(filepath.Join(coll.sdk.out, "_.unsigned"), nil)

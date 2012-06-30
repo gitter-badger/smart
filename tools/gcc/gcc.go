@@ -1,6 +1,7 @@
-package smart
+package smart_gcc
 
 import (
+        "../../pkg/smart"
         "fmt"
         "os"
         "path/filepath"
@@ -13,22 +14,22 @@ func init() {
 
 type gcc struct {
         top string
-        target *Target
+        target *smart.Target
 }
 
 func (gcc *gcc) SetTop(top string) {
         gcc.top = top
 }
 
-func (gcc *gcc) Goals() []*Target {
-        return []*Target{ gcc.target }
+func (gcc *gcc) Goals() []*smart.Target {
+        return []*smart.Target{ gcc.target }
 }
 
-func (gcc *gcc) NewCollector(t *Target) Collector {
+func (gcc *gcc) NewCollector(t *smart.Target) smart.Collector {
         return &gccCollector{ gcc, t }
 }
 
-func (gcc *gcc) Generate(t *Target) error {
+func (gcc *gcc) Generate(t *smart.Target) error {
         switch {
         case strings.HasSuffix(t.Name, ".o"):
                 return gcc.compile(t)
@@ -38,18 +39,18 @@ func (gcc *gcc) Generate(t *Target) error {
         return gcc.link(t)
 }
 
-func (gcc *gcc) compile(t *Target) error {
+func (gcc *gcc) compile(t *smart.Target) error {
         cc, args := "cc", []string{ "-o", t.Name, }
 
         dl := len(t.Depends)
         switch (dl) {
-        case 0: return NewErrorf("no depends: %v\n", t)
+        case 0: return smart.NewErrorf("no depends: %v\n", t)
         case 1:
                 d0 := t.Depends[0]
                 if s, ok := t.Variables["CC"]; ok && s != "" {
                         cc = s
                 } else {
-                        return NewErrorf("unknown file type: %v", d0.Name)
+                        return smart.NewErrorf("unknown file type: %v", d0.Name)
                 }
 
                 args = append(args, t.JoinAllArgs()...)
@@ -61,16 +62,16 @@ func (gcc *gcc) compile(t *Target) error {
                 cc, args = "ld", append(args, "-r")
                 for _, d := range t.Depends {
                         if !strings.HasSuffix(d.Name, ".o") {
-                                return NewErrorf("unexpected file type: %v", d)
+                                return smart.NewErrorf("unexpected file type: %v", d)
                         }
                         args = append(args, d.Name)
                 }
         }
 
-        return run(cc, args...)
+        return smart.Run(cc, args...)
 }
 
-func (gcc *gcc) archive(t *Target) error {
+func (gcc *gcc) archive(t *smart.Target) error {
         ar, args := "ar", []string{ "crs", t.Name, }
 
         al := len(args)
@@ -84,17 +85,17 @@ func (gcc *gcc) archive(t *Target) error {
         }
 
         if len(args) - al <= 0 {
-                return NewErrorf("no objects for archive: %v", t)
+                return smart.NewErrorf("no objects for archive: %v", t)
         }
 
         if s, ok := t.Variables["AR"]; ok && s != "" {
                 ar = s
         }
 
-        return run(ar, args...)
+        return smart.Run(ar, args...)
 }
 
-func (gcc *gcc) link(t *Target) error {
+func (gcc *gcc) link(t *smart.Target) error {
         //fmt.Printf("link: %v\n", t)
 
         ld := "ld" // the default linker is 'ld'
@@ -128,12 +129,12 @@ func (gcc *gcc) link(t *Target) error {
                 ld = s
         }
 
-        return run(ld, args...)
+        return smart.Run(ld, args...)
 }
 
 type gccCollector struct {
         gcc *gcc
-        target *Target
+        target *smart.Target
 }
 
 func (coll *gccCollector) ensureTarget(dir string) bool {
@@ -145,7 +146,7 @@ func (coll *gccCollector) ensureTarget(dir string) bool {
                         name = filepath.Base(dir)
                 }
 
-                coll.target = NewFileGoal(name)
+                coll.target = smart.NewFileGoal(name)
 
                 if coll.gcc.target == nil {
                         coll.gcc.target = coll.target
@@ -154,7 +155,7 @@ func (coll *gccCollector) ensureTarget(dir string) bool {
         return coll.target != nil
 }
 
-func (coll *gccCollector) AddDir(dir string) (t *Target) {
+func (coll *gccCollector) AddDir(dir string) (t *smart.Target) {
         if !coll.ensureTarget("") {
                 fmt.Fprintf(os.Stderr, "no goal in %v\n", dir)
                 return nil
@@ -162,7 +163,7 @@ func (coll *gccCollector) AddDir(dir string) (t *Target) {
 
         switch {
         case strings.HasSuffix(dir, ".o"):
-                t = NewFileGoal(filepath.Join(dir, "_.o"))
+                t = smart.NewFileGoal(filepath.Join(dir, "_.o"))
                 t.Type = ".o"
         case strings.HasSuffix(dir, ".a"): fallthrough
         case strings.HasSuffix(dir, ".so"):
@@ -172,7 +173,7 @@ func (coll *gccCollector) AddDir(dir string) (t *Target) {
                         name = "lib"+name
                 }
 
-                t = NewFileGoal(filepath.Join(dir, name))
+                t = smart.NewFileGoal(filepath.Join(dir, name))
                 t.Type = ext
 
                 l := len(name) - len(ext)
@@ -188,7 +189,7 @@ func (coll *gccCollector) AddDir(dir string) (t *Target) {
         }
 
         if t != nil {
-                scan(coll.gcc.NewCollector(t), coll.gcc.top, dir)
+                smart.Scan(coll.gcc.NewCollector(t), coll.gcc.top, dir)
                 //fmt.Printf("scan: %v %v\n", dir, t.Depends)
 
                 coll.target.Add(t)
@@ -197,7 +198,7 @@ func (coll *gccCollector) AddDir(dir string) (t *Target) {
         return t
 }
 
-func (coll *gccCollector) AddFile(dir, name string) *Target {
+func (coll *gccCollector) AddFile(dir, name string) *smart.Target {
         if !coll.ensureTarget(dir) {
                 fmt.Fprintf(os.Stderr, "no goal in %v\n", dir)
                 return nil
