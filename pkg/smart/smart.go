@@ -613,6 +613,7 @@ func run32(cmd string, args ...string) error {
 }
 
 func run32InDir(cmd, dir string, args ...string) error {
+        fmt.Printf("%s\n", filepath.Base(cmd) + " " + strings.Join(args, " "))
         args = append([]string{ cmd }, args...)
         p := exec.Command("linux32", args...)
         p.Stdout = os.Stdout

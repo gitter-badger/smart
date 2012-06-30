@@ -43,8 +43,8 @@ func TestBuildAPK(t *testing.T) {
 
         checkf(t, "org.smart.test.ASDK.apk")
         checkd(t, "out")
-        checkf(t, "out/_.apk.signed")
-        checkf(t, "out/_.apk.unsigned")
+        checkf(t, "out/_.signed")
+        checkf(t, "out/_.unsigned")
         checkd(t, "out/classes")
         checkf(t, "out/classes.dex")
         checkd(t, "out/classes/org")
@@ -77,11 +77,31 @@ func TestBuildAPK(t *testing.T) {
                 }
         }
         v("org.smart.test.ASDK.apk")
-        v("out/_.apk.signed")
+        v("out/_.signed")
 
         os.RemoveAll("out")
         os.RemoveAll("org.smart.test.ASDK.apk")
 }
 
 func TestBuildUseJAR(t *testing.T) {
+        chdir(t, "+testdata/asdk/use-jar"); defer chdir(t, "-")
+        checkf(t, "AndroidManifest.xml")
+        checkd(t, "res")
+        checkd(t, "res/layout")
+        checkf(t, "res/layout/main.xml")
+        checkd(t, "res/values")
+        checkf(t, "res/values/strings.xml")
+        checkd(t, "src")
+        checkd(t, "src/org")
+        checkd(t, "src/org/smart")
+        checkd(t, "src/org/smart/test")
+        checkf(t, "src/org/smart/test/Foobar.java")
+
+        os.RemoveAll("out")
+        os.RemoveAll("org.smart.test.apk")
+
+        sdk := newTestAsdk()
+        if e := Build(sdk); e != nil {
+                t.Errorf("build: %v", e)
+        }
 }
