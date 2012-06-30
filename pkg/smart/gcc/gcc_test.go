@@ -1,8 +1,8 @@
 package smart_gcc
 
 import (
-        "../../pkg/smart"
         ".."
+        "../t"
         "bytes"
         //"fmt"
         "os"

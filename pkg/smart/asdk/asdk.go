@@ -1,7 +1,7 @@
 package smart_asdk
 
 import (
-        "../../pkg/smart"
+        ".."
         "bytes"
         "fmt"
         "os"

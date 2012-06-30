@@ -1,7 +1,7 @@
 package smart_gcc
 
 import (
-        "../../pkg/smart"
+        ".."
         "fmt"
         "os"
         "path/filepath"
