@@ -99,11 +99,45 @@ func TestBuildUseJAR(t *testing.T) {
         tt.Checkd(t, "src/org/smart/test")
         tt.Checkf(t, "src/org/smart/test/Foobar.java")
 
-        os.RemoveAll("out")
-        os.RemoveAll("org.smart.test.apk")
+        removeOut := func() {
+                os.RemoveAll("out")
+                os.RemoveAll("org.smart.test.apk")
+        }
+
+        defer removeOut()
 
         sdk := newTestAsdk()
+
+        removeOut()
+
         if e := smart.Build(sdk); e != nil {
                 t.Errorf("build: %v", e)
         }
+
+        tt.Checkd(t, "out")
+        tt.Checkf(t, "out/_.signed")
+        tt.Checkf(t, "out/_.unsigned")
+        tt.Checkd(t, "out/classes")
+        tt.Checkf(t, "out/classes.dex")
+        tt.Checkd(t, "out/res")
+        tt.Checkd(t, "out/foo.jar")
+        tt.Checkf(t, "out/foo.jar/_.jar")
+        tt.Checkd(t, "out/foo.jar/classes")
+        tt.Checkd(t, "out/foo.jar/classes/org")
+        tt.Checkd(t, "out/foo.jar/classes/org/smart")
+        tt.Checkd(t, "out/foo.jar/classes/org/smart/test")
+        tt.Checkd(t, "out/foo.jar/classes/org/smart/test/foo")
+        tt.Checkf(t, "out/foo.jar/classes/org/smart/test/foo/Bar.class")
+        tt.Checkf(t, "out/foo.jar/classes/org/smart/test/foo/Foo.class")
+        tt.Checkf(t, "out/foo.jar/classes/org/smart/test/foo/R.class")
+        tt.Checkf(t, "out/foo.jar/classes/org/smart/test/foo/R$attr.class")
+        tt.Checkf(t, "out/foo.jar/classes/org/smart/test/foo/R$id.class")
+        tt.Checkf(t, "out/foo.jar/classes/org/smart/test/foo/R$layout.class")
+        tt.Checkf(t, "out/foo.jar/classes/org/smart/test/foo/R$string.class")
+        tt.Checkd(t, "out/foo.jar/res")
+        tt.Checkd(t, "out/foo.jar/res/org")
+        tt.Checkd(t, "out/foo.jar/res/org/smart")
+        tt.Checkd(t, "out/foo.jar/res/org/smart/test")
+        tt.Checkd(t, "out/foo.jar/res/org/smart/test/foo")
+        tt.Checkf(t, "out/foo.jar/res/org/smart/test/foo/R.java")
 }

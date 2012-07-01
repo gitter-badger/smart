@@ -52,6 +52,10 @@ var _regArg = regexp.MustCompile(`\s*(([^,"]|"(\\"|[^"])")*)(,|\s*$)`)
 var targets map[string]*Target
 var actions map[string]Action
 
+const (
+        Separator = string(filepath.Separator)
+)
+
 func init() {
         targets = make(map[string]*Target)
         actions = map[string]Action {
@@ -332,30 +336,36 @@ func (e *err) Error() string {
         return e.what
 }
 
+// NewError makes a new error object.
 func NewError(what string) error {
         return &err{ what }
 }
 
+// NewErrorf makes a new error object.
 func NewErrorf(what string, args ...interface{}) error {
         return &err{ fmt.Sprintf(what, args...) }
 }
 
+// Info reports an informative message.
 func Info(f string, a ...interface{}) {
         f = strings.TrimRight(f, " \t\n") + "\n"
         fmt.Fprintf(os.Stdout, f, a...)
 }
 
+// Warn reports a warning message.
 func Warn(f string, a ...interface{}) {
         f = "warn: " + strings.TrimRight(f, " \t\n") + "\n"
         fmt.Fprintf(os.Stderr, f, a...)
 }
 
+// Fatal reports a fatal error and quit all.
 func Fatal(f string, a ...interface{}) {
         f = strings.TrimRight(f, " \t\n") + "\n"
         fmt.Fprintf(os.Stderr, f, a...)
         os.Exit(-1)
 }
 
+// IsFile checks if the name on a filesystem is a file.
 func IsFile(name string) bool {
         if fi, e := os.Stat(name); e == nil && fi != nil {
                 return fi.Mode() & os.ModeType == 0
@@ -363,6 +373,7 @@ func IsFile(name string) bool {
         return false
 }
 
+// IsDir checks if the name on a filesystem is a directory.
 func IsDir(name string) bool {
         if fi, e := os.Stat(name); e == nil && fi != nil {
                 return fi.IsDir()
@@ -370,6 +381,7 @@ func IsDir(name string) bool {
         return false
 }
 
+// ReadFile reads a file lay in the filesystem.
 func ReadFile(fn string) []byte {
         if f, e := os.Open(fn); e == nil {
                 defer f.Close()
@@ -380,6 +392,7 @@ func ReadFile(fn string) []byte {
         return nil
 }
 
+// Copy copies a file lay in the filesystem.
 func CopyFile(s, d string) (err error) {
         var f1, f2 *os.File
         if f1, err = os.Open(s); err == nil {
@@ -394,6 +407,7 @@ func CopyFile(s, d string) (err error) {
         return
 }
 
+// ForEachLine iterates the file content line by line.
 func ForEachLine(filename string, fun func(lineno int, line []byte) bool) error {
         f, e := os.Open(filename)
         if e != nil {
@@ -676,8 +690,6 @@ func Generate(tool BuildTool, targets []*Target) (error, []*Target) {
         ch := make(chan meta)
 
         gen := func(t *Target) {
-                //fmt.Printf("gen: %v (%v)\n", t, t.IsGenerated)
-
                 if t.IsGenerated {
                         ch <- meta{ t, nil }
                         return

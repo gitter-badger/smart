@@ -144,22 +144,13 @@ func (sdk *asdk) compileResource(t *smart.Target) (e error) {
 
 func (sdk *asdk) compileJava(t *smart.Target) (e error) {
         classpath := filepath.Join(asdkRoot, "platforms", asdkPlatform, "android.jar")
-        //if 0 < len(sdk.classpath) {
-        //        classpath += ":" + strings.Join(sdk.classpath, ":")
-        //}
-        classpath += ":out/foo.jar/classes"
-
-        args := []string {
-                "-d", t.Name, // should be out/classes
-                //"-sourcepath", filepath.Join(sdk.top, "src"),
-                "-cp", classpath,
-        }
 
         var sources []string
         for _, d := range t.Depends {
                 ext := filepath.Ext(d.Name)
                 switch {
                 case ext == ".java": sources = append(sources, d.Name)
+                case ext == ".jar": classpath += ":" + d.Name
                 default: smart.Warn("ignored: %v", d)
                 }
         }
@@ -180,13 +171,18 @@ func (sdk *asdk) compileJava(t *smart.Target) (e error) {
                 }
         }()
 
+        args := []string {
+                "-d", t.Name, // should be out/classes
+                //"-sourcepath", filepath.Join(sdk.top, "src"),
+                "-cp", classpath,
+        }
+        args = append(args, sources...)
+
         if true {
                 smart.Info("compile -o %v %v", t.Name, strings.Join(sources, " "))
         } else {
                 smart.Info("javac %v", strings.Join(args, " "))
         }
-
-        args = append(args, sources...)
 
         p := smart.Command("javac", args...)
         e = p.Run() //run("javac", args...)
@@ -410,6 +406,14 @@ func (sdk *asdk) packJar(t *smart.Target) (e error) {
                 smart.Fatal("no top variable in %v", t)
         }
 
+        var classes *smart.Target
+        sep := string(filepath.Separator)
+        for _, d := range t.Depends {
+                if strings.HasPrefix(d.Name, "out"+sep) && strings.HasSuffix(d.Name, sep+"classes") {
+                        classes = d; break
+                }
+        }
+
         os.RemoveAll(t.Name) // clean all in out/classes
         if e = os.MkdirAll(filepath.Dir(t.Name), 0755); e != nil { // make empty out dir
                 return e
@@ -430,11 +434,7 @@ func (sdk *asdk) packJar(t *smart.Target) (e error) {
                         "-I", filepath.Join(asdkRoot, "platforms", asdkPlatform, "android.jar"),
                 }
 
-                var sources []string
-                if s := filepath.Join(top, "AndroidManifest.xml"); smart.IsFile(s) {
-                        args = append(args, "-M", s)
-                        sources = append(sources, s)
-                }
+                sources := []string{ am }
                 if s := filepath.Join(top, "res"); smart.IsDir(s) {
                         args = append(args, "-S", s)
                         sources = append(sources, s)
@@ -461,9 +461,9 @@ func (sdk *asdk) packJar(t *smart.Target) (e error) {
                 args = []string{ "-uf" }
         }
 
-        smart.Info("pack -o %v %v", t, sdk.proj.classes)
+        smart.Info("pack -o %v %v", t, classes)
 
-        args = append(args, t.Name, "-C", sdk.proj.classes.Name, ".")
+        args = append(args, t.Name, "-C", classes.Name, ".")
         p := smart.Command("jar", args...)
         if e = p.Run(); e != nil {
                 return
@@ -679,18 +679,24 @@ func (coll *asdkCollector) addResDir(dir string) (t *smart.Target) {
 }
 
 func (coll *asdkCollector) addJarDir(dir string) (t *smart.Target) {
-        if coll.proj.unsigned == nil {
-                smart.Fatal("no unsigned for %v", dir)
+        if coll.proj.classes == nil {
+                smart.Fatal("no class output for %v", dir)
         }
         
         name := filepath.Join(coll.sdk.out, dir, "_.jar")
-        t = coll.proj.unsigned.AddIntermediateFile(name, dir)
+        t = coll.proj.classes.AddIntermediateFile(name, dir)
+
+        /*
+        if s, ok := coll.proj.unsigned.Variables["classpath"]; !ok {
+                coll.proj.classes.Variables["classpath"] = name
+        } else {
+                coll.proj.classes.Variables["classpath"] = s + ":" + name
+        }
+        */
 
         jarColl := coll.sdk.NewCollector(t).(*asdkCollector)
         jarColl.makeTargets(dir)
         smart.Scan(jarColl, coll.sdk.top, dir)
-        
-        //fmt.Printf("AddJarDir: %v -> %v:%v (%v:%v)\n", dir, t, t.Depends, unsigned, unsigned.Depends)
         return
 }
 
