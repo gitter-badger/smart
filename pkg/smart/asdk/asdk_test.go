@@ -1,7 +1,7 @@
-package smart_asdk
+package asdk
 
 import (
-        ".."
+        ".." // smart
         "../t"
         "bytes"
         "os"
@@ -10,7 +10,7 @@ import (
 )
 
 func newTestAsdk() *asdk {
-        tool := &asdk{}
+        tool := New()
         if top, e := os.Getwd(); e != nil {
                 // TODO: error report
         } else {

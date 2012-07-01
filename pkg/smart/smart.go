@@ -340,6 +340,36 @@ func NewErrorf(what string, args ...interface{}) error {
         return &err{ fmt.Sprintf(what, args...) }
 }
 
+func Info(f string, a ...interface{}) {
+        f = strings.TrimRight(f, " \t\n") + "\n"
+        fmt.Fprintf(os.Stdout, f, a...)
+}
+
+func Warn(f string, a ...interface{}) {
+        f = "warn: " + strings.TrimRight(f, " \t\n") + "\n"
+        fmt.Fprintf(os.Stderr, f, a...)
+}
+
+func Fatal(f string, a ...interface{}) {
+        f = strings.TrimRight(f, " \t\n") + "\n"
+        fmt.Fprintf(os.Stderr, f, a...)
+        os.Exit(-1)
+}
+
+func IsFile(name string) bool {
+        if fi, e := os.Stat(name); e == nil && fi != nil {
+                return fi.Mode() & os.ModeType == 0
+        }
+        return false
+}
+
+func IsDir(name string) bool {
+        if fi, e := os.Stat(name); e == nil && fi != nil {
+                return fi.IsDir()
+        }
+        return false
+}
+
 func ReadFile(fn string) []byte {
         if f, e := os.Open(fn); e == nil {
                 defer f.Close()
@@ -601,16 +631,22 @@ func Graph() {
         apply(goals)
 }
 
-// run executes the command specified by cmd with arguments by args.
+// 
+func Command(name string, args ...string) *exec.Cmd {
+        p := exec.Command(name, args...)
+        p.Stdout = os.Stdout
+        p.Stderr = os.Stderr
+        return p
+}
+
+// Run executes the command specified by cmd with arguments by args.
 func Run(cmd string, args ...string) error {
         return RunInDir(cmd, "", args...)
 }
 
 func RunInDir(cmd, dir string, args ...string) error {
         fmt.Printf("%s\n", cmd + " " + strings.Join(args, " "))
-        p := exec.Command(cmd, args...)
-        p.Stdout = os.Stdout
-        p.Stderr = os.Stderr
+        p := Command(cmd, args...)
         if dir != "" { p.Dir = dir }
         p.Start()
         return p.Wait()
@@ -623,9 +659,7 @@ func Run32(cmd string, args ...string) error {
 func Run32InDir(cmd, dir string, args ...string) error {
         fmt.Printf("%s\n", filepath.Base(cmd) + " " + strings.Join(args, " "))
         args = append([]string{ cmd }, args...)
-        p := exec.Command("linux32", args...)
-        p.Stdout = os.Stdout
-        p.Stderr = os.Stderr
+        p := Command("linux32", args...)
         if dir != "" { p.Dir = dir }
         p.Start()
         return p.Wait()
@@ -698,7 +732,7 @@ func Generate(tool BuildTool, targets []*Target) (error, []*Target) {
                 if m := <-ch; m.e == nil {
                         updated = append(updated, m.t)
                 } else {
-                        fmt.Printf("%v\n", m.e)
+                        Fatal("error: %v\n", m.e)
                 }
         }
 
