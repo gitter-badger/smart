@@ -65,10 +65,12 @@ func init() {
         }
 }
 
+// ResetTargets reset the target map.
 func ResetTargets() {
         targets = make(map[string]*Target)
 }
 
+// All returns all the targets.
 func All() map[string]*Target {
         return targets
 }
