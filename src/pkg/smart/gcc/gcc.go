@@ -146,7 +146,7 @@ func (coll *gccCollector) ensureTarget(dir string) bool {
                         name = filepath.Base(dir)
                 }
 
-                coll.target = smart.NewFileGoal(name)
+                coll.target = smart.New(name, smart.GoalFile)
 
                 if coll.gcc.target == nil {
                         coll.gcc.target = coll.target
@@ -163,7 +163,7 @@ func (coll *gccCollector) AddDir(dir string) (t *smart.Target) {
 
         switch {
         case strings.HasSuffix(dir, ".o"):
-                t = smart.NewFileGoal(filepath.Join(dir, "_.o"))
+                t = smart.New(filepath.Join(dir, "_.o"), smart.GoalFile)
                 t.Type = ".o"
         case strings.HasSuffix(dir, ".a"): fallthrough
         case strings.HasSuffix(dir, ".so"):
@@ -173,7 +173,7 @@ func (coll *gccCollector) AddDir(dir string) (t *smart.Target) {
                         name = "lib"+name
                 }
 
-                t = smart.NewFileGoal(filepath.Join(dir, name))
+                t = smart.New(filepath.Join(dir, name), smart.GoalFile)
                 t.Type = ext
 
                 l := len(name) - len(ext)

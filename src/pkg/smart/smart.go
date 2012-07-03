@@ -99,19 +99,39 @@ type NameValues struct {
         Values []string
 }
 
+type Class int
+
+const (
+        None Class = 0
+
+        File = 1<<1
+        Dir = 1<<2
+
+        Intermediate = 1<<3
+        Goal = 1<<4
+
+        IntermediateFile = Intermediate | File
+        IntermediateDir = Intermediate | Dir
+
+        GoalFile = Goal | File
+        GoalDir = Goal | Dir
+)
+
 type Target struct {
         Type string
         Name string
+
         Depends []*Target
+
         Usees []*Target
         ParentUsees []*Target
-        IsFile bool // file (non-dir) target
-        IsDir bool // directory target
-        IsIntermediate bool // opposite to 'goal'
-        IsGoal bool // final target, opposite to 'intermediate'
+
+        Class Class
+
         IsScanned bool // target is made by scan() or find()
         IsDirTarget bool // target is made by AddDir
         IsGenerated bool
+
         Meta []*MetaInfo
         Args []*NameValues
         Exports []*NameValues
@@ -120,6 +140,22 @@ type Target struct {
 
 func (t *Target) String() string {
         return t.Name
+}
+
+func (t *Target) IsDir() bool {// directory target
+        return t.Class & Dir != 0 //&& !t.IsFile()
+}
+
+func (t *Target) IsFile() bool {// file (non-dir) target
+        return t.Class & File != 0 //&& !t.IsDir()
+}
+
+func (t *Target) IsIntermediate() bool {// opposite to 'goal'
+        return t.Class & Intermediate != 0 //&& !t.IsGoal()
+}
+
+func (t *Target) IsGoal() bool {// final target, opposite to 'intermediate'
+        return t.Class & Goal != 0 //&& !t.IsIntermediate()
 }
 
 func (t *Target) add(l []*NameValues, name string, args ...string) ([]*NameValues, *NameValues) {
@@ -215,7 +251,7 @@ func (t *Target) Add(i interface {}) (f *Target) {
         if i != nil {
                 switch d := i.(type) {
                 case string:
-                        f = New(d)
+                        f = New(d, None)
                 case *Target:
                         f = d
                 }
@@ -228,26 +264,26 @@ func (t *Target) Add(i interface {}) (f *Target) {
 
 func (t *Target) AddFile(name string) *Target {
         f := t.Add(name)
-        f.IsFile = true
+        f.Class |= File
         return f
 }
 
 func (t *Target) AddDir(name string) *Target {
         f := t.Add(name)
-        f.IsDir = true
+        f.Class |= Dir
         return f
 }
 
 func (t *Target) AddIntermediate(name string, source interface{}) *Target {
         i := t.Add(name)
-        i.IsIntermediate = true
+        i.Class |= Intermediate & ^Goal
         i.Add(source)
         return i
 }
 
 func (t *Target) AddIntermediateFile(name string, source interface{}) *Target {
         i := t.AddIntermediate(name, nil)
-        i.IsFile = true
+        i.Class |= File
         switch s := source.(type) {
         case *Target: i.Add(source)
         case string: i.AddFile(s)
@@ -257,66 +293,64 @@ func (t *Target) AddIntermediateFile(name string, source interface{}) *Target {
 
 func (t *Target) AddIntermediateDir(name string, source interface{}) *Target {
         i := t.AddIntermediateFile(name, source)
-        i.IsFile = false
-        i.IsDir = true
+        i.Class |= Dir & ^File
         return i
 }
 
-func New(name string) (t *Target) {
+func New(name string, class Class) (t *Target) {
         t = new(Target)
         t.Name = name
         t.Variables = make(map[string]string)
+        t.Class = class
         targets[name] = t
         return
 }
 
+/*
 func NewIntermediate(name string) (t *Target) {
-        t = New(name)
-        t.IsIntermediate = true
+        t = New(name, Intermediate)
         return
 }
 
 func NewGoal(name string) (t *Target) {
-        t = New(name)
-        t.IsGoal = true
+        t = New(name, Goal)
         return
 }
 
 func NewFile(name string) (t *Target) {
-        t = New(name)
-        t.IsFile = true
+        t = New(name, File)
         return
 }
 
 func NewFileGoal(name string) (t *Target) {
         t = NewFile(name)
-        t.IsGoal = true
+        t.Class |= Goal
         return
 }
 
 func NewFileIntermediate(name string) (t *Target) {
         t = NewFile(name)
-        t.IsIntermediate = true
+        t.Class |= Intermediate
         return
 }
 
 func NewDir(name string) (t *Target) {
-        t = New(name)
-        t.IsDir = true
+        t = New(name, Dir)
         return
 }
 
 func NewDirGoal(name string) (t *Target) {
         t = NewDir(name)
-        t.IsGoal = true
+        t.Class |= Goal
         return
 }
 
 func NewDirIntermediate(name string) (t *Target) {
         t = NewDir(name)
-        t.IsIntermediate = true
+        t.Class |= Intermediate
         return
 }
+*/
 
 type Collector interface {
         AddFile(dir, name string) *Target
@@ -588,9 +622,9 @@ readloop:
         return
 }
 
-// find 
-func Find(d string, sre string, coll Collector) error {
-        re, e := regexp.Compile(sre)
+// Find file via regexp.
+func Find(d string, sreg string, coll Collector) error {
+        re, e := regexp.Compile(sreg)
         if e != nil {
                 return e
         }
@@ -607,7 +641,7 @@ func Find(d string, sre string, coll Collector) error {
         })
 }
 
-// graph draws dependency graph of targets.
+// Graph draws dependency graph of targets.
 func Graph() {
         //fmt.Printf("scanned: %v\n", targets)
 
@@ -621,7 +655,7 @@ func Graph() {
                                 if d == t { goto next }
                         }
                         dirs = append(dirs, t)
-                } else if t.IsGoal {
+                } else if t.IsGoal() {
                         goals = append(goals, t)
                 } else {
                         files = append(files, t)
@@ -647,7 +681,7 @@ func Graph() {
         apply(goals)
 }
 
-// 
+// Command make system command.
 func Command(name string, args ...string) *exec.Cmd {
         p := exec.Command(name, args...)
         p.Stdout = os.Stdout
@@ -708,7 +742,7 @@ func Generate(tool BuildTool, targets []*Target) (error, []*Target) {
                         }
                 }
 
-                if t.IsFile || t.IsDir {
+                if t.IsFile() || t.IsDir() {
                         switch {
                         case t.IsScanned:
                                 needGen = needGen || false

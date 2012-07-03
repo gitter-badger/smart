@@ -71,11 +71,11 @@ func (sdk *asdk) Generate(t *smart.Target) error {
         //smart.Info("Generate: %v:%v...", t, t.Depends)
 
         isFile := func(s string) bool {
-                return t.IsFile && strings.HasSuffix(t.Name, s)
+                return t.IsFile() && strings.HasSuffix(t.Name, s)
         }
 
         isOutDir := func(s string) bool {
-                if !t.IsDir { return false }
+                if !t.IsDir() { return false }
                 separator := string(filepath.Separator)
                 if !strings.HasPrefix(t.Name, sdk.out+separator) { return false }
                 return strings.HasSuffix(t.Name, separator+s)
@@ -336,7 +336,7 @@ func (sdk *asdk) align(t *smart.Target) (e error) {
 func (sdk *asdk) packUnsigned(t *smart.Target) (e error) {
         var dex *smart.Target
         for _, d := range t.Depends {
-                if d.IsFile && strings.HasSuffix(d.Name, ".dex") {
+                if d.IsFile() && strings.HasSuffix(d.Name, ".dex") {
                         dex = d; break
                 }
         }
@@ -605,7 +605,7 @@ func (coll *asdkCollector) makeTargets(dir string) bool {
         pkg, tagline := coll.extractPackageName(am)
         if 0 < tagline && pkg != "" {
                 if coll.proj.target == nil {
-                        coll.proj.target = smart.NewFileGoal(pkg + tt)
+                        coll.proj.target = smart.New(pkg + tt, smart.GoalFile)
                 }
                 coll.proj.target.Variables["package"] = pkg
         } else {
@@ -613,7 +613,7 @@ func (coll *asdkCollector) makeTargets(dir string) bool {
                         smart.Fatal("not .jar directory %v", dir)
                 }
                 if coll.proj.target == nil {
-                        coll.proj.target = smart.NewFileGoal(base + tt)
+                        coll.proj.target = smart.New(base + tt, smart.GoalFile)
                 }
                 delete(coll.proj.target.Variables, "package")
         }
@@ -652,7 +652,7 @@ func (coll *asdkCollector) makeTargets(dir string) bool {
 func (coll *asdkCollector) addResDir(dir string) (t *smart.Target) {
         if coll.proj.res == nil {
                 outRes := filepath.Join(filepath.Dir(coll.proj.classes.Name), "res")
-                coll.proj.res = smart.NewDirIntermediate(outRes)
+                coll.proj.res = smart.New(outRes, smart.IntermediateDir)
                 coll.proj.res.Variables["top"] = filepath.Dir(dir)
         }
         
