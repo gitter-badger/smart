@@ -101,20 +101,33 @@ type NameValues struct {
 
 type Class int
 
+func (c Class) String() string {
+        var s1, s2 string
+        switch {
+        case c & Intermediate != 0: s1 = "Intermediate"
+        case c & Final != 0: s1 = "Final"
+        }
+        switch {
+        case c & File != 0: s2 = "File"
+        case c & Dir != 0: s2 = "Dir"
+        }
+        return fmt.Sprintf("%s%s", s1, s2)
+}
+
 const (
         None Class = 0
 
-        File = 1<<1
-        Dir = 1<<2
+        Intermediate = 1<<1
+        Final = 1<<2
 
-        Intermediate = 1<<3
-        Goal = 1<<4
+        File = 1<<3
+        Dir = 1<<4
 
         IntermediateFile = Intermediate | File
         IntermediateDir = Intermediate | Dir
 
-        GoalFile = Goal | File
-        GoalDir = Goal | Dir
+        FinalFile = Final | File
+        FinalDir = Final | Dir
 )
 
 type Target struct {
@@ -130,7 +143,7 @@ type Target struct {
 
         IsScanned bool // target is made by scan() or find()
         IsDirTarget bool // target is made by AddDir
-        IsGenerated bool
+        IsGenerated bool // target has already generated
 
         Meta []*MetaInfo
         Args []*NameValues
@@ -143,19 +156,19 @@ func (t *Target) String() string {
 }
 
 func (t *Target) IsDir() bool {// directory target
-        return t.Class & Dir != 0 //&& !t.IsFile()
+        return t.Class & (Dir | ^File) != 0
 }
 
 func (t *Target) IsFile() bool {// file (non-dir) target
-        return t.Class & File != 0 //&& !t.IsDir()
+        return t.Class & (File | ^Dir) != 0
 }
 
 func (t *Target) IsIntermediate() bool {// opposite to 'goal'
-        return t.Class & Intermediate != 0 //&& !t.IsGoal()
+        return t.Class & (Intermediate | ^Final) != 0
 }
 
-func (t *Target) IsGoal() bool {// final target, opposite to 'intermediate'
-        return t.Class & Goal != 0 //&& !t.IsIntermediate()
+func (t *Target) IsFinal() bool {// final target, opposite to 'intermediate'
+        return t.Class & (Final | ^Intermediate) != 0
 }
 
 func (t *Target) add(l []*NameValues, name string, args ...string) ([]*NameValues, *NameValues) {
@@ -247,56 +260,24 @@ func (t *Target) Use(usee *Target) {
 out:
 }
 
-func (t *Target) Add(i interface {}) (f *Target) {
-        if i != nil {
-                switch d := i.(type) {
-                case string:
-                        f = New(d, None)
-                case *Target:
-                        f = d
-                }
-                if f != nil {
-                        t.Depends = append(t.Depends, f)
-                }
+func (t *Target) Dep(i interface {}, class Class) (o *Target) {
+        switch d := i.(type) {
+        case string:
+                o = New(d, None)
+                o.Class = class
+        case *Target:
+                o = d
         }
+
+        if o == nil {
+                return
+        }
+
+        t.Depends = append(t.Depends, o)
         return
 }
 
-func (t *Target) AddFile(name string) *Target {
-        f := t.Add(name)
-        f.Class |= File
-        return f
-}
-
-func (t *Target) AddDir(name string) *Target {
-        f := t.Add(name)
-        f.Class |= Dir
-        return f
-}
-
-func (t *Target) AddIntermediate(name string, source interface{}) *Target {
-        i := t.Add(name)
-        i.Class |= Intermediate & ^Goal
-        i.Add(source)
-        return i
-}
-
-func (t *Target) AddIntermediateFile(name string, source interface{}) *Target {
-        i := t.AddIntermediate(name, nil)
-        i.Class |= File
-        switch s := source.(type) {
-        case *Target: i.Add(source)
-        case string: i.AddFile(s)
-        }
-        return i
-}
-
-func (t *Target) AddIntermediateDir(name string, source interface{}) *Target {
-        i := t.AddIntermediateFile(name, source)
-        i.Class |= Dir & ^File
-        return i
-}
-
+// New create new target
 func New(name string, class Class) (t *Target) {
         t = new(Target)
         t.Name = name
@@ -305,52 +286,6 @@ func New(name string, class Class) (t *Target) {
         targets[name] = t
         return
 }
-
-/*
-func NewIntermediate(name string) (t *Target) {
-        t = New(name, Intermediate)
-        return
-}
-
-func NewGoal(name string) (t *Target) {
-        t = New(name, Goal)
-        return
-}
-
-func NewFile(name string) (t *Target) {
-        t = New(name, File)
-        return
-}
-
-func NewFileGoal(name string) (t *Target) {
-        t = NewFile(name)
-        t.Class |= Goal
-        return
-}
-
-func NewFileIntermediate(name string) (t *Target) {
-        t = NewFile(name)
-        t.Class |= Intermediate
-        return
-}
-
-func NewDir(name string) (t *Target) {
-        t = New(name, Dir)
-        return
-}
-
-func NewDirGoal(name string) (t *Target) {
-        t = NewDir(name)
-        t.Class |= Goal
-        return
-}
-
-func NewDirIntermediate(name string) (t *Target) {
-        t = NewDir(name)
-        t.Class |= Intermediate
-        return
-}
-*/
 
 type Collector interface {
         AddFile(dir, name string) *Target
@@ -655,7 +590,7 @@ func Graph() {
                                 if d == t { goto next }
                         }
                         dirs = append(dirs, t)
-                } else if t.IsGoal() {
+                } else if t.IsFinal() {
                         goals = append(goals, t)
                 } else {
                         files = append(files, t)

@@ -605,7 +605,7 @@ func (coll *asdkCollector) makeTargets(dir string) bool {
         pkg, tagline := coll.extractPackageName(am)
         if 0 < tagline && pkg != "" {
                 if coll.proj.target == nil {
-                        coll.proj.target = smart.New(pkg + tt, smart.GoalFile)
+                        coll.proj.target = smart.New(pkg + tt, smart.FinalFile)
                 }
                 coll.proj.target.Variables["package"] = pkg
         } else {
@@ -613,7 +613,7 @@ func (coll *asdkCollector) makeTargets(dir string) bool {
                         smart.Fatal("not .jar directory %v", dir)
                 }
                 if coll.proj.target == nil {
-                        coll.proj.target = smart.New(base + tt, smart.GoalFile)
+                        coll.proj.target = smart.New(base + tt, smart.FinalFile)
                 }
                 delete(coll.proj.target.Variables, "package")
         }
@@ -623,15 +623,15 @@ func (coll *asdkCollector) makeTargets(dir string) bool {
 
         switch tt {
         case ".apk":
-                coll.proj.signed = coll.proj.target.AddIntermediateFile(filepath.Join(out, "_.signed"), nil)
-                coll.proj.unsigned = coll.proj.signed.AddIntermediateFile(filepath.Join(out, "_.unsigned"), nil)
+                coll.proj.signed = coll.proj.target.Dep(filepath.Join(out, "_.signed"), smart.IntermediateFile)
+                coll.proj.unsigned = coll.proj.signed.Dep(filepath.Join(out, "_.unsigned"), smart.IntermediateFile)
                 coll.proj.unsigned.Variables["top"] = top
-                coll.proj.dex = coll.proj.unsigned.AddIntermediateFile(outClasses + ".dex", nil)
+                coll.proj.dex = coll.proj.unsigned.Dep(outClasses + ".dex", smart.IntermediateFile)
                 coll.proj.dex.Type = ".dex"
-                coll.proj.classes = coll.proj.dex.AddIntermediateDir(outClasses, nil)
+                coll.proj.classes = coll.proj.dex.Dep(outClasses, smart.IntermediateDir)
 
         case ".jar":
-                coll.proj.classes = coll.proj.target.AddIntermediateDir(outClasses, nil)
+                coll.proj.classes = coll.proj.target.Dep(outClasses, smart.IntermediateDir)
 
         default:
                 smart.Fatal("unknown type: %v", dir)
@@ -656,7 +656,7 @@ func (coll *asdkCollector) addResDir(dir string) (t *smart.Target) {
                 coll.proj.res.Variables["top"] = filepath.Dir(dir)
         }
         
-        t = coll.proj.res.AddDir(dir)
+        t = coll.proj.res.Dep(dir, smart.Dir)
         
         // Add R.java target
         if pkg, ok := coll.proj.target.Variables["package"]; ok {
@@ -667,7 +667,8 @@ func (coll *asdkCollector) addResDir(dir string) (t *smart.Target) {
                         smart.Fatal("no classes for %v", rjava)
                 }
 
-                r := coll.proj.classes.AddIntermediateFile(rjava, coll.proj.res)
+                r := coll.proj.classes.Dep(rjava, smart.IntermediateFile)
+                r.Dep(coll.proj.res, smart.None)
                 if r == nil {
                         smart.Fatal("inter: %v:%v", rjava, coll.proj.res)
                 }
@@ -684,7 +685,8 @@ func (coll *asdkCollector) addJarDir(dir string) (t *smart.Target) {
         }
         
         name := filepath.Join(coll.sdk.out, dir, "_.jar")
-        t = coll.proj.classes.AddIntermediateFile(name, dir)
+        t = coll.proj.classes.Dep(name, smart.IntermediateFile)
+        t.Dep(dir, smart.Dir)
 
         /*
         if s, ok := coll.proj.unsigned.Variables["classpath"]; !ok {
@@ -732,13 +734,13 @@ func (coll *asdkCollector) AddFile(dir, name string) (t *smart.Target) {
 
         switch {
         case name == "AndroidManifest.xml":
-                t =  coll.proj.target.AddFile(dname)
+                t =  coll.proj.target.Dep(dname, smart.File)
 
         case strings.HasSuffix(name, ".java"):
                 if coll.proj.classes == nil {
                         smart.Warn("ignored: %v (classes=%v)", dname, coll.proj.classes)
                 } else {
-                        t = coll.proj.classes.AddFile(dname)
+                        t = coll.proj.classes.Dep(dname, smart.File)
                 }
 
         default:

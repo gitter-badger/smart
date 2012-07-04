@@ -38,7 +38,7 @@ func TestBuildSimple(t *testing.T) {
                 t.Errorf("not 2 depends: %v", c.target.Depends)
         } else {
                 if !c.target.IsFile() { t.Errorf("not file: %v", c.target) }
-                if !c.target.IsGoal() { t.Errorf("not goal: %v", c.target) }
+                if !c.target.IsFinal() { t.Errorf("not goal: %v", c.target) }
 
                 d1 := c.target.Depends[0]
                 d2 := c.target.Depends[1]
@@ -108,7 +108,7 @@ func TestBuildCombineObjects(t *testing.T) {
                 t.Errorf("not 2 depends: %v", c.target.Depends)
         } else {
                 if !c.target.IsFile() { t.Errorf("not file: %v", c.target) }
-                if !c.target.IsGoal() { t.Errorf("not goal: %v", c.target) }
+                if !c.target.IsFinal() { t.Errorf("not goal: %v", c.target) }
 
                 d1 := c.target.Depends[0]
                 if !d1.IsFile() { t.Errorf("not file: %v", d1) }
@@ -125,7 +125,7 @@ func TestBuildCombineObjects(t *testing.T) {
 
                 d2 := c.target.Depends[1]
                 if !d2.IsFile() { t.Errorf("not file: %v", d2) }
-                if !d2.IsGoal() { t.Errorf("not goal: %v", d2) }
+                if !d2.IsFinal() { t.Errorf("not goal: %v", d2) }
                 if d2.Name != "sub.o/_.o" { t.Errorf("bad name: %s", d2.Name) }
                 if len(d2.Depends) != 2 {
                         t.Errorf("not 2 depends: %v (%v)", d2.Depends, d2)

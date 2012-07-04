@@ -146,7 +146,7 @@ func (coll *gccCollector) ensureTarget(dir string) bool {
                         name = filepath.Base(dir)
                 }
 
-                coll.target = smart.New(name, smart.GoalFile)
+                coll.target = smart.New(name, smart.FinalFile)
 
                 if coll.gcc.target == nil {
                         coll.gcc.target = coll.target
@@ -163,7 +163,7 @@ func (coll *gccCollector) AddDir(dir string) (t *smart.Target) {
 
         switch {
         case strings.HasSuffix(dir, ".o"):
-                t = smart.New(filepath.Join(dir, "_.o"), smart.GoalFile)
+                t = smart.New(filepath.Join(dir, "_.o"), smart.FinalFile)
                 t.Type = ".o"
         case strings.HasSuffix(dir, ".a"): fallthrough
         case strings.HasSuffix(dir, ".so"):
@@ -173,7 +173,7 @@ func (coll *gccCollector) AddDir(dir string) (t *smart.Target) {
                         name = "lib"+name
                 }
 
-                t = smart.New(filepath.Join(dir, name), smart.GoalFile)
+                t = smart.New(filepath.Join(dir, name), smart.FinalFile)
                 t.Type = ext
 
                 l := len(name) - len(ext)
@@ -192,7 +192,7 @@ func (coll *gccCollector) AddDir(dir string) (t *smart.Target) {
                 smart.Scan(coll.gcc.NewCollector(t), coll.gcc.top, dir)
                 //fmt.Printf("scan: %v %v\n", dir, t.Depends)
 
-                coll.target.Add(t)
+                coll.target.Dep(t, smart.None)
                 //fmt.Printf("TODO: AddDir: %v %v\n", t, t.Depends)
         }
         return t
@@ -221,7 +221,8 @@ func (coll *gccCollector) AddFile(dir, name string) *smart.Target {
 
         name = filepath.Join(dir, name)
 
-        o := coll.target.AddIntermediateFile(name+".o", name)
+        o := coll.target.Dep(name+".o", smart.IntermediateFile)
+        o.Dep(name, smart.File)
         if o == nil {
                 fmt.Fprintf(os.Stderr, "fatal: no intermediate: %v\n", name)
                 return nil
