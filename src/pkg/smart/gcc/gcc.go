@@ -1,4 +1,4 @@
-package smart_gcc
+package gcc
 
 import (
         ".."
@@ -10,6 +10,11 @@ import (
 
 func init() {
         // ...
+}
+
+func New() (t *gcc) {
+        t = &gcc{}
+        return
 }
 
 type gcc struct {

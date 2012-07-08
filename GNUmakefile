@@ -1,6 +1,7 @@
 ALL := \
   bin \
   bin/smart \
+  bin/gcc \
   pkg \
   pkg/smart.a \
   pkg/smart \
@@ -10,6 +11,9 @@ ALL := \
 ALLDIRS := $(filter-out pkg/%.a bin/%,$(ALL))
 ALLPKGS := $(filter-out $(ALLDIRS) bin/%,$(ALL))
 ALLBINS := $(filter bin/%,$(ALL))
+
+# all bin targets is in src/cmds/%(@F)
+GOBUILD_BIN = cd $(<D) && go build -o ../../../$@
 
 #$(info $(ALLDIRS))
 #$(info $(ALLBINS))
@@ -24,8 +28,12 @@ $(ALLPKGS): %.a : src/%
 	@echo "TODO: $< $@"
 #	cd $< && go build -o $(notdir $@) && ls *.a
 
-#$(ALLBINS): bin/% :
-#	@echo "TODO: $< $@"
+define BUILD_BIN
+ $(eval NAME := $(notdir $(BIN)))\
+ $(eval \
+   bin/$(NAME): src/cmds/$(NAME)/$(NAME).go
+	$$(GOBUILD_BIN)
+  )
+endef #BUILD_BIN
 
-bin/smart: src/smart.go
-	cd $(<D) && go build -o ../$@
+$(foreach BIN,$(ALLBINS),$(BUILD_BIN))

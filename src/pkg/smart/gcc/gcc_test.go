@@ -1,4 +1,4 @@
-package smart_gcc
+package gcc
 
 import (
         ".."
@@ -14,7 +14,7 @@ import (
 )
 
 func newTestGcc() *gcc {
-        tool := &gcc{}
+        tool := New()
         if top, e := os.Getwd(); e != nil {
                 // TODO: error report
         } else {
