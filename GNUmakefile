@@ -1,10 +1,8 @@
 ALL := \
-  bin \
   bin/smart \
   bin/gcc \
-  pkg \
+  bin/asdk \
   pkg/smart.a \
-  pkg/smart \
   pkg/smart/gcc.a \
   pkg/smart/asdk.a \
 
@@ -33,6 +31,9 @@ define BUILD_BIN
  $(eval \
    bin/$(NAME): src/cmds/$(NAME)/$(NAME).go
 	$$(GOBUILD_BIN)
+
+   src/cmds/$(NAME)/$(NAME).go: \
+     $(filter-out %_test.go,$(wildcard src/pkg/smart/*.go src/pkg/smart/$(NAME)/*.go))
   )
 endef #BUILD_BIN
 

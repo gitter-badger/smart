@@ -2,13 +2,13 @@ package main
 
 import (
         "../../pkg/smart"
-        "../../pkg/smart/gcc"
+        "../../pkg/smart/asdk"
         "os"
         "fmt"
 )
 
 func main() {
-        tool := gcc.New()
+        tool := asdk.New()
 
         if e := smart.Build(tool); e != nil {
                 fmt.Fprintf(os.Stderr, "error: %v\n", e)

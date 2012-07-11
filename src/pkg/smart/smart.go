@@ -20,29 +20,25 @@ import (
         */
 )
 
-/*
-const (
-        TargetFlagFile int = 1
-        TargetFlagBuilt = 2
-        TargetFlagScanned = 4
-)
-*/
-
 const (
         ACTION_NOP Action = iota
         ACTION_USE
         ACTION_COMBINE
 )
 
+var actionNames = []string{
+        ACTION_NOP: "nop",
+        ACTION_USE: "use",
+        ACTION_COMBINE: "combine",
+}
+
 type Action int
 
 func (a Action) String() string {
-        switch (a) {
-        case ACTION_NOP: return "nop"
-        case ACTION_USE: return "use"
-        case ACTION_COMBINE: return "combine"
+        if a < 0 || len(actionNames) <= int(a) {
+                return ""
         }
-        return ""
+        return actionNames[a]
 }
 
 var _regComment = regexp.MustCompile(`^\s*//`)
@@ -90,7 +86,6 @@ type MetaInfo struct {
 }
 
 func (mi *MetaInfo) String() string {
-        //return fmt.Sprintf("%v(%v)", mi.Action, strings.Join(mi.Args, ","))
         return fmt.Sprintf("%v%v", mi.Action, mi.Args)
 }
 
@@ -209,32 +204,39 @@ func (t *Target) joinAll(l []*NameValues) (res []string) {
         return
 }
 
+// 
 func (t *Target) AddArgs(name string, args ...string) (nv *NameValues) {
         t.Args, nv = t.add(t.Args, name, args...)
         return nv
 }
 
+// 
 func (t *Target) AddExports(name string, args ...string) (nv *NameValues) {
         t.Exports, nv = t.add(t.Exports, name, args...)
         return nv
 }
 
+// 
 func (t *Target) JoinAllArgs() (res []string) {
         return t.joinAll(t.Args)
 }
 
+// 
 func (t *Target) JoinAllExports() (res []string) {
         return t.joinAll(t.Exports)
 }
 
+// 
 func (t *Target) JoinArgs(n string) []string {
         return t.join(t.Args, n)
 }
 
+// 
 func (t *Target) JoinExports(n string) []string {
         return t.join(t.Exports, n)
 }
 
+// 
 func (t *Target) joinUseesArgs(usees []*Target, n string) (res []string) {
         for _, u := range usees {
                 res = append(res, u.JoinExports(n)...)
@@ -242,14 +244,17 @@ func (t *Target) joinUseesArgs(usees []*Target, n string) (res []string) {
         return
 }
 
+// 
 func (t *Target) JoinUseesArgs(n string) []string {
         return t.joinUseesArgs(t.Usees, n)
 }
 
+// 
 func (t *Target) JoinParentUseesArgs(n string) []string {
         return t.joinUseesArgs(t.ParentUsees, n)
 }
 
+// Use
 func (t *Target) Use(usee *Target) {
         for _, u := range t.Usees {
                 if usee == u {
@@ -260,6 +265,7 @@ func (t *Target) Use(usee *Target) {
 out:
 }
 
+// Dep
 func (t *Target) Dep(i interface {}, class Class) (o *Target) {
         switch d := i.(type) {
         case string:
@@ -738,7 +744,16 @@ func Build(tool BuildTool) (e error) {
 
         Graph() // draw dependency graph.
 
-        if e, _ = Generate(tool, tool.Goals()); e != nil {
+        goals := tool.Goals()
+
+        for _, g := range goals {
+                if !g.IsFinal() {
+                        e = NewErrorf("goal `%v' is not final", g)
+                        return
+                }
+        }
+
+        if e, _ = Generate(tool, goals); e != nil {
                 return
         }
 
