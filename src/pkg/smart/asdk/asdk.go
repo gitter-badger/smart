@@ -749,3 +749,52 @@ func (coll *asdkCollector) AddFile(dir, name string) (t *smart.Target) {
 
         return
 }
+
+// Install invokes "adb install" command
+func Install(args []string) (e error) {
+        tool := New()
+
+        if e = smart.Build(tool); e != nil {
+                return
+        }
+
+        goals := tool.Goals()
+
+        // should be only one APK goal for a project
+        if len(goals) != 1 {
+                return smart.NewErrorf("wrong goals: %v", goals)
+        }
+
+        apk := goals[0]
+
+        if !apk.IsFile() {
+                return smart.NewErrorf("wrong APK type: %v", apk.Class)
+        }
+
+        if !smart.IsFile(apk.String()) {
+                return smart.NewErrorf("APK not found: %v", apk)
+        }
+
+        for _, arg := range args {
+                if arg[0] != '-' {
+                        return smart.NewErrorf("unknown argument: %v", arg)
+                }
+        }
+
+        args = append([]string{ "install" }, args...)
+        args = append(args, apk.String())
+
+        smart.Info("install %v..", apk)
+
+        adb := filepath.Join(asdkRoot, "platform-tools", "adb")
+        p := smart.Command(adb, args...)
+        e  = p.Run()
+        return
+}
+
+// Create invokes "android create" command
+func Create(args []string) (err error) {
+        and := filepath.Join(asdkRoot, "tools", "android")
+        p := smart.Command(and, args...)
+        return p.Run()
+}
