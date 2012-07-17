@@ -9,25 +9,15 @@ import (
 )
 
 var root = "bin"
-var cmdLine = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
-var flagOutput = cmdLine.String("o", "", "output string")
+var flagOutput = flag.String("o", "", "output string")
 
 func main() {
         root = filepath.Dir(os.Args[0])
-        args := os.Args[1:]
-        subCmdIdx := -1
 
-argloop:for i, arg := range args {
-                switch {
-                case arg[0] != '-':
-                        cmdLine.Parse(args[0:i])
-                        subCmdIdx, args = 1+i, args[i:]
-                        break argloop
-                }
-        }
-
-        if subCmdIdx < 1 || len(args) < 1 {
-                fmt.Fprintf(os.Stderr, "sub command required: %v (%v)\n", args, subCmdIdx)
+	flag.Parse()
+	args := flag.Args()
+	if len(args) == 0 {
+                fmt.Fprintf(os.Stderr, "sub command required\n")
                 os.Exit(-1)
         }
 
