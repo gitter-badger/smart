@@ -10,14 +10,6 @@ import (
         "path/filepath"
         "regexp"
         "strings"
-/*
-        "bytes"
-        "flag"
-        "os"
-        "regexp"
-        "runtime"
-        "sort"
-        */
 )
 
 const (
@@ -89,7 +81,7 @@ func (mi *MetaInfo) String() string {
         return fmt.Sprintf("%v%v", mi.Action, mi.Args)
 }
 
-type NameValues struct {
+type NamedValues struct {
         Name string
         Values []string
 }
@@ -141,8 +133,8 @@ type Target struct {
         IsGenerated bool // target has already generated
 
         Meta []*MetaInfo
-        Args []*NameValues
-        Exports []*NameValues
+        Args []*NamedValues
+        Exports []*NamedValues
         Variables map[string]string
 }
 
@@ -166,7 +158,7 @@ func (t *Target) IsFinal() bool {// final target, opposite to 'intermediate'
         return t.Class & (Final | ^Intermediate) != 0
 }
 
-func (t *Target) add(l []*NameValues, name string, args ...string) ([]*NameValues, *NameValues) {
+func (t *Target) add(l []*NamedValues, name string, args ...string) ([]*NamedValues, *NamedValues) {
         for _, nv := range l {
                 if nv.Name == name {
                         nv.Values = append(nv.Values, args...)
@@ -174,12 +166,12 @@ func (t *Target) add(l []*NameValues, name string, args ...string) ([]*NameValue
                 }
         }
 
-        nv := &NameValues{ name, args }
+        nv := &NamedValues{ name, args }
         l = append(l, nv)
         return l, nv
 }
 
-func (t *Target) join(l []*NameValues, n string) (res []string) {
+func (t *Target) join(l []*NamedValues, n string) (res []string) {
         for _, nv := range l {
                 if nv.Name == n {
                         for _, s := range nv.Values {
@@ -190,7 +182,7 @@ func (t *Target) join(l []*NameValues, n string) (res []string) {
         return
 }
 
-func (t *Target) joinAll(l []*NameValues) (res []string) {
+func (t *Target) joinAll(l []*NamedValues) (res []string) {
         for _, nv := range l {
                 if len(nv.Values) == 0 {
                         res = append(res, nv.Name)
@@ -205,13 +197,13 @@ func (t *Target) joinAll(l []*NameValues) (res []string) {
 }
 
 // 
-func (t *Target) AddArgs(name string, args ...string) (nv *NameValues) {
+func (t *Target) AddArgs(name string, args ...string) (nv *NamedValues) {
         t.Args, nv = t.add(t.Args, name, args...)
         return nv
 }
 
 // 
-func (t *Target) AddExports(name string, args ...string) (nv *NameValues) {
+func (t *Target) AddExports(name string, args ...string) (nv *NamedValues) {
         t.Exports, nv = t.add(t.Exports, name, args...)
         return nv
 }

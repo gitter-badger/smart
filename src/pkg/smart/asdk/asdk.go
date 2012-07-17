@@ -9,6 +9,7 @@ import (
         "regexp"
         "runtime"
         "strings"
+	"fmt"
 )
 
 var asdkRoot = "/android-sdk-linux_x86"
@@ -737,6 +738,17 @@ func (coll *asdkCollector) AddFile(dir, name string) (t *smart.Target) {
         }
 
         return
+}
+
+func SetPlatformLevel(platformLevel uint) error {
+	platform := fmt.Sprintf("android-%d", platformLevel)
+	s := filepath.Join(asdkRoot, "platforms", platform)
+	if !smart.IsDir(s) {
+		return smart.NewErrorf("No platform found by name '%v'", platform)
+	}
+
+	asdkPlatform = platform
+	return nil
 }
 
 // Build builds a project
