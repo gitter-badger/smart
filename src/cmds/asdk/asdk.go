@@ -1,7 +1,6 @@
 package main
 
 import (
-        "../../pkg/smart"
         "../../pkg/smart/asdk"
         "os"
         "fmt"
@@ -15,8 +14,7 @@ var commands = map[string] func(args []string) error {
 }
 
 func build(args []string) (e error) {
-        tool := asdk.New()
-        e = smart.Build(tool)
+	e = asdk.Build(args)
         return
 }
 

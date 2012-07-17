@@ -9,7 +9,6 @@ import (
 )
 
 var root = "bin"
-var flagOutput = flag.String("o", "", "output string")
 
 func main() {
         root = filepath.Dir(os.Args[0])

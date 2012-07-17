@@ -739,6 +739,13 @@ func (coll *asdkCollector) AddFile(dir, name string) (t *smart.Target) {
         return
 }
 
+// Build builds a project
+func Build(args []string) (e error) {
+        tool := New()
+        e = smart.Build(tool)
+	return
+}
+
 // Install invokes "adb install" command
 func Install(args []string) (e error) {
         tool := New()
