@@ -26,7 +26,7 @@ func init() {
         }
 
         if  asdkRoot == "" {
-                smart.Fatal("Can't locate Android SDK.")
+                smart.Fatal("Can't find any Android SDK installaion.")
         }
 }
 
@@ -137,7 +137,8 @@ func (sdk *asdk) compileResource(t *smart.Target) (e error) {
         smart.Info("compile -o %v %v", t, strings.Join(sources, " "))
 
         // Produces R.java under t.Name
-        p := smart.Command("aapt", args...)
+	aapt := filepath.Join(asdkRoot, "platform-tools", "aapt")
+        p := smart.Command(aapt, args...)
         e = p.Run() //return run("aapt", args...)
         return
 }
@@ -207,7 +208,8 @@ func (sdk *asdk) dx(t *smart.Target) error {
         args = append(args, classes.Name)
 
         smart.Info("dex -o %v %v", t, classes)
-        p := smart.Command("dx", args...)
+	dx := filepath.Join(asdkRoot, "platform-tools", "dx")
+        p := smart.Command(dx, args...)
         return p.Run() //run("dx", args...)
 }
 
@@ -383,7 +385,8 @@ func (sdk *asdk) packUnsigned(t *smart.Target) (e error) {
         //args = append(args, "--target-sdk-version", "7")
 
         smart.Info("pack -o %v %v", t, strings.Join(sources, " "))
-        p := smart.Command("aapt", args...)
+	aapt := filepath.Join(asdkRoot, "platform-tools", "aapt")
+        p := smart.Command(aapt, args...)
         p.Stdout = nil
         if e = p.Run(); e != nil {
                 return
@@ -393,7 +396,7 @@ func (sdk *asdk) packUnsigned(t *smart.Target) (e error) {
 
         dexName := filepath.Base(dex.Name)
         apkName := filepath.Base(t.Name)
-        p = smart.Command("aapt", "add", "-k", apkName, dexName)
+        p = smart.Command(aapt, "add", "-k", apkName, dexName)
         p.Stdout, p.Dir = nil, filepath.Dir(dex.Name)
         e = p.Run()
         return
@@ -447,7 +450,8 @@ func (sdk *asdk) packJar(t *smart.Target) (e error) {
                 //args = append(args, "--target-sdk-version", "7")
 
                 smart.Info("pack -o %v %v", t, strings.Join(sources, " "))
-                p := smart.Command("aapt", args...)
+		aapt := filepath.Join(asdkRoot, "platform-tools", "aapt")
+                p := smart.Command(aapt, args...)
                 if e = p.Run(); e != nil {
                         return
                 }
@@ -498,21 +502,6 @@ func (coll *asdkCollector) extractPackageName(am string) (pkg string, tagline in
         })
         return
 }
-
-/*
-func (coll *asdkCollector) getPackageName() (pkg string) {
-        if s, ok := coll.proj.target.Variables["package"]; ok {
-                pkg = s
-        } else if s, ok = coll.proj.target.Variables["top"]; ok {
-                s, tagline := coll.extractPackageName(am)
-                coll.proj.target.Variables["package"] = s
-                pkg = s
-        } else {
-                smart.Fatal("no top variable for %v", coll.proj.target)
-        }
-        return
-}
-*/
 
 func (coll *asdkCollector) extractClasses(outclasses, lib string, cs []string) (classes []string) {
         f, err := os.Open(lib)
