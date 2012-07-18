@@ -651,14 +651,37 @@ func Run32InDir(cmd, dir string, args ...string) error {
 // Generate calls tool.Generate in goroutines on each target. If any error occurs,
 // it will be returned with the updated targets.
 func Generate(tool BuildTool, targets []*Target) (error, []*Target) {
-        if len(targets) == 0 {
-                return nil, nil
+        type meta struct { t *Target; e error }
+        var gen func(ch chan meta, caller *Target, t *Target)
+
+        generate := func(tool BuildTool, caller *Target, targets []*Target) (error, []*Target) {
+                if len(targets) == 0 {
+                        return nil, nil
+                }
+
+                ch := make(chan meta)
+                gn := len(targets)
+
+                for _, t := range targets {
+                        if !t.IsGenerated {
+                                go gen(ch, caller, t)
+                        }
+                }
+
+                updated := make([]*Target, gn)
+
+                for ; 0 < gn; gn -= 1 {
+                        if m := <-ch; m.e == nil {
+                                updated = append(updated, m.t)
+                        } else {
+                                Fatal("error: %v\n", m.e)
+                        }
+                }
+
+                return nil, updated
         }
 
-        type meta struct { t *Target; e error }
-        ch := make(chan meta)
-
-        gen := func(t *Target) {
+        gen = func(ch chan meta, caller *Target, t *Target) {
                 if t.IsGenerated {
                         ch <- meta{ t, nil }
                         return
@@ -668,11 +691,20 @@ func Generate(tool BuildTool, targets []*Target) (error, []*Target) {
                 var needGen = false
 
                 if 0 < len(t.Depends) {
-                        if e, u := Generate(tool, t.Depends); e == nil {
+                        if e, u := generate(tool, t, t.Depends); e == nil {
                                 needGen = needGen || 0 < len(u)
                         } else {
                                 needGen, err = needGen || false, e
                         }
+                }
+
+                var fi os.FileInfo
+                if caller != nil {
+                        fi, _ = os.Stat(caller.Name)
+                }
+                di, _ := os.Stat(t.Name)
+                if fi != nil && di != nil && fi.ModTime().After(di.ModTime()) {
+                        needGen = needGen || true
                 }
 
                 if t.IsFile() || t.IsDir() {
@@ -688,8 +720,6 @@ func Generate(tool BuildTool, targets []*Target) (error, []*Target) {
                         }
                 }
 
-                //fmt.Printf("gen: %v (%v, %v)\n", t, t.IsGenerated, needGen)
-
                 if needGen {
                         if err = tool.Generate(t); err == nil {
                                 t.IsGenerated = true
@@ -699,25 +729,7 @@ func Generate(tool BuildTool, targets []*Target) (error, []*Target) {
                 ch <- meta{ t, err }
         }
 
-        gn := len(targets)
-
-        for _, t := range targets {
-                if !t.IsGenerated {
-                        go gen(t)
-                }
-        }
-
-        updated := make([]*Target, gn)
-
-        for ; 0 < gn; gn -= 1 {
-                if m := <-ch; m.e == nil {
-                        updated = append(updated, m.t)
-                } else {
-                        Fatal("error: %v\n", m.e)
-                }
-        }
-
-        return nil, updated
+        return generate(tool, nil, targets)
 }
 
 // Build launches a build process on a tool.
