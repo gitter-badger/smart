@@ -1,7 +1,7 @@
 ALL := \
   bin/smart \
-  bin/gcc \
-  bin/asdk \
+  bin/smart-gcc \
+  bin/smart-asdk \
   pkg/smart.a \
   pkg/smart/gcc.a \
   pkg/smart/asdk.a \
@@ -11,7 +11,7 @@ ALLPKGS := $(filter-out $(ALLDIRS) bin/%,$(ALL))
 ALLBINS := $(filter bin/%,$(ALL))
 
 # all bin targets is in src/cmds/%(@F)
-GOBUILD_BIN = ([[ -e $(<D) ]] || mkdir -p $(<D)) && cd $(<D) && go build -o ../../../$@
+GOBUILD_BIN = ([ -e $(<D) ] || mkdir -p $(<D)) && cd $(<D) && go build -o ../../../$@
 
 #$(info $(ALLDIRS))
 #$(info $(ALLBINS))

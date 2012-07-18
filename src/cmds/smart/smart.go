@@ -20,7 +20,7 @@ func main() {
                 os.Exit(-1)
         }
 
-        name := args[0]
+        name := "smart-"+args[0]
         args  = args[1:]
 
         p := exec.Command(filepath.Join(root, name), args...)
