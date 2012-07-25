@@ -689,7 +689,7 @@ func generate(tool BuildTool, caller *Target, targets []*Target) (error, []*Targ
 
         for _, t := range targets {
                 if !t.IsGenerated {
-                        go gen(tool, ch, caller, t)
+                        go gen(tool, caller, t, ch)
                 }
         }
         
@@ -707,7 +707,7 @@ func generate(tool BuildTool, caller *Target, targets []*Target) (error, []*Targ
 }
 
 // gen invoke tool.Generate on a single target
-func gen(tool BuildTool, ch chan genmeta, caller *Target, t *Target) {
+func gen(tool BuildTool, caller *Target, t *Target, ch chan genmeta) {
         var err error
         var needGen = false
 

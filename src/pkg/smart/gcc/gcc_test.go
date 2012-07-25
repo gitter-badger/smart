@@ -218,7 +218,16 @@ func TestBuildSimpleRebuild(t *testing.T) {
                         if fi0, ok := oldTargetInfos[k]; !ok {
                                 t.Errorf("FileInfo: %v", k)
                         } else if fi0.ModTime() != fi.ModTime() {
-                                t.Errorf("ModTime: mismatched: %v", k)
+                                switch k {
+                                case "simple": fallthrough
+                                case "say.c":  fallthrough
+                                case "say.c.o":
+                                        if !fi.ModTime().After(fi0.ModTime()) {
+                                                t.Errorf("ModTime: %v (%v)", k, fi0.ModTime().Sub(fi.ModTime()))
+                                        }
+                                default:
+                                        t.Errorf("ModTime: %v (%v)", k, fi0.ModTime().Sub(fi.ModTime()))
+                                }
                         }
                 }
         }
