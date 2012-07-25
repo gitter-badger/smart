@@ -90,6 +90,144 @@ func TestBuildSimple(t *testing.T) {
         os.Remove("simple")
 }
 
+func TestBuildSimpleRebuild(t *testing.T) {
+        tt.Chdir(t, "+testdata/simple"); defer tt.Chdir(t, "-")
+        tt.Checkf(t, "simple.c")
+
+        c := New()
+        if e := smart.Build(c); e != nil {
+                t.Errorf("build: %v", e)
+        }
+
+        if c.target.Name != "simple" { t.Errorf("bad name: %s", c.target.Name) }
+        if len(c.target.Depends) != 2 {
+                t.Errorf("not 2 depends: %v", c.target.Depends)
+        } else {
+                if !c.target.IsFile() { t.Errorf("not file: %v", c.target) }
+                if !c.target.IsFinal() { t.Errorf("not goal: %v", c.target) }
+
+                d1 := c.target.Depends[0]
+                d2 := c.target.Depends[1]
+                if !d1.IsFile() { t.Errorf("not file: %v", d1) }
+                if !d1.IsIntermediate() { t.Errorf("not intermediate: %v", d1) }
+                if !d2.IsFile() { t.Errorf("not file: %v", d1) }
+                if !d2.IsIntermediate() { t.Errorf("not intermediate: %v", d1) }
+                if d1.Name != "say.c.o" && d1.Name != "simple.c.o" { t.Errorf("bad name: %s", d1.Name) }
+                if d2.Name != "say.c.o" && d2.Name != "simple.c.o" { t.Errorf("bad name: %s", d2.Name) }
+                if len(d1.Depends) != 1 {
+                        t.Errorf("not 1 depend: %v", d1.Depends)
+                } else {
+                        d := d1.Depends[0]
+                        if d.Name != "say.c" && d.Name != "simple.c" { t.Errorf("bad name: %s", d.Name) }
+                        if !d.IsFile() { t.Errorf("not file: %v", d) }
+                        if !d.IsScanned { t.Errorf("not scanned: %v", d) }
+                }
+                if len(d2.Depends) != 1 {
+                        t.Errorf("not 1 depend: %v", d2.Depends)
+                } else {
+                        d := d2.Depends[0]
+                        if d.Name != "say.c" && d.Name != "simple.c" { t.Errorf("bad name: %s", d.Name) }
+                        if !d.IsFile() { t.Errorf("not file: %v", d) }
+                        if !d.IsScanned { t.Errorf("not scanned: %v", d) }
+                }
+        }
+
+        tt.Checkf(t, "say.c.o")
+        tt.Checkf(t, "simple.c.o")
+        tt.Checkf(t, "simple")
+
+        out := bytes.NewBuffer(nil)
+        p := exec.Command("./simple")
+        p.Stdout, p.Stderr = out, out
+        if e := p.Run(); e != nil {
+                t.Errorf("simple: %v", e)
+        } else if string(out.Bytes()) != "smart.gcc.test.simple\n" {
+                t.Errorf("simple: %v", string(out.Bytes()))
+        }
+
+        // bookmark FileInfos
+        oldTargetInfos := make(map[string]smart.FileInfo)
+        for k, ta := range smart.All() {
+                if fi := ta.Stat(); fi == nil {
+                        t.Errorf("simple: stat %v", k)
+                } else {
+                        oldTargetInfos[k] = fi
+                }
+        }
+
+        // rebuild the project
+        oldTargets := smart.ResetTargets()
+        c.target, c.top = nil, ""
+
+        smart.Info("rebuild: simple... (no action sould be performed!)")
+
+        if e := smart.Build(c); e != nil {
+                t.Errorf("rebuild: %v", e)
+                return
+        }
+
+        // the target set must be the same, and no targets should be touched
+        for k, ta := range smart.All() {
+                if ot, ok := oldTargets[k]; !ok {
+                        t.Errorf("rebuild: mismatched: %v", k)
+                } else if ot.Name != ta.Name {
+                        t.Errorf("rebuild: mismatched: %v != %v", ot, ta)
+                }
+
+                if fi := ta.Stat(); fi == nil {
+                        t.Errorf("simple: stat %v", k)
+                } else {
+                        if fi0, ok := oldTargetInfos[k]; !ok {
+                                t.Errorf("FileInfo: %v", k)
+                        } else if fi0.ModTime() != fi.ModTime() {
+                                t.Errorf("ModTime: mismatched: %v", k)
+                        }
+                }
+        }
+
+        // now touch a file
+        if ok := smart.T("say.c").Touch(); !ok {
+                t.Errorf("touch: say.c")
+        } else if fi := smart.T("say.c").Stat(); fi == nil {
+                t.Errorf("stat: say.c")
+        } else if fi0 := oldTargetInfos["say.c"]; fi0.ModTime() == fi.ModTime() {
+                t.Errorf("touch say.c failed: %v == %v", fi0.ModTime(), fi.ModTime())
+        }
+
+        // rebuild again and only say.c.o should be generated
+        oldTargets2 := smart.ResetTargets()
+        c.target, c.top = nil, ""
+
+        smart.Info("rebuild: simple... (only say.c should be compiled!)")
+
+        if e := smart.Build(c); e != nil {
+                t.Errorf("rebuild: %v", e)
+                return
+        }
+
+        for k, ta := range smart.All() {
+                if ot, ok := oldTargets2[k]; !ok {
+                        t.Errorf("rebuild: mismatched: %v", k)
+                } else if ot.Name != ta.Name {
+                        t.Errorf("rebuild: mismatched: %v != %v", ot, ta)
+                }
+
+                if fi, e := os.Stat(k); e != nil {
+                        t.Errorf("simple: %v", e)
+                } else {
+                        if fi0, ok := oldTargetInfos[k]; !ok {
+                                t.Errorf("FileInfo: %v", k)
+                        } else if fi0.ModTime() != fi.ModTime() {
+                                t.Errorf("ModTime: mismatched: %v", k)
+                        }
+                }
+        }
+
+        os.Remove("say.c.o")
+        os.Remove("simple.c.o")
+        os.Remove("simple")
+}
+
 func TestBuildCombineObjects(t *testing.T) {
         tt.Chdir(t, "+testdata/combine"); defer tt.Chdir(t, "-")
         tt.Checkd(t, "sub.o")
@@ -563,10 +701,10 @@ func TestSmartBuild(t *testing.T) {
         //////////////////////////////////////////////////
         // Try rebuild:
 
-        oldTargets := smart.All()
-        smart.ResetTargets()
-        c.target = nil
-        c.top = ""
+        oldTargets := smart.ResetTargets()
+        c.target, c.top = nil, ""
+
+        smart.Info("rebuild: sub_lib_dirs (no action should be performed!)\n")
 
         if e := smart.Build(c); e != nil {
                 t.Errorf("rebuild: %v", e)

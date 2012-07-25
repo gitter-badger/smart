@@ -2,8 +2,6 @@ package gcc
 
 import (
         ".."
-        "fmt"
-        "os"
         "path/filepath"
         "strings"
 )
@@ -40,6 +38,18 @@ func (gcc *gcc) Generate(t *smart.Target) error {
                 return gcc.compile(t)
         case strings.HasSuffix(t.Name, ".a"):
                 return gcc.archive(t)
+
+                /**
+                 *  TODO: think about this ignores.
+                 *
+                 *  Avoid linking these files.
+                 */
+        case strings.HasSuffix(t.Name, ".c"): fallthrough
+        case strings.HasSuffix(t.Name, ".C"): fallthrough
+        case strings.HasSuffix(t.Name, ".cc"):fallthrough
+        case strings.HasSuffix(t.Name, ".cpp"): fallthrough
+        case strings.HasSuffix(t.Name, ".cxx"):
+                return nil
         }
         return gcc.link(t)
 }
@@ -85,7 +95,7 @@ func (gcc *gcc) archive(t *smart.Target) error {
                 case ".o":
                         args = append(args, d.String())
                 default:
-                        fmt.Printf("ar: ignored: %v\n", d)
+                        smart.Warn("ar: ignored: %v\n", d)
                 }
         }
 
@@ -101,14 +111,14 @@ func (gcc *gcc) archive(t *smart.Target) error {
 }
 
 func (gcc *gcc) link(t *smart.Target) error {
-        //fmt.Printf("link: %v\n", t)
-
         ld := "ld" // the default linker is 'ld'
         args := []string{ "-o", t.Name, }
 
         if strings.HasSuffix(t.Name, ".so") {
                 args = append(args, "-shared")
         }
+
+        //smart.Info("link: %v (%v)\n", t.Name, gcc.target)
 
         for _, d := range t.Depends {
                 switch d.Type {
@@ -119,7 +129,7 @@ func (gcc *gcc) link(t *smart.Target) error {
                 case ".o":
                         args = append(args, d.Name)
                 default:
-                        fmt.Printf("link: ignored: %v\n", d)
+                        smart.Info("link: ignored: %v\n", d)
                 }
         }
 
@@ -162,7 +172,7 @@ func (coll *gccCollector) ensureTarget(dir string) bool {
 
 func (coll *gccCollector) AddDir(dir string) (t *smart.Target) {
         if !coll.ensureTarget("") {
-                fmt.Fprintf(os.Stderr, "no goal in %v\n", dir)
+                smart.Fatal("no goal in %v\n", dir)
                 return nil
         }
 
@@ -205,19 +215,19 @@ func (coll *gccCollector) AddDir(dir string) (t *smart.Target) {
 
 func (coll *gccCollector) AddFile(dir, name string) *smart.Target {
         if !coll.ensureTarget(dir) {
-                fmt.Fprintf(os.Stderr, "no goal in %v\n", dir)
+                smart.Fatal("no goal in %v\n", dir)
                 return nil
         }
 
         cc := ""
         switch {
         default: return nil
-        case strings.HasSuffix(name, ".cc"): fallthrough
+        case strings.HasSuffix(name, ".cc"):  fallthrough
         case strings.HasSuffix(name, ".cpp"): fallthrough
         case strings.HasSuffix(name, ".cxx"): fallthrough
-        case strings.HasSuffix(name, ".C"): cc = "g++"
-        case strings.HasSuffix(name, ".c"): cc = "gcc"
-        case strings.HasSuffix(name, ".go"): cc = "gccgo"
+        case strings.HasSuffix(name, ".C"):   cc = "g++"
+        case strings.HasSuffix(name, ".c"):   cc = "gcc"
+        case strings.HasSuffix(name, ".go"):  cc = "gccgo"
         }
 
         if cc == "" {
@@ -226,10 +236,12 @@ func (coll *gccCollector) AddFile(dir, name string) *smart.Target {
 
         name = filepath.Join(dir, name)
 
+        //smart.Info("File: %v (%v)\n", name, coll.target)
+
         o := coll.target.Dep(name+".o", smart.IntermediateFile)
         o.Dep(name, smart.File)
         if o == nil {
-                fmt.Fprintf(os.Stderr, "fatal: no intermediate: %v\n", name)
+                smart.Fatal("fatal: no intermediate: %v\n", name)
                 return nil
         }
 

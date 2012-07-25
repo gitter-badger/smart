@@ -10,7 +10,11 @@ import (
         "path/filepath"
         "regexp"
         "strings"
+        "time"
 )
+
+// Alias of os.FileInfo, allow client to use it without import os package.
+type FileInfo os.FileInfo
 
 const (
         ACTION_NOP Action = iota
@@ -53,14 +57,16 @@ func init() {
         }
 }
 
-// ResetTargets reset the target map.
-func ResetTargets() {
-        targets = make(map[string]*Target)
-}
-
 // All returns all the targets.
 func All() map[string]*Target {
         return targets
+}
+
+// ResetTargets reset the target map.
+func ResetTargets() map[string]*Target {
+        old := targets
+        targets = make(map[string]*Target)
+        return old
 }
 
 // T maps name to the coresponding target.
@@ -140,6 +146,22 @@ type Target struct {
 
 func (t *Target) String() string {
         return t.Name
+}
+
+func (t *Target) Stat() FileInfo {
+        fi, _ := os.Stat(t.Name)
+        return fi
+}
+
+func (t *Target) Touch() bool {
+        if fi := t.Stat(); fi != nil {
+                at := time.Now()
+                mt := time.Now()
+                if e := os.Chtimes(t.Name, at, mt); e == nil { // utime
+                        return true
+                }
+        }
+        return false
 }
 
 func (t *Target) IsDir() bool {// directory target
@@ -513,7 +535,7 @@ func Scan(coll Collector, top, dir string) (e error) {
         return
 }
 
-type traverseCallback func(depth int, dname string, fi os.FileInfo) bool
+type traverseCallback func(depth int, dname string, fi FileInfo) bool
 
 // traverse iterate each name under a directory recursively.
 func traverse(depth int, d string, fun traverseCallback) (err error) {
@@ -524,7 +546,7 @@ func traverse(depth int, d string, fun traverseCallback) (err error) {
 
         defer fd.Close()
 
-        var fi os.FileInfo
+        var fi FileInfo
 readloop:
         for {
                 names, e := fd.Readdirnames(50)
@@ -561,7 +583,7 @@ func Find(d string, sreg string, coll Collector) error {
         if e != nil {
                 return e
         }
-        return traverse(0, d, func(depth int, dname string, fi os.FileInfo) bool {
+        return traverse(0, d, func(depth int, dname string, fi FileInfo) bool {
                 if re.MatchString(dname) {
                         if !fi.IsDir() {
                                 t := coll.AddFile(filepath.Dir(dname), filepath.Base(dname))
@@ -698,7 +720,7 @@ func Generate(tool BuildTool, targets []*Target) (error, []*Target) {
                         }
                 }
 
-                var fi os.FileInfo
+                var fi FileInfo
                 if caller != nil {
                         fi, _ = os.Stat(caller.Name)
                 }
