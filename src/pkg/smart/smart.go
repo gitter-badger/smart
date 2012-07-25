@@ -149,8 +149,11 @@ func (t *Target) String() string {
 }
 
 func (t *Target) Stat() FileInfo {
-        fi, _ := os.Stat(t.Name)
-        return fi
+        if t.IsFile() || t.IsDir() {
+                fi, _ := os.Stat(t.Name)
+                return fi
+        }
+        return nil
 }
 
 func (t *Target) Touch() bool {
@@ -283,8 +286,7 @@ out:
 func (t *Target) Dep(i interface {}, class Class) (o *Target) {
         switch d := i.(type) {
         case string:
-                o = New(d, None)
-                o.Class = class
+                o = New(d, class)
         case *Target:
                 o = d
         }
@@ -670,87 +672,89 @@ func Run32InDir(cmd, dir string, args ...string) error {
         return p.Wait()
 }
 
+type genmeta struct {
+        t *Target
+        g bool // tool.Generate invoked
+        e error // error returned by tool.Generate
+}
+
+// generate invoke tool.Generate on targets
+func generate(tool BuildTool, caller *Target, targets []*Target) (error, []*Target) {
+        if len(targets) == 0 {
+                return nil, nil
+        }
+
+        ch := make(chan genmeta)
+        gn := len(targets)
+
+        for _, t := range targets {
+                if !t.IsGenerated {
+                        go gen(tool, ch, caller, t)
+                }
+        }
+        
+        updated := []*Target{}
+
+        for ; 0 < gn; gn -= 1 {
+                if m := <-ch; m.g && m.e == nil {
+                        updated = append(updated, m.t)
+                } else if m.e != nil {
+                        Fatal("error: %v\n", m.e)
+                }
+        }
+
+        return nil, updated
+}
+
+// gen invoke tool.Generate on a single target
+func gen(tool BuildTool, ch chan genmeta, caller *Target, t *Target) {
+        var err error
+        var needGen = false
+
+        if t.IsGenerated {
+                ch <- genmeta{ t, needGen, err }
+                return
+        }
+
+        // check depends
+        if 0 < len(t.Depends) {
+                if e, u := generate(tool, t, t.Depends); e == nil {
+                        //Info("updated: %v", u)
+                        needGen = needGen || 0 < len(u)
+                } else {
+                        needGen, err = needGen || false, e
+                }
+        }
+
+        // check for update
+        fi := t.Stat()
+        if fi == nil { // not an file target or file not exists
+                needGen = needGen || true
+        } else if caller != nil {
+                // compare modification time with caller-target
+                fiCaller := caller.Stat()
+                if fiCaller == nil {
+                        ///Info("caller: no %v", caller)
+                } else if fi.ModTime().After(fiCaller.ModTime()) {
+                        ///Info("%v: %v (%v)", caller, t, fi.ModTime().Sub(fiCaller.ModTime()))
+                        needGen = needGen || true
+                }
+        }
+
+        // invoke tool.Generate
+        if needGen {
+                if err = tool.Generate(t); err == nil {
+                        t.IsGenerated = true
+                }
+        }
+
+        ch <- genmeta{ t, needGen, err }
+}
+
+
 // Generate calls tool.Generate in goroutines on each target. If any error occurs,
 // it will be returned with the updated targets.
 func Generate(tool BuildTool, targets []*Target) (error, []*Target) {
-        type meta struct { t *Target; e error }
-        var gen func(ch chan meta, caller *Target, t *Target)
-
-        generate := func(tool BuildTool, caller *Target, targets []*Target) (error, []*Target) {
-                if len(targets) == 0 {
-                        return nil, nil
-                }
-
-                ch := make(chan meta)
-                gn := len(targets)
-
-                for _, t := range targets {
-                        if !t.IsGenerated {
-                                go gen(ch, caller, t)
-                        }
-                }
-
-                updated := make([]*Target, gn)
-
-                for ; 0 < gn; gn -= 1 {
-                        if m := <-ch; m.e == nil {
-                                updated = append(updated, m.t)
-                        } else {
-                                Fatal("error: %v\n", m.e)
-                        }
-                }
-
-                return nil, updated
-        }
-
-        gen = func(ch chan meta, caller *Target, t *Target) {
-                if t.IsGenerated {
-                        ch <- meta{ t, nil }
-                        return
-                }
-
-                var err error
-                var needGen = false
-
-                if 0 < len(t.Depends) {
-                        if e, u := generate(tool, t, t.Depends); e == nil {
-                                needGen = needGen || 0 < len(u)
-                        } else {
-                                needGen, err = needGen || false, e
-                        }
-                }
-
-                var fi FileInfo
-                if caller != nil {
-                        fi, _ = os.Stat(caller.Name)
-                }
-                di, _ := os.Stat(t.Name)
-                if fi != nil && di != nil && fi.ModTime().After(di.ModTime()) {
-                        needGen = needGen || true
-                }
-
-                if t.IsFile() || t.IsDir() {
-                        switch {
-                        case t.IsScanned:
-                                needGen = needGen || false
-                        default:
-                                if _, e := os.Stat(t.Name); e != nil {
-                                        needGen = needGen || true
-                                } else {
-                                        needGen = needGen || false
-                                }
-                        }
-                }
-
-                if needGen {
-                        if err = tool.Generate(t); err == nil {
-                                t.IsGenerated = true
-                        }
-                }
-
-                ch <- meta{ t, err }
-        }
-
         return generate(tool, nil, targets)
 }
 
