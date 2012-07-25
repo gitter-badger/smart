@@ -255,3 +255,21 @@ func (coll *gccCollector) AddFile(dir, name string) *smart.Target {
 
         return o.Depends[0]
 }
+
+func build(args []string) error {
+        tool := New()
+        return smart.Build(tool)
+}
+
+func clean(args []string) error {
+        return nil
+}
+
+func CommandLine(args []string) {
+        var commands = map[string] func(args []string) error {
+                "build": build,
+                "clean": clean,
+        }
+
+        smart.CommandLine(commands, args)
+}

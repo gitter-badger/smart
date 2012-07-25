@@ -789,3 +789,19 @@ func Build(tool BuildTool) (e error) {
 
         return
 }
+
+// CommandLine
+func CommandLine(commands map[string] func(args []string) error, args []string) {
+        cmd := args[0]
+        args = args[1:]
+
+        if proc, ok := commands[cmd]; ok && proc != nil {
+                if e := proc(args); e != nil {
+                        fmt.Fprintf(os.Stderr, "asdk: %v\n", e)
+                        os.Exit(-1)
+                }
+        } else {
+                fmt.Fprintf(os.Stderr, "asdk: '%v' not supported\n", cmd)
+                os.Exit(-1)
+        }
+}

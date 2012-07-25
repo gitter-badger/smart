@@ -752,14 +752,14 @@ func SetPlatformLevel(platformLevel uint) error {
 }
 
 // Build builds a project
-func Build(args []string) (e error) {
+func build(args []string) (e error) {
         tool := New()
         e = smart.Build(tool)
 	return
 }
 
 // Install invokes "adb install" command
-func Install(args []string) (e error) {
+func install(args []string) (e error) {
         tool := New()
 
         if e = smart.Build(tool); e != nil {
@@ -801,8 +801,43 @@ func Install(args []string) (e error) {
 }
 
 // Create invokes "android create" command
-func Create(args []string) (err error) {
+func create(args []string) (err error) {
         and := filepath.Join(asdkRoot, "tools", "android")
         p := smart.Command(and, args...)
         return p.Run()
+}
+
+func processPlatformLevelFlags(args []string) (a []string) {
+	platformLevel := 10 // the default level
+
+	for _, arg := range args {
+		var level int
+		if n, se := fmt.Sscanf(arg, "-%d", &level); n == 1 && se == nil {
+			platformLevel = level
+			continue
+		}
+		a = append(a, arg)
+	}
+
+	if e := SetPlatformLevel(uint(platformLevel)); e != nil {
+                fmt.Fprintf(os.Stderr, "asdk: %v\n", e)
+                os.Exit(-1)
+	}
+
+        return
+}
+
+func CommandLine(args []string) {
+        if args = processPlatformLevelFlags(args); len(args) < 1 {
+                fmt.Fprintf(os.Stderr, "asdk: no arguments\n")
+                os.Exit(-1)
+        }
+
+        var commands = map[string] func(args []string) error {
+                "build": build,
+                "install": install,
+                "create": create,
+        }
+
+        smart.CommandLine(commands, args)
 }
