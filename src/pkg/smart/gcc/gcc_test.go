@@ -586,8 +586,7 @@ func TestSmartBuild(t *testing.T) {
         removeInters := func() { for _, s := range inters { os.Remove(s) } }
         removeInters()
 
-        c := newTestGcc()
-
+        c := New()
         if e := smart.Build(c); e != nil {
                 t.Errorf("build: %v", e)
                 return
@@ -699,17 +698,24 @@ func TestSmartBuild(t *testing.T) {
 
         out.Reset()
         p = exec.Command("./sub_lib_dirs")
-        p.Stdout = out
-        p.Stderr = out
+        p.Stdout, p.Stderr = out, out
         if e := p.Run(); e != nil {
                 t.Errorf("sub_lib_dirs: %v", e)
         } else if string(out.Bytes()) != "foooobar\n" {
                 t.Errorf("sub_lib_dirs: %v", string(out.Bytes()))
         }
 
-        //////////////////////////////////////////////////
-        // Try rebuild:
+        // bookmark FileInfos
+        oldTargetInfos := make(map[string]smart.FileInfo)
+        for k, ta := range smart.All() {
+                if fi := ta.Stat(); fi == nil {
+                        t.Errorf("simple: stat %v", k)
+                } else {
+                        oldTargetInfos[k] = fi
+                }
+        }
 
+        // try to rebuild it
         oldTargets := smart.Reset()
         c.target, c.top = nil, ""
 
@@ -726,16 +732,65 @@ func TestSmartBuild(t *testing.T) {
                 } else if ot.Name != ta.Name {
                         t.Errorf("rebuild: mismatched: %v != %v", ot, ta)
                 }
+
+                if fi := ta.Stat(); fi == nil {
+                        t.Errorf("simple: stat %v", k)
+                } else {
+                        if fi0, ok := oldTargetInfos[k]; !ok {
+                                t.Errorf("FileInfo: %v", k)
+                        } else if fi0.ModTime() != fi.ModTime() {
+                                t.Errorf("ModTime: mismatched: %v", k)
+                        }
+                }
         }
 
-        for _, s := range inters {
-                if fi, e := os.Stat(s); e != nil {
-                        t.Errorf("stat: %v: %v", s, e)
+        // touch and rebuild
+        ta := smart.T("foo.so/oo.so/bar.so/ln.so/ln.c")
+        if ta == nil { t.Errorf("none: %v", t); return }
+
+        ta.Touch()
+
+        smart.Reset()
+        c.target, c.top = nil, ""
+
+        smart.Info("rebuild: sub_lib_dirs (foo.so/oo.so/bar.so/ln.so/ln.c touched)\n")
+
+        if e := smart.Build(c); e != nil {
+                t.Errorf("rebuild: %v", e)
+                return
+        }
+
+        for k, ta := range smart.All() {
+                if ot, ok := oldTargets[k]; !ok {
+                        t.Errorf("rebuild: mismatched: %v", k)
+                } else if ot.Name != ta.Name {
+                        t.Errorf("rebuild: mismatched: %v != %v", ot, ta)
+                }
+
+                if fi := ta.Stat(); fi == nil {
+                        t.Errorf("simple: stat %v", k)
                 } else {
-                        if i, ok := fiinters[s]; !ok {
-                                t.Errorf("FileInfo: %v", s)
-                        } else if i.ModTime() != fi.ModTime() {
-                                t.Errorf("ModTime: mismatched: %v", s)
+                        if fi0, ok := oldTargetInfos[k]; !ok {
+                                t.Errorf("FileInfo: %v", k)
+                        } else if fi0.ModTime() != fi.ModTime() {
+                                switch k {
+                                case "foo.so/oo.so/bar.so/ln.so": fallthrough
+                                case "foo.so/oo.so/bar.so/ln.so/ln.c": fallthrough
+                                case "foo.so/oo.so/bar.so/ln.so/ln.c.o": fallthrough
+                                case "foo.so/oo.so/bar.so/ln.so/libln.so": fallthrough
+                                case "foo.so/oo.so/bar.so/libbar.so": fallthrough
+                                case "foo.so/oo.so/bar.so": fallthrough
+                                case "foo.so/oo.so/liboo.so": fallthrough
+                                case "foo.so/oo.so": fallthrough
+                                case "foo.so/libfoo.so": fallthrough
+                                case "foo.so": fallthrough
+                                case "sub_lib_dirs":
+                                        if !fi.ModTime().After(fi0.ModTime()) {
+                                                t.Errorf("ModTime: %v (%v)", k, fi0.ModTime().Sub(fi.ModTime()))
+                                        }
+                                default:
+                                        t.Errorf("ModTime: %v (%v)", k, fi0.ModTime().Sub(fi.ModTime()))
+                                }
                         }
                 }
         }
