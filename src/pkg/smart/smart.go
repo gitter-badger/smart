@@ -62,8 +62,8 @@ func All() map[string]*Target {
         return targets
 }
 
-// ResetTargets reset the target map.
-func ResetTargets() map[string]*Target {
+// Reset reset the target map.
+func Reset() map[string]*Target {
         old := targets
         targets = make(map[string]*Target)
         return old

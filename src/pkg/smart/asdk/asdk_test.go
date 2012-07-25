@@ -16,7 +16,7 @@ func newTestAsdk() *asdk {
         } else {
                 tool.SetTop(top)
         }
-        smart.ResetTargets()
+        smart.Reset()
         return tool
 }
 

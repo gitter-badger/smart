@@ -20,7 +20,7 @@ func newTestGcc() *gcc {
         } else {
                 tool.SetTop(top)
         }
-        smart.ResetTargets()
+        smart.Reset()
         return tool
 }
 
@@ -156,7 +156,7 @@ func TestBuildSimpleRebuild(t *testing.T) {
         }
 
         // rebuild the project
-        oldTargets := smart.ResetTargets()
+        oldTargets := smart.Reset()
         c.target, c.top = nil, ""
 
         smart.Info("rebuild: simple... (no action sould be performed!)")
@@ -195,7 +195,7 @@ func TestBuildSimpleRebuild(t *testing.T) {
         }
 
         // rebuild again and only say.c.o should be generated
-        oldTargets2 := smart.ResetTargets()
+        oldTargets2 := smart.Reset()
         c.target, c.top = nil, ""
 
         smart.Info("rebuild: simple... (only say.c should be compiled!)")
@@ -701,7 +701,7 @@ func TestSmartBuild(t *testing.T) {
         //////////////////////////////////////////////////
         // Try rebuild:
 
-        oldTargets := smart.ResetTargets()
+        oldTargets := smart.Reset()
         c.target, c.top = nil, ""
 
         smart.Info("rebuild: sub_lib_dirs (no action should be performed!)\n")
