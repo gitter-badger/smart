@@ -290,7 +290,7 @@ func (t *Target) JoinParentUseesArgs(n string) []string {
         return t.joinUseesArgs(t.ParentUsees, n)
 }
 
-// Use
+// Use add target to the usee list.
 func (t *Target) Use(usee *Target) {
         for _, u := range t.Usees {
                 if usee == u {
@@ -301,7 +301,7 @@ func (t *Target) Use(usee *Target) {
 out:
 }
 
-// Dep
+// Dep add target to the depend list.
 func (t *Target) Dep(i interface {}, class Class) (o *Target) {
         switch d := i.(type) {
         case string:
@@ -310,11 +310,9 @@ func (t *Target) Dep(i interface {}, class Class) (o *Target) {
                 o = d
         }
 
-        if o == nil {
-                return
+        if o != nil {
+                t.Depends = append(t.Depends, o)
         }
-
-        t.Depends = append(t.Depends, o)
         return
 }
 

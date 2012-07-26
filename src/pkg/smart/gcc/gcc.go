@@ -34,6 +34,8 @@ func (gcc *gcc) NewCollector(t *smart.Target) smart.Collector {
 
 func (gcc *gcc) Generate(t *smart.Target) error {
         switch {
+        default:
+                return gcc.link(t)
         case strings.HasSuffix(t.Name, ".o"):
                 return gcc.compile(t)
         case strings.HasSuffix(t.Name, ".a"):
@@ -51,7 +53,7 @@ func (gcc *gcc) Generate(t *smart.Target) error {
         case strings.HasSuffix(t.Name, ".cxx"):
                 return nil
         }
-        return gcc.link(t)
+        return smart.NewErrorf("gcc: unknown target: %v", t)
 }
 
 func (gcc *gcc) compile(t *smart.Target) error {
