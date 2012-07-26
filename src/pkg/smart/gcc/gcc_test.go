@@ -34,32 +34,32 @@ func TestBuildSimple(t *testing.T) {
         }
 
         if c.target.Name != "simple" { t.Errorf("bad name: %s", c.target.Name) }
-        if len(c.target.Depends) != 2 {
-                t.Errorf("not 2 depends: %v", c.target.Depends)
+        if len(c.target.Dependees) != 2 {
+                t.Errorf("not 2 depends: %v", c.target.Dependees)
         } else {
                 if !c.target.IsFile() { t.Errorf("not file: %v", c.target) }
                 if !c.target.IsFinal() { t.Errorf("not goal: %v", c.target) }
 
-                d1 := c.target.Depends[0]
-                d2 := c.target.Depends[1]
+                d1 := c.target.Dependees[0]
+                d2 := c.target.Dependees[1]
                 if !d1.IsFile() { t.Errorf("not file: %v", d1) }
                 if !d1.IsIntermediate() { t.Errorf("not intermediate: %v", d1) }
                 if !d2.IsFile() { t.Errorf("not file: %v", d1) }
                 if !d2.IsIntermediate() { t.Errorf("not intermediate: %v", d1) }
                 if d1.Name != "say.c.o" && d1.Name != "simple.c.o" { t.Errorf("bad name: %s", d1.Name) }
                 if d2.Name != "say.c.o" && d2.Name != "simple.c.o" { t.Errorf("bad name: %s", d2.Name) }
-                if len(d1.Depends) != 1 {
-                        t.Errorf("not 1 depend: %v", d1.Depends)
+                if len(d1.Dependees) != 1 {
+                        t.Errorf("not 1 depend: %v", d1.Dependees)
                 } else {
-                        d := d1.Depends[0]
+                        d := d1.Dependees[0]
                         if d.Name != "say.c" && d.Name != "simple.c" { t.Errorf("bad name: %s", d.Name) }
                         if !d.IsFile() { t.Errorf("not file: %v", d) }
                         if !d.IsScanned { t.Errorf("not scanned: %v", d) }
                 }
-                if len(d2.Depends) != 1 {
-                        t.Errorf("not 1 depend: %v", d2.Depends)
+                if len(d2.Dependees) != 1 {
+                        t.Errorf("not 1 depend: %v", d2.Dependees)
                 } else {
-                        d := d2.Depends[0]
+                        d := d2.Dependees[0]
                         if d.Name != "say.c" && d.Name != "simple.c" { t.Errorf("bad name: %s", d.Name) }
                         if !d.IsFile() { t.Errorf("not file: %v", d) }
                         if !d.IsScanned { t.Errorf("not scanned: %v", d) }
@@ -100,32 +100,32 @@ func TestBuildSimpleRebuild(t *testing.T) {
         }
 
         if c.target.Name != "simple" { t.Errorf("bad name: %s", c.target.Name) }
-        if len(c.target.Depends) != 2 {
-                t.Errorf("not 2 depends: %v", c.target.Depends)
+        if len(c.target.Dependees) != 2 {
+                t.Errorf("not 2 depends: %v", c.target.Dependees)
         } else {
                 if !c.target.IsFile() { t.Errorf("not file: %v", c.target) }
                 if !c.target.IsFinal() { t.Errorf("not goal: %v", c.target) }
 
-                d1 := c.target.Depends[0]
-                d2 := c.target.Depends[1]
+                d1 := c.target.Dependees[0]
+                d2 := c.target.Dependees[1]
                 if !d1.IsFile() { t.Errorf("not file: %v", d1) }
                 if !d1.IsIntermediate() { t.Errorf("not intermediate: %v", d1) }
                 if !d2.IsFile() { t.Errorf("not file: %v", d1) }
                 if !d2.IsIntermediate() { t.Errorf("not intermediate: %v", d1) }
                 if d1.Name != "say.c.o" && d1.Name != "simple.c.o" { t.Errorf("bad name: %s", d1.Name) }
                 if d2.Name != "say.c.o" && d2.Name != "simple.c.o" { t.Errorf("bad name: %s", d2.Name) }
-                if len(d1.Depends) != 1 {
-                        t.Errorf("not 1 depend: %v", d1.Depends)
+                if len(d1.Dependees) != 1 {
+                        t.Errorf("not 1 depend: %v", d1.Dependees)
                 } else {
-                        d := d1.Depends[0]
+                        d := d1.Dependees[0]
                         if d.Name != "say.c" && d.Name != "simple.c" { t.Errorf("bad name: %s", d.Name) }
                         if !d.IsFile() { t.Errorf("not file: %v", d) }
                         if !d.IsScanned { t.Errorf("not scanned: %v", d) }
                 }
-                if len(d2.Depends) != 1 {
-                        t.Errorf("not 1 depend: %v", d2.Depends)
+                if len(d2.Dependees) != 1 {
+                        t.Errorf("not 1 depend: %v", d2.Dependees)
                 } else {
-                        d := d2.Depends[0]
+                        d := d2.Dependees[0]
                         if d.Name != "say.c" && d.Name != "simple.c" { t.Errorf("bad name: %s", d.Name) }
                         if !d.IsFile() { t.Errorf("not file: %v", d) }
                         if !d.IsScanned { t.Errorf("not scanned: %v", d) }
@@ -253,32 +253,32 @@ func TestCleanSimple(t *testing.T) {
         }()
 
         if c.target.Name != "simple" { t.Errorf("bad name: %s", c.target.Name) }
-        if len(c.target.Depends) != 2 {
-                t.Errorf("not 2 depends: %v", c.target.Depends)
+        if len(c.target.Dependees) != 2 {
+                t.Errorf("not 2 depends: %v", c.target.Dependees)
         } else {
                 if !c.target.IsFile() { t.Errorf("not file: %v", c.target) }
                 if !c.target.IsFinal() { t.Errorf("not goal: %v", c.target) }
 
-                d1 := c.target.Depends[0]
-                d2 := c.target.Depends[1]
+                d1 := c.target.Dependees[0]
+                d2 := c.target.Dependees[1]
                 if !d1.IsFile() { t.Errorf("not file: %v", d1) }
                 if !d1.IsIntermediate() { t.Errorf("not intermediate: %v", d1) }
                 if !d2.IsFile() { t.Errorf("not file: %v", d1) }
                 if !d2.IsIntermediate() { t.Errorf("not intermediate: %v", d1) }
                 if d1.Name != "say.c.o" && d1.Name != "simple.c.o" { t.Errorf("bad name: %s", d1.Name) }
                 if d2.Name != "say.c.o" && d2.Name != "simple.c.o" { t.Errorf("bad name: %s", d2.Name) }
-                if len(d1.Depends) != 1 {
-                        t.Errorf("not 1 depend: %v", d1.Depends)
+                if len(d1.Dependees) != 1 {
+                        t.Errorf("not 1 depend: %v", d1.Dependees)
                 } else {
-                        d := d1.Depends[0]
+                        d := d1.Dependees[0]
                         if d.Name != "say.c" && d.Name != "simple.c" { t.Errorf("bad name: %s", d.Name) }
                         if !d.IsFile() { t.Errorf("not file: %v", d) }
                         if !d.IsScanned { t.Errorf("not scanned: %v", d) }
                 }
-                if len(d2.Depends) != 1 {
-                        t.Errorf("not 1 depend: %v", d2.Depends)
+                if len(d2.Dependees) != 1 {
+                        t.Errorf("not 1 depend: %v", d2.Dependees)
                 } else {
-                        d := d2.Depends[0]
+                        d := d2.Dependees[0]
                         if d.Name != "say.c" && d.Name != "simple.c" { t.Errorf("bad name: %s", d.Name) }
                         if !d.IsFile() { t.Errorf("not file: %v", d) }
                         if !d.IsScanned { t.Errorf("not scanned: %v", d) }
@@ -316,53 +316,53 @@ func TestBuildCombineObjects(t *testing.T) {
 
         if c.target.Name != "combine" { t.Errorf("bad name: %s", c.target.Name) }
 
-        if len(c.target.Depends) != 2 {
-                t.Errorf("not 2 depends: %v", c.target.Depends)
+        if len(c.target.Dependees) != 2 {
+                t.Errorf("not 2 depends: %v", c.target.Dependees)
         } else {
                 if !c.target.IsFile() { t.Errorf("not file: %v", c.target) }
                 if !c.target.IsFinal() { t.Errorf("not goal: %v", c.target) }
 
-                d1 := c.target.Depends[0]
+                d1 := c.target.Dependees[0]
                 if !d1.IsFile() { t.Errorf("not file: %v", d1) }
                 if !d1.IsIntermediate() { t.Errorf("not intermediate: %v", d1) }
                 if d1.Name != "main.c.o" { t.Errorf("bad name: %s", d1.Name) }
-                if len(d1.Depends) != 1 {
-                        t.Errorf("not 1 depend: %v (%v)", d1.Depends, d1)
+                if len(d1.Dependees) != 1 {
+                        t.Errorf("not 1 depend: %v (%v)", d1.Dependees, d1)
                 } else {
-                        d := d1.Depends[0]
+                        d := d1.Dependees[0]
                         if d.Name != "main.c" { t.Errorf("bad name: %s", d.Name) }
                         if !d.IsFile() { t.Errorf("not file: %v", d) }
                         if !d.IsScanned { t.Errorf("not scanned: %v", d) }
                 }
 
-                d2 := c.target.Depends[1]
+                d2 := c.target.Dependees[1]
                 if !d2.IsFile() { t.Errorf("not file: %v", d2) }
                 if !d2.IsFinal() { t.Errorf("not goal: %v", d2) }
                 if d2.Name != "sub.o/_.o" { t.Errorf("bad name: %s", d2.Name) }
-                if len(d2.Depends) != 2 {
-                        t.Errorf("not 2 depends: %v (%v)", d2.Depends, d2)
+                if len(d2.Dependees) != 2 {
+                        t.Errorf("not 2 depends: %v (%v)", d2.Dependees, d2)
                 } else {
-                        d := d2.Depends[0]
+                        d := d2.Dependees[0]
                         if d.Name != "sub.o/sub1.c.o" && d.Name != "sub.o/sub2.c.o" { t.Errorf("bad name: %s", d.Name) }
                         if !d.IsFile() { t.Errorf("not file: %v", d) }
                         if !d.IsIntermediate() { t.Errorf("not scanned: %v", d) }
-                        if len(d.Depends) != 1 {
-                                t.Errorf("not 1 depends: %v (%v)", d.Depends, d)
+                        if len(d.Dependees) != 1 {
+                                t.Errorf("not 1 depends: %v (%v)", d.Dependees, d)
                         } else {
-                                dd := d.Depends[0]
+                                dd := d.Dependees[0]
                                 if dd.Name != "sub.o/sub1.c" && dd.Name != "sub.o/sub2.c" { t.Errorf("bad name: %s", dd.Name) }
                                 if !dd.IsFile() { t.Errorf("not file: %v", dd) }
                                 //if !dd.IsScanned { t.Errorf("not scanned: %v", dd) }
                         }
 
-                        d = d2.Depends[1]
+                        d = d2.Dependees[1]
                         if d.Name != "sub.o/sub1.c.o" && d.Name != "sub.o/sub2.c.o" { t.Errorf("bad name: %s", d.Name) }
                         if !d.IsFile() { t.Errorf("not file: %v", d) }
                         if !d.IsIntermediate() { t.Errorf("not scanned: %v", d) }
-                        if len(d.Depends) != 1 {
-                                t.Errorf("not 1 depends: %v (%v)", d.Depends, d)
+                        if len(d.Dependees) != 1 {
+                                t.Errorf("not 1 depends: %v (%v)", d.Dependees, d)
                         } else {
-                                dd := d.Depends[0]
+                                dd := d.Dependees[0]
                                 if dd.Name != "sub.o/sub1.c" && dd.Name != "sub.o/sub2.c" { t.Errorf("bad name: %s", dd.Name) }
                                 if !dd.IsFile() { t.Errorf("not file: %v", dd) }
                                 //if !dd.IsScanned { t.Errorf("not scanned: %v", dd) }

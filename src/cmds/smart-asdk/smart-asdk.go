@@ -6,6 +6,6 @@ import (
 )
 
 func main() {
-	args := os.Args
+        args := os.Args[1:]
         asdk.CommandLine(args)
 }

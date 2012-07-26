@@ -59,23 +59,23 @@ func (gcc *gcc) Generate(t *smart.Target) error {
 func (gcc *gcc) compile(t *smart.Target) error {
         cc, args := "cc", []string{ "-o", t.Name, }
 
-        dl := len(t.Depends)
+        dl := len(t.Dependees)
         switch (dl) {
         case 0: return smart.NewErrorf("no depends: %v\n", t)
         case 1:
-                d0 := t.Depends[0]
+                d0 := t.Dependees[0]
                 if cc = t.VarDef("CC", cc); cc == "" {
                         return smart.NewErrorf("unknown file type: %v", d0.Name)
                 }
 
                 args = append(args, t.JoinAllArgs()...)
                 args = append(args, t.JoinUseesArgs("-I")...)
-                args = append(args, t.JoinParentUseesArgs("-I")...)
+                args = append(args, t.JoinDependersUseesArgs("-I")...)
                 args = append(args, "-c", d0.Name)
 
         default:
                 cc, args = "ld", append(args, "-r")
-                for _, d := range t.Depends {
+                for _, d := range t.Dependees {
                         if !strings.HasSuffix(d.Name, ".o") {
                                 return smart.NewErrorf("unexpected file type: %v", d)
                         }
@@ -90,7 +90,7 @@ func (gcc *gcc) archive(t *smart.Target) error {
         ar, args := "ar", []string{ "crs", t.Name, }
 
         al := len(args)
-        for _, d := range t.Depends {
+        for _, d := range t.Dependees {
                 switch d.Type {
                 case ".o":
                         args = append(args, d.String())
@@ -120,7 +120,7 @@ func (gcc *gcc) link(t *smart.Target) error {
 
         //smart.Info("link: %v (%v)\n", t.Name, gcc.target)
 
-        for _, d := range t.Depends {
+        for _, d := range t.Dependees {
                 switch d.Type {
                 case ".a": fallthrough
                 case ".so":
@@ -205,10 +205,10 @@ func (coll *gccCollector) AddDir(dir string) (t *smart.Target) {
 
         if t != nil {
                 smart.Scan(coll.gcc.NewCollector(t), coll.gcc.top, dir)
-                //fmt.Printf("scan: %v %v\n", dir, t.Depends)
+                //fmt.Printf("scan: %v %v\n", dir, t.Dependees)
 
                 coll.target.Dep(t, smart.None)
-                //fmt.Printf("TODO: AddDir: %v %v\n", t, t.Depends)
+                //fmt.Printf("TODO: AddDir: %v %v\n", t, t.Dependees)
         }
         return t
 }
@@ -253,7 +253,7 @@ func (coll *gccCollector) AddFile(dir, name string) *smart.Target {
                 o.AddArgs("-fPIC")
         }
 
-        return o.Depends[0]
+        return o.Dependees[0]
 }
 
 func build(args []string) error {

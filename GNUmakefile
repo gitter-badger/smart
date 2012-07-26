@@ -32,7 +32,9 @@ define BUILD_BIN
    bin/$(NAME): src/cmds/$(NAME)/$(NAME).go
 	$$(GOBUILD_BIN)
 
-   bin/$(NAME): $(wildcard src/pkg/smart/$(NAME)/*.go)
+   bin/$(NAME): \
+     $(wildcard src/pkg/smart/*.go)\
+     $(wildcard src/pkg/smart/$(NAME)/*.go)\
 
    src/cmds/$(NAME)/$(NAME).go: \
      $(filter-out %_test.go,$(wildcard src/pkg/smart/*.go src/pkg/smart/$(NAME)/*.go))

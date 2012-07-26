@@ -147,7 +147,7 @@ func (sdk *asdk) compileJava(t *smart.Target) (e error) {
         classpath := filepath.Join(asdkRoot, "platforms", asdkPlatform, "android.jar")
 
         var sources []string
-        for _, d := range t.Depends {
+        for _, d := range t.Dependees {
                 ext := filepath.Ext(d.Name)
                 switch {
                 case ext == ".java": sources = append(sources, d.Name)
@@ -192,10 +192,10 @@ func (sdk *asdk) compileJava(t *smart.Target) (e error) {
 
 func (sdk *asdk) dx(t *smart.Target) error {
         var classes *smart.Target
-        if len(t.Depends) == 1 {
-                classes = t.Depends[0]
+        if len(t.Dependees) == 1 {
+                classes = t.Dependees[0]
         } else {
-                return smart.NewErrorf("expect 1 depend: %v->%v\n", t, t.Depends)
+                return smart.NewErrorf("expect 1 depend: %v->%v\n", t, t.Dependees)
         }
 
         var args []string
@@ -337,14 +337,14 @@ func (sdk *asdk) align(t *smart.Target) (e error) {
 
 func (sdk *asdk) packUnsigned(t *smart.Target) (e error) {
         var dex *smart.Target
-        for _, d := range t.Depends {
+        for _, d := range t.Dependees {
                 if d.IsFile() && strings.HasSuffix(d.Name, ".dex") {
                         dex = d; break
                 }
         }
 
         if dex == nil {
-                return smart.NewErrorf("no dex for %v (%v)", t, t.Depends)
+                return smart.NewErrorf("no dex for %v (%v)", t, t.Dependees)
         }
 
         if e = sdk.createEmptyPackage(t.Name); e != nil {
@@ -409,7 +409,7 @@ func (sdk *asdk) packJar(t *smart.Target) (e error) {
 
         var classes *smart.Target
         sep := string(filepath.Separator)
-        for _, d := range t.Depends {
+        for _, d := range t.Dependees {
                 if strings.HasPrefix(d.Name, "out"+sep) && strings.HasSuffix(d.Name, sep+"classes") {
                         classes = d; break
                 }
@@ -627,7 +627,7 @@ func (coll *asdkCollector) makeTargets(dir string) bool {
         coll.proj.classes.Type = "classes"
         coll.proj.classes.SetVar("top", top)
 
-        //smart.Info("target: %v (%v)", coll.proj.target, coll.proj.target.Depends)
+        //smart.Info("target: %v (%v)", coll.proj.target, coll.proj.target.Dependees)
 
         if coll.proj.target == nil {
                 smart.Fatal("no target for '%v'", dir)
@@ -659,7 +659,7 @@ func (coll *asdkCollector) addResDir(dir string) (t *smart.Target) {
                 if r == nil {
                         smart.Fatal("inter: %v:%v", rjava, coll.proj.res)
                 }
-                //fmt.Printf("%v: %v\n", r, r.Depends)
+                //fmt.Printf("%v: %v\n", r, r.Dependees)
         } else {
                 smart.Fatal("no package name")
         }

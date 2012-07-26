@@ -110,8 +110,8 @@ func (c Class) String() string {
 const (
         None Class = 0
 
-        Intermediate = 1<<1
-        Final = 1<<2
+        Intermediate = 1<<1 // generated target of depends 
+        Final = 1<<2 // project goal target
 
         File = 1<<3
         Dir = 1<<4
@@ -127,16 +127,16 @@ type Target struct {
         Type string
         Name string
 
-        Depends []*Target
-
-        Usees []*Target
-        ParentUsees []*Target
+        Dependees []*Target // the targets this target depends on
+        Dependers []*Target // the targets depends on this target
+        Usees []*Target // the targets used by this target
 
         Class Class
 
         IsScanned bool // target is made by scan() or find()
         IsDirTarget bool // target is made by AddDir
-        IsGenerated bool // target has already generated
+
+        Generated bool // target has already generated
 
         Meta []*MetaInfo
         Args []*NamedValues
@@ -272,22 +272,20 @@ func (t *Target) JoinExports(n string) []string {
         return t.join(t.Exports, n)
 }
 
-// 
-func (t *Target) joinUseesArgs(usees []*Target, n string) (res []string) {
-        for _, u := range usees {
+// JoinUseesArgs
+func (t *Target) JoinUseesArgs(n string) (res []string) {
+        for _, u := range t.Usees {
                 res = append(res, u.JoinExports(n)...)
         }
         return
 }
 
-// 
-func (t *Target) JoinUseesArgs(n string) []string {
-        return t.joinUseesArgs(t.Usees, n)
-}
-
-// 
-func (t *Target) JoinParentUseesArgs(n string) []string {
-        return t.joinUseesArgs(t.ParentUsees, n)
+// JoinDependersUseesArgs
+func (t *Target) JoinDependersUseesArgs(n string) (a []string) {
+        for _, der := range t.Dependers {
+                a = append(a, der.JoinUseesArgs(n)...)
+        }
+        return
 }
 
 // Use add target to the usee list.
@@ -311,7 +309,8 @@ func (t *Target) Dep(i interface {}, class Class) (o *Target) {
         }
 
         if o != nil {
-                t.Depends = append(t.Depends, o)
+                t.Dependees = append(t.Dependees, o)
+                o.Dependers = append(o.Dependers, t)
         }
         return
 }
@@ -617,8 +616,6 @@ func Find(d string, sreg string, coll Collector) error {
 
 // Graph draws dependency graph of targets.
 func Graph() {
-        //fmt.Printf("scanned: %v\n", targets)
-
         var dirs []*Target
         var files []*Target
         var goals []*Target
@@ -636,23 +633,6 @@ func Graph() {
                 }
         next:
         }
-
-        /*
-        fmt.Printf("dirs: %v\n", dirs)
-        fmt.Printf("files: %v\n", files)
-        fmt.Printf("goals: %v\n", goals)
-        */
-
-        var apply func(ts []*Target)
-        apply = func(ts []*Target) {
-                for _, t := range ts {
-                        apply(t.Depends)
-                        for _, d := range t.Depends {
-                                d.ParentUsees = append(d.ParentUsees, t.Usees...)
-                        }
-                }
-        }
-        apply(goals)
 }
 
 // Command make system command.
@@ -705,7 +685,7 @@ func generate(tool BuildTool, caller *Target, targets []*Target) (error, []*Targ
         gn := len(targets)
 
         for _, t := range targets {
-                if !t.IsGenerated {
+                if !t.Generated {
                         go gen(tool, caller, t, ch)
                 }
         }
@@ -728,14 +708,14 @@ func gen(tool BuildTool, caller *Target, t *Target, ch chan genmeta) {
         var err error
         var needGen = false
 
-        if t.IsGenerated {
+        if t.Generated {
                 ch <- genmeta{ t, needGen, err }
                 return
         }
 
         // check depends
-        if 0 < len(t.Depends) {
-                if e, u := generate(tool, t, t.Depends); e == nil {
+        if 0 < len(t.Dependees) {
+                if e, u := generate(tool, t, t.Dependees); e == nil {
                         //Info("updated: %v", u)
                         needGen = needGen || 0 < len(u)
                 } else {
@@ -761,7 +741,7 @@ func gen(tool BuildTool, caller *Target, t *Target, ch chan genmeta) {
         // invoke tool.Generate
         if needGen {
                 if err = tool.Generate(t); err == nil {
-                        t.IsGenerated = true
+                        t.Generated = true
                 }
         }
 
@@ -817,7 +797,7 @@ func Build(tool BuildTool) (e error) {
 
 func clean(ts []*Target) error {
         for _, t := range ts {
-                if e := clean(t.Depends); e != nil {
+                if e := clean(t.Dependees); e != nil {
                         return e
                 }
 
@@ -851,11 +831,11 @@ func CommandLine(commands map[string] func(args []string) error, args []string) 
 
         if proc, ok := commands[cmd]; ok && proc != nil {
                 if e := proc(args); e != nil {
-                        fmt.Fprintf(os.Stderr, "asdk: %v\n", e)
+                        Fatal("smart: %v (%v %v)\n", e, cmd, args)
                         os.Exit(-1)
                 }
         } else {
-                fmt.Fprintf(os.Stderr, "asdk: '%v' not supported\n", cmd)
+                Fatal("smart: '%v' not supported (%v)\n", cmd, args)
                 os.Exit(-1)
         }
 }
