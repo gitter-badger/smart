@@ -183,6 +183,25 @@ func (t *Target) IsFinal() bool {// final target, opposite to 'intermediate'
         return t.Class & (Final | ^Intermediate) != 0
 }
 
+func (t *Target) SetVar(name, value string) {
+        t.Variables[name] = value
+}
+
+func (t *Target) DelVar(name string) {
+        delete(t.Variables, name)
+}
+
+func (t *Target) VarDef(name string, def string) string {
+        if v, ok := t.Variables[name]; ok {
+                return v
+        }
+        return def
+}
+
+func (t *Target) Var(name string) string {
+        return t.VarDef(name, "")
+}
+
 func (t *Target) add(l []*NamedValues, name string, args ...string) ([]*NamedValues, *NamedValues) {
         for _, nv := range l {
                 if nv.Name == name {

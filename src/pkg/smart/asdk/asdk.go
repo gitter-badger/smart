@@ -102,8 +102,7 @@ func (sdk *asdk) compileResource(t *smart.Target) (e error) {
         //assert(t.IsDir)
 
         var top string
-        if s, ok := t.Variables["top"]; ok { top = s }
-        if top == "" {
+        if top = t.Var("top"); top == "" {
                 smart.Fatal("no top variable in %v", t)
         }
 
@@ -359,8 +358,7 @@ func (sdk *asdk) packUnsigned(t *smart.Target) (e error) {
         }()
 
         var top string
-        if s, ok := t.Variables["top"]; ok { top = s }
-        if top == "" {
+        if top = t.Var("top"); top == "" {
                 smart.Fatal("no top variable in %v", t)
         }
 
@@ -405,8 +403,7 @@ func (sdk *asdk) packUnsigned(t *smart.Target) (e error) {
 
 func (sdk *asdk) packJar(t *smart.Target) (e error) {
         var top string
-        if s, ok := t.Variables["top"]; ok { top = s }
-        if top == "" {
+        if top = t.Var("top"); top == "" {
                 smart.Fatal("no top variable in %v", t)
         }
 
@@ -597,7 +594,7 @@ func (coll *asdkCollector) makeTargets(dir string) bool {
                 if coll.proj.target == nil {
                         coll.proj.target = smart.New(pkg + tt, smart.FinalFile)
                 }
-                coll.proj.target.Variables["package"] = pkg
+                coll.proj.target.SetVar("package", pkg)
         } else {
                 if !strings.HasSuffix(dir, ".jar") {
                         smart.Fatal("not .jar directory %v", dir)
@@ -605,17 +602,17 @@ func (coll *asdkCollector) makeTargets(dir string) bool {
                 if coll.proj.target == nil {
                         coll.proj.target = smart.New(base + tt, smart.FinalFile)
                 }
-                delete(coll.proj.target.Variables, "package")
+                coll.proj.target.DelVar("package")
         }
 
         coll.proj.target.Type = tt
-        coll.proj.target.Variables["top"] = top
+        coll.proj.target.SetVar("top", top)
 
         switch tt {
         case ".apk":
                 coll.proj.signed = coll.proj.target.Dep(filepath.Join(out, "_.signed"), smart.IntermediateFile)
                 coll.proj.unsigned = coll.proj.signed.Dep(filepath.Join(out, "_.unsigned"), smart.IntermediateFile)
-                coll.proj.unsigned.Variables["top"] = top
+                coll.proj.unsigned.SetVar("top", top)
                 coll.proj.dex = coll.proj.unsigned.Dep(outClasses + ".dex", smart.IntermediateFile)
                 coll.proj.dex.Type = ".dex"
                 coll.proj.classes = coll.proj.dex.Dep(outClasses, smart.IntermediateDir)
@@ -628,7 +625,7 @@ func (coll *asdkCollector) makeTargets(dir string) bool {
         }
 
         coll.proj.classes.Type = "classes"
-        coll.proj.classes.Variables["top"] = top
+        coll.proj.classes.SetVar("top", top)
 
         //smart.Info("target: %v (%v)", coll.proj.target, coll.proj.target.Depends)
 
@@ -643,13 +640,13 @@ func (coll *asdkCollector) addResDir(dir string) (t *smart.Target) {
         if coll.proj.res == nil {
                 outRes := filepath.Join(filepath.Dir(coll.proj.classes.Name), "res")
                 coll.proj.res = smart.New(outRes, smart.IntermediateDir)
-                coll.proj.res.Variables["top"] = filepath.Dir(dir)
+                coll.proj.res.SetVar("top", filepath.Dir(dir))
         }
         
         t = coll.proj.res.Dep(dir, smart.Dir)
         
         // Add R.java target
-        if pkg, ok := coll.proj.target.Variables["package"]; ok {
+        if pkg := coll.proj.target.Var("package"); pkg != "" {
                 pkg = strings.Replace(pkg, ".", string(filepath.Separator), -1)
                 rjava := filepath.Join(coll.proj.res.Name, pkg, "R.java")
                 
@@ -679,11 +676,11 @@ func (coll *asdkCollector) addJarDir(dir string) (t *smart.Target) {
         t.Dep(dir, smart.Dir)
 
         /*
-        if s, ok := coll.proj.unsigned.Variables["classpath"]; !ok {
-                coll.proj.classes.Variables["classpath"] = name
-        } else {
-                coll.proj.classes.Variables["classpath"] = s + ":" + name
-        }
+         if s := coll.proj.unsigned.Var("classpath"); s == "" {
+         coll.proj.classes.SetVar("classpath", name)
+         } else {
+         coll.proj.classes.SetVar("classpath", s + ":" + name)
+         }
         */
 
         jarColl := coll.sdk.NewCollector(t).(*asdkCollector)

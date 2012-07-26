@@ -62,9 +62,7 @@ func (gcc *gcc) compile(t *smart.Target) error {
         case 0: return smart.NewErrorf("no depends: %v\n", t)
         case 1:
                 d0 := t.Depends[0]
-                if s, ok := t.Variables["CC"]; ok && s != "" {
-                        cc = s
-                } else {
+                if cc = t.VarDef("CC", cc); cc == "" {
                         return smart.NewErrorf("unknown file type: %v", d0.Name)
                 }
 
@@ -103,8 +101,8 @@ func (gcc *gcc) archive(t *smart.Target) error {
                 return smart.NewErrorf("no objects for archive: %v", t)
         }
 
-        if s, ok := t.Variables["AR"]; ok && s != "" {
-                ar = s
+        if ar = t.VarDef("AR", ar); ar == "" {
+                return smart.NewErrorf("empty AR command for: %v", t)
         }
 
         return smart.Run(ar, args...)
@@ -140,8 +138,8 @@ func (gcc *gcc) link(t *smart.Target) error {
         args = append(args, t.JoinUseesArgs("-L")...)
         args = append(args, t.JoinUseesArgs("-l")...)
 
-        if s, ok := t.Variables["LD"]; ok && s != "" {
-                ld = s
+        if ld = t.VarDef("LD", ld); ld == "" {
+                return smart.NewErrorf("empty LD command for: %v", t)
         }
 
         return smart.Run(ld, args...)
@@ -246,8 +244,8 @@ func (coll *gccCollector) AddFile(dir, name string) *smart.Target {
         }
 
         o.Type = ".o"
-        o.Variables["CC"] = cc
-        coll.target.Variables["LD"] = cc
+        o.SetVar("CC", cc)
+        coll.target.SetVar("LD", cc)
 
         if coll.target.Type == ".so" {
                 o.AddArgs("-fPIC")
