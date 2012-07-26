@@ -48,3 +48,17 @@ func Checkd(t *testing.T, fn string) {
                 t.Errorf("NotDir: %v", fi)
         }
 }
+
+func Checknf(t *testing.T, fn string) {
+        if fi, e := os.Stat(fn); fi != nil || e == nil {
+                t.Errorf("File: %v", fn)
+        }
+}
+
+func Checknd(t *testing.T, fn string) {
+        if fi, e := os.Stat(fn); fi == nil || e != nil {
+                return
+        } else if fi.IsDir() {
+                t.Errorf("Dir: %v", fn)
+        }
+}

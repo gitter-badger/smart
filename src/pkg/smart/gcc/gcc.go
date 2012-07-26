@@ -262,7 +262,8 @@ func build(args []string) error {
 }
 
 func clean(args []string) error {
-        return nil
+        tool := New()
+        return smart.Clean(tool)
 }
 
 func CommandLine(args []string) {

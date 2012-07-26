@@ -237,6 +237,71 @@ func TestBuildSimpleRebuild(t *testing.T) {
         os.Remove("simple")
 }
 
+func TestCleanSimple(t *testing.T) {
+        tt.Chdir(t, "+testdata/simple"); defer tt.Chdir(t, "-")
+        tt.Checkf(t, "simple.c")
+
+        c := New()
+        if e := smart.Build(c); e != nil {
+                t.Errorf("scan: %v", e); return
+        }
+
+        defer func() {
+                os.Remove("say.c.o")
+                os.Remove("simple.c.o")
+                os.Remove("simple")
+        }()
+
+        if c.target.Name != "simple" { t.Errorf("bad name: %s", c.target.Name) }
+        if len(c.target.Depends) != 2 {
+                t.Errorf("not 2 depends: %v", c.target.Depends)
+        } else {
+                if !c.target.IsFile() { t.Errorf("not file: %v", c.target) }
+                if !c.target.IsFinal() { t.Errorf("not goal: %v", c.target) }
+
+                d1 := c.target.Depends[0]
+                d2 := c.target.Depends[1]
+                if !d1.IsFile() { t.Errorf("not file: %v", d1) }
+                if !d1.IsIntermediate() { t.Errorf("not intermediate: %v", d1) }
+                if !d2.IsFile() { t.Errorf("not file: %v", d1) }
+                if !d2.IsIntermediate() { t.Errorf("not intermediate: %v", d1) }
+                if d1.Name != "say.c.o" && d1.Name != "simple.c.o" { t.Errorf("bad name: %s", d1.Name) }
+                if d2.Name != "say.c.o" && d2.Name != "simple.c.o" { t.Errorf("bad name: %s", d2.Name) }
+                if len(d1.Depends) != 1 {
+                        t.Errorf("not 1 depend: %v", d1.Depends)
+                } else {
+                        d := d1.Depends[0]
+                        if d.Name != "say.c" && d.Name != "simple.c" { t.Errorf("bad name: %s", d.Name) }
+                        if !d.IsFile() { t.Errorf("not file: %v", d) }
+                        if !d.IsScanned { t.Errorf("not scanned: %v", d) }
+                }
+                if len(d2.Depends) != 1 {
+                        t.Errorf("not 1 depend: %v", d2.Depends)
+                } else {
+                        d := d2.Depends[0]
+                        if d.Name != "say.c" && d.Name != "simple.c" { t.Errorf("bad name: %s", d.Name) }
+                        if !d.IsFile() { t.Errorf("not file: %v", d) }
+                        if !d.IsScanned { t.Errorf("not scanned: %v", d) }
+                }
+        }
+
+        tt.Checkf(t, "say.c.o")
+        tt.Checkf(t, "simple.c.o")
+        tt.Checkf(t, "simple")
+
+        smart.Reset()
+        c.target, c.top = nil, ""
+        if e := smart.Clean(c); e != nil {
+                t.Errorf("gcc: %v", e); return
+        }
+
+        tt.Checkf(t, "say.c")
+        tt.Checkf(t, "simple.c")
+        tt.Checknf(t, "say.c.o")
+        tt.Checknf(t, "simple.c.o")
+        tt.Checknf(t, "simple")
+}
+
 func TestBuildCombineObjects(t *testing.T) {
         tt.Chdir(t, "+testdata/combine"); defer tt.Chdir(t, "-")
         tt.Checkd(t, "sub.o")

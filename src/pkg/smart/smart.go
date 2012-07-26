@@ -775,8 +775,8 @@ func Generate(tool BuildTool, targets []*Target) (error, []*Target) {
         return generate(tool, nil, targets)
 }
 
-// Build launches a build process on a tool.
-func Build(tool BuildTool) (e error) {
+// scanTargetGraph scan filesystem for targets and draw target graph
+func scanTargetGraph(tool BuildTool) (e error) {
         var top string
 
         if top, e = os.Getwd(); e != nil {
@@ -790,6 +790,14 @@ func Build(tool BuildTool) (e error) {
         }
 
         Graph() // draw dependency graph.
+        return nil
+}
+
+// Build launches a build process on a tool.
+func Build(tool BuildTool) (e error) {
+        if e = scanTargetGraph(tool); e != nil {
+                return
+        }
 
         goals := tool.Goals()
 
@@ -805,6 +813,35 @@ func Build(tool BuildTool) (e error) {
         }
 
         return
+}
+
+func clean(ts []*Target) error {
+        for _, t := range ts {
+                if e := clean(t.Depends); e != nil {
+                        return e
+                }
+
+                if t.Stat() == nil { continue }
+
+                if (t.IsIntermediate() || t.IsFinal()) && !t.IsScanned {
+                        Info("remove %v", t)
+                        if e := os.Remove(t.Name); e != nil {
+                                return e
+                        }
+                }
+        }
+        return nil
+}
+
+// Clean performs the clean command line
+func Clean(tool BuildTool) (e error) {
+        if e = scanTargetGraph(tool); e != nil {
+                return
+        }
+
+        var ts []*Target
+        for _, t := range targets { ts = append(ts, t) }
+        return clean(ts)
 }
 
 // CommandLine

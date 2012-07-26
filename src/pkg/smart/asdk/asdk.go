@@ -804,6 +804,11 @@ func create(args []string) (err error) {
         return p.Run()
 }
 
+func clean(args []string) error {
+        tool := New()
+        return smart.Clean(tool)
+}
+
 func processPlatformLevelFlags(args []string) (a []string) {
 	platformLevel := 10 // the default level
 
@@ -834,6 +839,7 @@ func CommandLine(args []string) {
                 "build": build,
                 "install": install,
                 "create": create,
+                "clean": clean,
         }
 
         smart.CommandLine(commands, args)
