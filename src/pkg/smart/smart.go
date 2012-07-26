@@ -130,13 +130,14 @@ type Target struct {
         Dependees []*Target // the targets this target depends on
         Dependers []*Target // the targets depends on this target
         Usees []*Target // the targets used by this target
+        Users []*Target // the targets use this target
 
         Class Class
 
         IsScanned bool // target is made by scan() or find()
         IsDirTarget bool // target is made by AddDir
 
-        Generated bool // target has already generated
+        Generated bool // target has already generated -- tool.Generate performed
 
         Meta []*MetaInfo
         Args []*NamedValues
@@ -296,6 +297,7 @@ func (t *Target) Use(usee *Target) {
                 }
         }
         t.Usees = append(t.Usees, usee)
+        usee.Users = append(usee.Users, t)
 out:
 }
 
