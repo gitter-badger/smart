@@ -32,7 +32,7 @@ func init() {
 }
 
 type asdkProject struct {
-        target, signed, unsigned, dex, classes, res *smart.Target
+        target, signed, unsigned, dex, classes, libs, res *smart.Target
 }
 
 type asdk struct {
@@ -69,7 +69,7 @@ func (sdk *asdk) NewCollector(t *smart.Target) smart.Collector {
 }
 
 func (sdk *asdk) Generate(t *smart.Target) error {
-        //smart.Info("Generate: %v:%v...", t, t.Depends)
+        //smart.Info("Generate: %v:%v...", t, t.Dependees)
 
         isFile := func(s string) bool {
                 return t.IsFile() && strings.HasSuffix(t.Name, s)
@@ -82,8 +82,14 @@ func (sdk *asdk) Generate(t *smart.Target) error {
                 return strings.HasSuffix(t.Name, separator+s)
         }
 
+        outlib := filepath.Join("out", "lib")
+        isLib := func() bool {
+                return t.IsFile() && strings.HasPrefix(t.Name, outlib)
+        }
+
         // .dex+res --(pack)--> .unsigned --(sign)--> .signed --(align)--> .apk
         switch {
+        case isLib():                   return sdk.copyJNISharedLib(t)
         case isOutDir("classes"):       return sdk.compileJava(t)
         case isOutDir("res"):           return sdk.compileResource(t)
         case isFile(".dex"):            return sdk.dx(t)
@@ -140,6 +146,24 @@ func (sdk *asdk) compileResource(t *smart.Target) (e error) {
 	aapt := filepath.Join(asdkRoot, "platform-tools", "aapt")
         p := smart.Command(aapt, args...)
         e = p.Run() //return run("aapt", args...)
+        return
+}
+
+// copyJNISharedLib copies libs/XXX/YYY into out/lib/XXX/YYY.
+func (sdk *asdk) copyJNISharedLib(t *smart.Target) (e error) {
+        if len(t.Dependees) != 1 {
+                return smart.NewErrorf("no source JNI lib for %v", t)
+        }
+
+        if e = os.MkdirAll(filepath.Dir(t.Name), 0755); e != nil {
+                return
+        }
+
+        lib := t.Dependees[0]
+
+        if e = smart.CopyFile(lib.Name, t.Name); e != nil {
+                return
+        }
         return
 }
 
@@ -397,7 +421,36 @@ func (sdk *asdk) packUnsigned(t *smart.Target) (e error) {
         apkName := filepath.Base(t.Name)
         p = smart.Command(aapt, "add", "-k", apkName, dexName)
         p.Stdout, p.Dir = nil, filepath.Dir(dex.Name)
-        e = p.Run()
+        if e = p.Run(); e != nil {
+                return
+        }
+
+        // add JNI libs
+        if sdk.proj.libs == nil {
+                return
+        }
+
+        var libs []string
+        for _, lib := range sdk.proj.libs.Dependees {
+                if strings.HasPrefix(lib.Name, filepath.Join("out", "lib")) {
+                        libs = append(libs, lib.Name[4:])
+                } else {
+                        smart.Warn("ignored: JNI libary %v", lib)
+                }
+        }
+
+        smart.Info("pack -o %v %v\n", t, strings.Join(libs, ", "))
+
+        //p = smart.Command("zip", "-r", apkName, "lib")
+        args = []string{ "-r", apkName, }
+        args = append(args, libs...)
+        p = smart.Command("zip", args...)
+        p.Stdout = nil
+        p.Dir = "out"
+        if e = p.Run(); e != nil {
+                return
+        }
+        
         return
 }
 
@@ -596,8 +649,9 @@ func (coll *asdkCollector) makeTargets(dir string) bool {
                 }
                 coll.proj.target.SetVar("package", pkg)
         } else {
+                smart.Info("asdk: no package name in AndroidManifest.xml")
                 if !strings.HasSuffix(dir, ".jar") {
-                        smart.Fatal("not .jar directory %v", dir)
+                        smart.Fatal("asdk: not a .jar directory %v", dir)
                 }
                 if coll.proj.target == nil {
                         coll.proj.target = smart.New(base + tt, smart.FinalFile)
@@ -634,6 +688,26 @@ func (coll *asdkCollector) makeTargets(dir string) bool {
         }
 
         return coll.proj.target != nil
+}
+
+func (coll *asdkCollector) addLibsDir(dir string) (t *smart.Target) {
+        if coll.proj.libs != nil {
+                smart.Fatal("more than one 'libs' subdirectories")
+                return
+        }
+
+        if coll.proj.unsigned == nil {
+                smart.Fatal("no unsigned target for %v", dir)
+                return
+        }
+
+        coll.proj.libs = coll.proj.unsigned.Dep(dir, smart.Dir)
+        smart.Find(dir, ".*", &asdkLibsCollector{ coll.proj.libs })
+
+        //smart.Info("libs: %v %v %v", coll.proj.libs, coll.proj.libs.Dependees, coll.proj.unsigned.Dependees)
+
+        t = coll.proj.libs
+        return
 }
 
 func (coll *asdkCollector) addResDir(dir string) (t *smart.Target) {
@@ -693,10 +767,15 @@ func (coll *asdkCollector) AddDir(dir string) (t *smart.Target) {
         base := filepath.Base(dir)
 
         switch {
-        case dir == "out": return nil
+        case dir == "obj": fallthrough
+        case dir == "out":
+                return nil
 
         case base == "src":
                 smart.Find(dir, `^.*?\.java$`, coll)
+
+        case base == "libs":
+                return coll.addLibsDir(dir)
 
         case base == "res": fallthrough
         case base == "assets":
@@ -734,6 +813,33 @@ func (coll *asdkCollector) AddFile(dir, name string) (t *smart.Target) {
                 smart.Warn("ignored: %v", dname)
         }
 
+        return
+}
+
+type asdkLibsCollector struct {
+        libs *smart.Target
+}
+
+func (coll *asdkLibsCollector) AddDir(dir string) (t *smart.Target) {
+        //smart.Info("lib: %v", dir)
+        return
+}
+
+func (coll *asdkLibsCollector) AddFile(dir, name string) (t *smart.Target) {
+        if !strings.HasPrefix(dir, "libs/") {
+                smart.Warn("ignore: %v/%v", dir, name)
+                return
+        }
+
+        dname := filepath.Join(dir, name)
+        libName := filepath.Join("out", "lib"+dname[4:])
+
+        //smart.Info("lib: %v -> %v", dname, libName)
+
+        // TODO: check dname: libXXX.so, or executibles
+
+        lib := coll.libs.Dep(libName, smart.IntermediateFile)
+        t = lib.Dep(dname, smart.File)
         return
 }
 

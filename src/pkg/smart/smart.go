@@ -707,6 +707,8 @@ func generate(tool BuildTool, caller *Target, targets []*Target) (error, []*Targ
 
 // gen invoke tool.Generate on a single target
 func gen(tool BuildTool, caller *Target, t *Target, ch chan genmeta) {
+        //Info("gen: %v -> %v", caller, t)
+
         var err error
         var needGen = false
 
