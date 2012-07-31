@@ -12,6 +12,27 @@ import (
 	"fmt"
 )
 
+        // ref: http://developer.android.com/guide/topics/manifest/uses-sdk-element.html
+var apiLevels = [][]string{
+	16: { "JELLY_BEAN",             "4.1", "4.1.1" },
+	15: { "ICE_CREAM_SANDWICH_MR1", "4.0.3", "4.0.4" },
+ 	14: { "ICE_CREAM_SANDWICH",     "4.0", "4.0.1", "4.0.2" },
+	13: { "HONEYCOMB_MR2",          "3.2" },
+	12: { "HONEYCOMB_MR1",          "3.1.x" },
+	11: { "HONEYCOMB",              "3.0.x" },
+        10: { "GINGERBREAD_MR1",        "2.3.3", "2.3.4",},
+        9:  { "GINGERBREAD",            "2.3", "2.3.1", "2.3.2", },
+ 	8:  { "FROYO",                  "2.2.x", },
+ 	7:  { "ECLAIR_MR1",             "2.1.x", },
+ 	6:  { "ECLAIR_0_1",             "2.0.1", },
+ 	5:  { "ECLAIR",                 "2.0", },
+ 	4:  { "DONUT",                  "1.6", },
+ 	3:  { "CUPCAKE",                "1.5", },
+ 	2:  { "BASE_1_1",               "1.1", },
+  	1:  { "BASE",                   "1.0", },
+        0:  nil,
+}
+
 var asdkRoot = "/android-sdk-linux_x86"
 var asdkPlatform = "android-10"
 var _regAsdkAMTag = regexp.MustCompile(`^\s*<\s*manifest\s+`)
@@ -161,6 +182,7 @@ func (sdk *asdk) copyJNISharedLib(t *smart.Target) (e error) {
 
         lib := t.Dependees[0]
 
+        smart.Info("copy %v -> %v", lib, t)
         if e = smart.CopyFile(lib.Name, t.Name); e != nil {
                 return
         }
@@ -844,10 +866,20 @@ func (coll *asdkLibsCollector) AddFile(dir, name string) (t *smart.Target) {
 }
 
 func SetPlatformLevel(platformLevel uint) error {
+        var versionCodes []string
+
+        if n := int(platformLevel); n <= 0 || len(apiLevels) < n {
+		return smart.NewErrorf("Platform %d not supported!", platformLevel)
+        } else {
+                versionCodes = apiLevels[n]
+        }
+
+        smart.Info("asdk: Using %s API (Android %s)", versionCodes[0], strings.Join(versionCodes[1:], ", "));
+
 	platform := fmt.Sprintf("android-%d", platformLevel)
 	s := filepath.Join(asdkRoot, "platforms", platform)
 	if !smart.IsDir(s) {
-		return smart.NewErrorf("No platform found by name '%v'", platform)
+		return smart.NewErrorf("Android %s not installed!", versionCodes[0])
 	}
 
 	asdkPlatform = platform
@@ -915,6 +947,43 @@ func clean(args []string) error {
         return smart.Clean(tool)
 }
 
+func level(args []string) error {
+        smart.Info("Smart supported Android API Levels:");
+
+        var maxCol = 0
+        for _, codes := range apiLevels {
+                if codes == nil { continue }
+                if n := len(codes[0]); maxCol < n {
+                        maxCol = n
+                }
+        }
+
+        var req []int
+        for n, s := range args {
+                if j, e := fmt.Sscanf(s, "%d", &n); j == 1 && e == nil {
+                        req = append(req, n)
+                }
+        }
+
+        for l, codes := range apiLevels {
+                if codes == nil { continue }
+                s := strings.Repeat(" ", (maxCol - len(codes[0])))
+
+                var v bool
+                if len(req) == 0 {
+                        v = true
+                } else {
+                        for _, i := range req {
+                                if l == i { v = true; break }
+                        }
+                }
+
+                if !v { continue }
+                smart.Info("    %d\t%s %s (Android %s)", l, codes[0], s, strings.Join(codes[1:], ", "));
+        }
+        return nil
+}
+
 func processPlatformLevelFlags(args []string) (a []string) {
 	platformLevel := 10 // the default level
 
@@ -946,6 +1015,7 @@ func CommandLine(args []string) {
                 "install": install,
                 "create": create,
                 "clean": clean,
+                "level": level,
         }
 
         smart.CommandLine(commands, args)
