@@ -57,6 +57,10 @@ func init() {
         }
 }
 
+func IsVerbose() bool {
+        return false
+}
+
 // All returns all the targets.
 func All() map[string]*Target {
         return targets
@@ -135,7 +139,7 @@ type Target struct {
         Class Class
 
         IsScanned bool // target is made by scan() or find()
-        IsDirTarget bool // target is made by AddDir
+        IsDirTarget bool // target is made by Collector.Add
 
         Generated bool // target has already generated -- tool.Generate performed
 
@@ -307,6 +311,9 @@ func (t *Target) Dep(i interface {}, class Class) (o *Target) {
         case string:
                 o = New(d, class)
         case *Target:
+                for _, a := range t.Dependees {
+                        if a == d { return nil }
+                }
                 o = d
         }
 
@@ -328,8 +335,86 @@ func New(name string, class Class) (t *Target) {
 }
 
 type Collector interface {
-        AddFile(dir, name string) *Target
-        AddDir(dir string) *Target
+        Add(dir string, info FileInfo) *Target
+}
+
+type DependeeCollector struct {
+        t *Target
+        class Class
+        regs []*regexp.Regexp
+        ignores []*regexp.Regexp
+}
+
+func NewDependeeCollector(t *Target) *DependeeCollector {
+        if t == nil {
+                Warn("collect for nothing")
+                return nil
+        }
+
+        coll := &DependeeCollector{ t:t }
+        return coll
+}
+
+func (coll *DependeeCollector) SetClass(class Class) {
+        coll.class = class
+}
+
+func (coll *DependeeCollector) AddPattern(s string) error {
+        re, e := regexp.Compile(s)
+        if e != nil {
+                return e
+        }
+
+        coll.regs = append(coll.regs, re)
+        return nil
+}
+
+func (coll *DependeeCollector) AddIgnorePattern(s string) error {
+        re, e := regexp.Compile(s)
+        if e != nil {
+                return e
+        }
+
+        coll.ignores = append(coll.ignores, re)
+        return nil
+}
+
+func (coll *DependeeCollector) addNoCheck(dir string, info FileInfo) (t *Target) {
+        var class Class
+        if info.Mode() & os.ModeType == 0 {
+                class = File
+        } else {
+                class = Dir
+        }
+
+        class |= (coll.class & (Intermediate | Final))
+
+        t = coll.t.Dep(filepath.Join(dir, info.Name()), class)
+        return
+}
+
+func (coll *DependeeCollector) add(dir string, info FileInfo) (t *Target) {
+        for _, re := range coll.ignores {
+                if re.MatchString(info.Name()) {
+                        return
+                }
+        }
+
+        for _, re := range coll.regs {
+                if re.MatchString(info.Name()) {
+                        return coll.addNoCheck(dir, info)
+                }
+        }
+
+        return
+}
+
+func (coll *DependeeCollector) Add(dir string, info FileInfo) (t *Target) {
+        isdir := info.IsDir()
+        if (isdir && coll.class & Dir != 0) || (!isdir && coll.class & File != 0) {
+                return coll.add(dir, info)
+        }
+        return
 }
 
 type BuildTool interface {
@@ -506,16 +591,13 @@ func Scan(coll Collector, top, dir string) (e error) {
                         if fi, e := os.Stat(dname); fi == nil || e != nil {
                                 fmt.Printf("error: %v\n", e); continue
                         } else {
-                                if fi.IsDir() {
-                                        if s := coll.AddDir(dname); s != nil {
-                                                s.IsDirTarget = true
-                                                targets[dname] = s
-                                        }
-                                } else if s := coll.AddFile(sd, name); s != nil {
+                                if s := coll.Add(sd, fi); s != nil {
+                                        //targets[dname] = s
+                                        s.IsDirTarget = fi.IsDir()
                                         s.IsScanned = true
-                                        s.Meta = meta(dname)
-                                        //fmt.Printf("meta: %s: %v\n", dname, s.Meta)
-                                        targets[dname] = s
+                                        if !s.IsDirTarget {
+                                                s.Meta = meta(dname)
+                                        }
                                 }
                         }
                 }
@@ -597,19 +679,21 @@ readloop:
         return
 }
 
-// Find file via regexp.
-func Find(d string, sreg string, coll Collector) error {
+// Collect names maching regexp sreg in directory d.
+func Collect(d string, sreg string, coll Collector) error {
         re, e := regexp.Compile(sreg)
         if e != nil {
                 return e
         }
         return traverse(0, d, func(depth int, dname string, fi FileInfo) bool {
-                if re.MatchString(dname) {
-                        if !fi.IsDir() {
-                                t := coll.AddFile(filepath.Dir(dname), filepath.Base(dname))
-                                if t != nil {
-                                        t.IsScanned = true
-                                }
+                if !re.MatchString(dname) {
+                        return true
+                }
+                if t := coll.Add(filepath.Dir(dname), fi); t != nil {
+                        t.IsDirTarget = fi.IsDir()
+                        t.IsScanned = true
+                        if !t.IsDirTarget {
+                                t.Meta = meta(dname)
                         }
                 }
                 return true

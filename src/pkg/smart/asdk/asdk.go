@@ -2,13 +2,16 @@ package asdk
 
 import (
         ".." // smart
+        "bufio"
         "bytes"
+        "io"
         "os"
         "os/exec"
         "path/filepath"
         "regexp"
         "runtime"
         "strings"
+        "flag"
 	"fmt"
 )
 
@@ -53,6 +56,7 @@ func init() {
 }
 
 type asdkProject struct {
+        top, pkg string
         target, signed, unsigned, dex, classes, libs, res *smart.Target
 }
 
@@ -118,8 +122,13 @@ func (sdk *asdk) Generate(t *smart.Target) error {
         case isFile(".signed"):         return sdk.sign(t)
         case isFile(".apk"):            return sdk.align(t)
         case isFile(".jar"):            return sdk.packJar(t)
-        case isFile("R.java"):          return nil
-        default: smart.Warn("ignored: %v", t)
+        case isFile("R.java"):          fallthrough
+        case t.IsDir() && strings.HasPrefix(t.Name, "libs/"):
+                return nil
+        default:
+                if smart.IsVerbose() {
+                        smart.Info("ignored: %v (generate ??)", t)
+                }
         }
 
         return nil
@@ -166,6 +175,9 @@ func (sdk *asdk) compileResource(t *smart.Target) (e error) {
         // Produces R.java under t.Name
 	aapt := filepath.Join(asdkRoot, "platform-tools", "aapt")
         p := smart.Command(aapt, args...)
+        if !smart.IsVerbose() {
+                p.Stdout, p.Stderr = nil, nil
+        }
         e = p.Run() //return run("aapt", args...)
         return
 }
@@ -198,7 +210,10 @@ func (sdk *asdk) compileJava(t *smart.Target) (e error) {
                 switch {
                 case ext == ".java": sources = append(sources, d.Name)
                 case ext == ".jar": classpath += ":" + d.Name
-                default: smart.Warn("ignored: %v", d)
+                default:
+                        if smart.IsVerbose() {
+                                smart.Info("ignored: %v (not Java)", d)
+                        }
                 }
         }
 
@@ -432,7 +447,9 @@ func (sdk *asdk) packUnsigned(t *smart.Target) (e error) {
         smart.Info("pack -o %v %v", t, strings.Join(sources, " "))
 	aapt := filepath.Join(asdkRoot, "platform-tools", "aapt")
         p := smart.Command(aapt, args...)
-        p.Stdout = nil
+        if !smart.IsVerbose() {
+                p.Stdout, p.Stderr = nil, nil
+        }
         if e = p.Run(); e != nil {
                 return
         }
@@ -456,8 +473,8 @@ func (sdk *asdk) packUnsigned(t *smart.Target) (e error) {
         for _, lib := range sdk.proj.libs.Dependees {
                 if strings.HasPrefix(lib.Name, filepath.Join("out", "lib")) {
                         libs = append(libs, lib.Name[4:])
-                } else {
-                        smart.Warn("ignored: JNI libary %v", lib)
+                } else if smart.IsVerbose() {
+                        smart.Info("ignored: JNI libary %v", lib)
                 }
         }
 
@@ -525,6 +542,9 @@ func (sdk *asdk) packJar(t *smart.Target) (e error) {
                 smart.Info("pack -o %v %v", t, strings.Join(sources, " "))
 		aapt := filepath.Join(asdkRoot, "platform-tools", "aapt")
                 p := smart.Command(aapt, args...)
+                if !smart.IsVerbose() {
+                        p.Stdout, p.Stderr = nil, nil
+                }
                 if e = p.Run(); e != nil {
                         return
                 }
@@ -724,7 +744,7 @@ func (coll *asdkCollector) addLibsDir(dir string) (t *smart.Target) {
         }
 
         coll.proj.libs = coll.proj.unsigned.Dep(dir, smart.Dir)
-        smart.Find(dir, ".*", &asdkLibsCollector{ coll.proj.libs })
+        smart.Collect(dir, ".*", &asdkLibsCollector{ coll.proj.libs })
 
         //smart.Info("libs: %v %v %v", coll.proj.libs, coll.proj.libs.Dependees, coll.proj.unsigned.Dependees)
 
@@ -737,28 +757,29 @@ func (coll *asdkCollector) addResDir(dir string) (t *smart.Target) {
                 outRes := filepath.Join(filepath.Dir(coll.proj.classes.Name), "res")
                 coll.proj.res = smart.New(outRes, smart.IntermediateDir)
                 coll.proj.res.SetVar("top", filepath.Dir(dir))
+
+                // Add R.java target
+                if pkg := coll.proj.target.Var("package"); pkg != "" {
+                        pkg = strings.Replace(pkg, ".", string(filepath.Separator), -1)
+                        rjava := filepath.Join(coll.proj.res.Name, pkg, "R.java")
+                        
+                        if coll.proj.classes == nil {
+                                smart.Fatal("no classes for %v", rjava)
+                        }
+
+                        r := coll.proj.classes.Dep(rjava, smart.IntermediateFile)
+                        r.Dep(coll.proj.res, smart.None)
+                        if r == nil {
+                                smart.Fatal("inter: %v:%v", rjava, coll.proj.res)
+                        }
+                        //fmt.Printf("%v: %v\n", r, r.Dependees)
+                } else {
+                        smart.Fatal("no package name")
+                }
         }
         
         t = coll.proj.res.Dep(dir, smart.Dir)
-        
-        // Add R.java target
-        if pkg := coll.proj.target.Var("package"); pkg != "" {
-                pkg = strings.Replace(pkg, ".", string(filepath.Separator), -1)
-                rjava := filepath.Join(coll.proj.res.Name, pkg, "R.java")
-                
-                if coll.proj.classes == nil {
-                        smart.Fatal("no classes for %v", rjava)
-                }
-
-                r := coll.proj.classes.Dep(rjava, smart.IntermediateFile)
-                r.Dep(coll.proj.res, smart.None)
-                if r == nil {
-                        smart.Fatal("inter: %v:%v", rjava, coll.proj.res)
-                }
-                //fmt.Printf("%v: %v\n", r, r.Dependees)
-        } else {
-                smart.Fatal("no package name")
-        }
+        smart.Collect(dir, ".*", &asdkResCollector{ coll.proj.res })
         return
 }
 
@@ -785,56 +806,100 @@ func (coll *asdkCollector) addJarDir(dir string) (t *smart.Target) {
         return
 }
 
-func (coll *asdkCollector) AddDir(dir string) (t *smart.Target) {
-        base := filepath.Base(dir)
+func (coll *asdkCollector) Add(dir string, info smart.FileInfo) (t *smart.Target) {
+        //smart.Info("add: %v", filepath.Join(dir, info.Name()))
+        if info.IsDir() {
+                return coll.addDir(dir, info)
+        } else {
+                return coll.addFile(dir, info)
+        }
+        return nil
+}
+
+func (coll *asdkCollector) addDir(dir string, info smart.FileInfo) (t *smart.Target) {
+        dname := filepath.Join(dir, info.Name())
 
         switch {
-        case dir == "obj": fallthrough
-        case dir == "out":
+        case info.Name() == "obj": fallthrough
+        case info.Name() == "out":
                 return nil
 
-        case base == "src":
-                smart.Find(dir, `^.*?\.java$`, coll)
+        case info.Name() == "src":
+                smart.Collect(dname, `^.*?\.java$`, coll)
 
-        case base == "libs":
-                return coll.addLibsDir(dir)
+        case info.Name() == "libs":
+                return coll.addLibsDir(dname)
 
-        case base == "res": fallthrough
-        case base == "assets":
-                return coll.addResDir(dir)
+        case info.Name() == "res": fallthrough
+        case info.Name() == "assets":
+                return coll.addResDir(dname)
 
-        case strings.HasSuffix(dir, ".jar"):
-                return coll.addJarDir(dir)
+        case strings.HasSuffix(info.Name(), ".jar"):
+                return coll.addJarDir(dname)
 
         default:
-                smart.Warn("ignored: %v", dir)
+                if smart.IsVerbose() {
+                        smart.Info("ignored: %v (unknown source)", filepath.Join(dir, info.Name()))
+                }
         }
 
         return
 }
 
-func (coll *asdkCollector) AddFile(dir, name string) (t *smart.Target) {
-        dname := filepath.Join(dir, name)
+func (coll *asdkCollector) addFile(dir string, info smart.FileInfo) (t *smart.Target) {
+        //smart.Info("addFile: %v", filepath.Join(dir, info.Name()))
+
+        dname := filepath.Join(dir, info.Name())
 
         if coll.proj.target == nil {
                 smart.Fatal("no target for %v", dname)
         }
 
-        switch {
-        case name == "AndroidManifest.xml":
-                t =  coll.proj.target.Dep(dname, smart.File)
-
-        case strings.HasSuffix(name, ".java"):
-                if coll.proj.classes == nil {
-                        smart.Warn("ignored: %v (classes=%v)", dname, coll.proj.classes)
-                } else {
-                        t = coll.proj.classes.Dep(dname, smart.File)
-                }
-
-        default:
-                smart.Warn("ignored: %v", dname)
+        if coll.proj.classes == nil {
+                smart.Fatal("no classes for %v", dname)
         }
 
+
+        switch {
+        case info.Name() == "AndroidManifest.xml":
+                t =  coll.proj.target.Dep(dname, smart.File)
+
+        case strings.HasSuffix(info.Name(), ".java"):
+                t = coll.proj.classes.Dep(dname, smart.File)
+
+        default:
+                if smart.IsVerbose() {
+                        smart.Info("ignored: %v (unknown)", dname)
+                }
+        }
+
+        return
+}
+
+type asdkResCollector struct {
+        res *smart.Target
+}
+
+func (coll *asdkResCollector) Add(dir string, info smart.FileInfo) (t *smart.Target) {
+        if info.IsDir() {
+                return
+        }
+        
+        dname := filepath.Join(dir, info.Name())
+
+        if !strings.HasPrefix(dname, "res/") && !strings.HasPrefix(dname, "assets") {
+                smart.Info("ignore: %v/%v (not res/ nor assets/)", dir, info.Name())
+                return
+        }
+
+        if strings.HasSuffix(info.Name(), "~") {
+                //smart.Info("ignore: %v/%v (*~)", dname)
+                return
+        }
+
+        //smart.Info("res: %v (%v)", dname, coll.res)
+
+        t = coll.res.Dep(dname, smart.File)
         return
 }
 
@@ -842,18 +907,17 @@ type asdkLibsCollector struct {
         libs *smart.Target
 }
 
-func (coll *asdkLibsCollector) AddDir(dir string) (t *smart.Target) {
-        //smart.Info("lib: %v", dir)
-        return
-}
-
-func (coll *asdkLibsCollector) AddFile(dir, name string) (t *smart.Target) {
-        if !strings.HasPrefix(dir, "libs/") {
-                smart.Warn("ignore: %v/%v", dir, name)
+func (coll *asdkLibsCollector) Add(dir string, info smart.FileInfo) (t *smart.Target) {
+        if info.IsDir() {
                 return
         }
 
-        dname := filepath.Join(dir, name)
+        if !strings.HasPrefix(dir, "libs/") {
+                smart.Info("ignore: %v/%v (not libs/)", dir, info.Name())
+                return
+        }
+
+        dname := filepath.Join(dir, info.Name())
         libName := filepath.Join("out", "lib"+dname[4:])
 
         //smart.Info("lib: %v -> %v", dname, libName)
@@ -984,6 +1048,58 @@ func level(args []string) error {
         return nil
 }
 
+func logcat(args []string) error {
+        var a []string
+
+        fs := flag.NewFlagSet("logcat", flag.ContinueOnError)
+        flagS := fs.String("s", "", "directs commands to the specified device")
+
+        if e := fs.Parse(args); e != nil {
+                return e
+        }
+
+        if *flagS != "" { a = append(a, "-s", *flagS) }
+
+        args = fs.Args()
+
+        var regs []*regexp.Regexp
+        for _, s := range args {
+                re, err := regexp.Compile(s)
+                if err == nil {
+                        regs = append(regs, re)
+                }
+        }
+
+        a = append(a, "logcat")
+
+        logsR, logsW := io.Pipe()
+	adb := filepath.Join(asdkRoot, "platform-tools", "adb")
+        p := exec.Command(adb, a...)
+        p.Stdout = logsW
+        go func() {
+                in, log := bufio.NewReader(logsR), []byte{}
+                for {
+                        line, isPrefix, err := in.ReadLine()
+                        log = append(log, line...)
+
+                        for isPrefix && err == nil {
+                                line, isPrefix, err = in.ReadLine()
+                                log = append(log, line...)
+                        }
+
+                        for _, re := range regs {
+                                if !re.Match(log) { continue }
+                                fmt.Printf("%s\n", string(log))
+                        }
+
+                        log = []byte{}
+                        if err != nil { break }
+                }
+                fmt.Printf("logcat finished\n")
+        }()
+        return p.Run()
+}
+
 func processPlatformLevelFlags(args []string) (a []string) {
 	platformLevel := 10 // the default level
 
@@ -1016,6 +1132,7 @@ func CommandLine(args []string) {
                 "create": create,
                 "clean": clean,
                 "level": level,
+                "logcat": logcat,
         }
 
         smart.CommandLine(commands, args)

@@ -170,21 +170,28 @@ func (coll *gccCollector) ensureTarget(dir string) bool {
         return coll.target != nil
 }
 
-func (coll *gccCollector) AddDir(dir string) (t *smart.Target) {
+func (coll *gccCollector) Add(dir string, info smart.FileInfo) (t *smart.Target) {
+        if info.IsDir() {
+                return coll.addDir(dir, info)
+        }
+        return coll.addFile(dir, info)
+}
+
+func (coll *gccCollector) addDir(dir string, info smart.FileInfo) (t *smart.Target) {
         if !coll.ensureTarget("") {
                 smart.Fatal("no goal in %v\n", dir)
                 return nil
         }
 
         switch {
-        case strings.HasSuffix(dir, ".o"):
-                t = smart.New(filepath.Join(dir, "_.o"), smart.FinalFile)
+        case strings.HasSuffix(info.Name(), ".o"):
+                t = smart.New(filepath.Join(dir, info.Name(), "_.o"), smart.FinalFile)
                 t.Type = ".o"
-        case strings.HasSuffix(dir, ".a"): fallthrough
-        case strings.HasSuffix(dir, ".so"):
-                name := filepath.Base(dir)
+        case strings.HasSuffix(info.Name(), ".a"): fallthrough
+        case strings.HasSuffix(info.Name(), ".so"):
+                name := info.Name()
                 ext := filepath.Ext(name)
-                if !strings.HasPrefix(dir, "lib") {
+                if !strings.HasPrefix(name, "lib") {
                         name = "lib"+name
                 }
 
@@ -204,7 +211,7 @@ func (coll *gccCollector) AddDir(dir string) (t *smart.Target) {
         }
 
         if t != nil {
-                smart.Scan(coll.gcc.NewCollector(t), coll.gcc.top, dir)
+                smart.Scan(coll.gcc.NewCollector(t), coll.gcc.top, filepath.Join(dir, info.Name()))
                 //fmt.Printf("scan: %v %v\n", dir, t.Dependees)
 
                 coll.target.Dep(t, smart.None)
@@ -213,11 +220,13 @@ func (coll *gccCollector) AddDir(dir string) (t *smart.Target) {
         return t
 }
 
-func (coll *gccCollector) AddFile(dir, name string) *smart.Target {
+func (coll *gccCollector) addFile(dir string, info smart.FileInfo) *smart.Target {
         if !coll.ensureTarget(dir) {
                 smart.Fatal("no goal in %v\n", dir)
                 return nil
         }
+
+        name := info.Name()
 
         cc := ""
         switch {
