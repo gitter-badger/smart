@@ -63,6 +63,7 @@ type asdkProject struct {
 type asdk struct {
         top, out string
         proj *asdkProject
+        staticLibs []string
 }
 
 func New() (sdk *asdk) {
@@ -175,9 +176,9 @@ func (sdk *asdk) compileResource(t *smart.Target) (e error) {
         // Produces R.java under t.Name
 	aapt := filepath.Join(asdkRoot, "platform-tools", "aapt")
         p := smart.Command(aapt, args...)
-        if !smart.IsVerbose() {
-                p.Stdout, p.Stderr = nil, nil
-        }
+        //if !smart.IsVerbose() {
+        //        p.Stdout, p.Stderr = nil, nil
+        //}
         e = p.Run() //return run("aapt", args...)
         return
 }
@@ -202,14 +203,17 @@ func (sdk *asdk) copyJNISharedLib(t *smart.Target) (e error) {
 }
 
 func (sdk *asdk) compileJava(t *smart.Target) (e error) {
-        classpath := filepath.Join(asdkRoot, "platforms", asdkPlatform, "android.jar")
+        classpath := []string{
+                filepath.Join(asdkRoot, "platforms", asdkPlatform, "android.jar"),
+        }
+        classpath = append(classpath, sdk.staticLibs...)
 
         var sources []string
         for _, d := range t.Dependees {
                 ext := filepath.Ext(d.Name)
                 switch {
                 case ext == ".java": sources = append(sources, d.Name)
-                case ext == ".jar": classpath += ":" + d.Name
+                case ext == ".jar": classpath = append(classpath, d.Name)
                 default:
                         if smart.IsVerbose() {
                                 smart.Info("ignored: %v (not Java)", d)
@@ -236,7 +240,7 @@ func (sdk *asdk) compileJava(t *smart.Target) (e error) {
         args := []string {
                 "-d", t.Name, // should be out/classes
                 //"-sourcepath", filepath.Join(sdk.top, "src"),
-                "-cp", classpath,
+                "-cp", strings.Join(classpath, ":"),
         }
         args = append(args, sources...)
 
@@ -251,12 +255,91 @@ func (sdk *asdk) compileJava(t *smart.Target) (e error) {
         return
 }
 
+func asdkExtractClasses(outclasses, lib string, cs []string) (classes []string) {
+        f, err := os.Open(lib)
+        if err != nil {
+                smart.Fatal("open: %v (%v)", lib, err)
+        }
+        defer f.Close()
+
+        var wd string
+        if s, e := os.Getwd(); e != nil {
+                smart.Fatal("getwd: %v", e)
+                return
+        } else {
+                wd = s
+        }
+
+        if e := os.Chdir(outclasses); e != nil {
+                smart.Fatal("chdir: %v", e)
+                return
+        }
+        defer func() {
+                if e := os.Chdir(wd); e != nil {
+                        smart.Fatal("chdir: %v", e)
+                }
+        }()
+
+        args := append([]string{ "-x" }, cs...)
+        p := smart.Command("jar", args...)
+        p.Stdin = f
+        if e := p.Run(); e != nil {
+                smart.Fatal("error: extract classes %v (%v)\n", lib, e)
+        }
+
+        for _, s := range cs {
+                if fi, er := os.Stat(s); er != nil || fi == nil {
+                        smart.Fatal("error: class `%v' not extracted (%v)", s, lib);
+                        return
+                }
+                classes = append(classes, s)
+        }
+
+        return
+}
+
+func asdkExtractStaticLibsClasses(outclasses string, libs []string) (classes []string) {
+        out := new(bytes.Buffer)
+
+        for _, lib := range libs {
+                if lib = strings.TrimSpace(lib); lib == "" { continue }
+
+                out.Reset()
+
+                args := []string{ "-tf", lib }
+                p := smart.Command("jar", args...)
+                p.Stdout = out
+                if e := p.Run(); e != nil {
+                        smart.Fatal("error: extract %v (%v)\n", lib, e)
+                }
+
+                var cs []string
+                for _, s := range strings.Split(out.String(), "\n") {
+                        if strings.HasSuffix(s, ".class") {
+                                cs = append(cs, s)
+                        }
+                }
+
+                //fmt.Printf("jar: %v: %v\n", lib, cs)
+
+                classes = append(classes, asdkExtractClasses(outclasses, lib, cs)...)
+        }
+
+        //fmt.Printf("embeded-classes: %v\n", classes)
+        return
+}
+
 func (sdk *asdk) dx(t *smart.Target) error {
         var classes *smart.Target
         if len(t.Dependees) == 1 {
                 classes = t.Dependees[0]
         } else {
                 return smart.NewErrorf("expect 1 depend: %v->%v\n", t, t.Dependees)
+        }
+
+        outclasses := filepath.Join(filepath.Dir(t.Name), "classes")
+        embclasses := asdkExtractStaticLibsClasses(outclasses, sdk.staticLibs)
+        if embclasses == nil {
         }
 
         var args []string
@@ -267,6 +350,7 @@ func (sdk *asdk) dx(t *smart.Target) error {
 
         args = append(args, "--dex", "--output="+t.Name)
         args = append(args, classes.Name)
+        //args = append(args, embclasses...)
 
         smart.Info("dex -o %v %v", t, classes)
 	dx := filepath.Join(asdkRoot, "platform-tools", "dx")
@@ -779,7 +863,11 @@ func (coll *asdkCollector) addResDir(dir string) (t *smart.Target) {
         }
         
         t = coll.proj.res.Dep(dir, smart.Dir)
-        smart.Collect(dir, ".*", &asdkResCollector{ coll.proj.res })
+        collRes := smart.NewDependeeCollector(t, smart.File)
+        collRes.AddIgnorePattern(`[^~]*~`)
+        collRes.AddPattern(`.*`)
+        smart.Collect(dir, `.*`, collRes)
+        //smart.Info("res: %v\n", t.Dependees)
         return
 }
 
@@ -876,33 +964,6 @@ func (coll *asdkCollector) addFile(dir string, info smart.FileInfo) (t *smart.Ta
         return
 }
 
-type asdkResCollector struct {
-        res *smart.Target
-}
-
-func (coll *asdkResCollector) Add(dir string, info smart.FileInfo) (t *smart.Target) {
-        if info.IsDir() {
-                return
-        }
-        
-        dname := filepath.Join(dir, info.Name())
-
-        if !strings.HasPrefix(dname, "res/") && !strings.HasPrefix(dname, "assets") {
-                smart.Info("ignore: %v/%v (not res/ nor assets/)", dir, info.Name())
-                return
-        }
-
-        if strings.HasSuffix(info.Name(), "~") {
-                //smart.Info("ignore: %v/%v (*~)", dname)
-                return
-        }
-
-        //smart.Info("res: %v (%v)", dname, coll.res)
-
-        t = coll.res.Dep(dname, smart.File)
-        return
-}
-
 type asdkLibsCollector struct {
         libs *smart.Target
 }
@@ -950,9 +1011,48 @@ func SetPlatformLevel(platformLevel uint) error {
 	return nil
 }
 
+func parseToolArgs(tool *asdk, name string, args[]string) []string {
+        extras := make(smart.FlagArrayValue, 5)
+        libs := make(smart.FlagArrayValue, 5)
+
+        fs := flag.NewFlagSet(name, flag.ContinueOnError)
+        fs.Var(&extras, "extra", "specify extra libs of Android SDK")
+        fs.Var(&libs, "lib", "specify static Jar libs for the project")
+
+        if e := fs.Parse(args); e != nil {
+                smart.Warn("%v", e)
+        }
+
+        for _, s := range extras {
+                if s == "" { continue }
+
+                s := filepath.Join(asdkRoot, "extras", s)
+                if !smart.IsFile(s) {
+                        smart.Fatal("error: extra \"%v\" is not file", s)
+                }
+
+                if strings.HasSuffix(s, ".jar") {
+                        tool.staticLibs = append(tool.staticLibs, s)
+                } else {
+                        smart.Warn("unknown extra \"%v\"", s)
+                }
+        }
+
+        for _, s := range libs {
+                if s == "" { continue }
+                if !smart.IsFile(s) {
+                        smart.Fatal("error: \"%v\" is not file", s)
+                }
+                tool.staticLibs = append(tool.staticLibs, s)
+        }
+
+        return fs.Args()
+}
+
 // Build builds a project
 func build(args []string) (e error) {
         tool := New()
+        parseToolArgs(tool, "build", args)
         e = smart.Build(tool)
 	return
 }
@@ -960,6 +1060,8 @@ func build(args []string) (e error) {
 // Install invokes "adb install" command
 func install(args []string) (e error) {
         tool := New()
+
+        args = parseToolArgs(tool, "install", args)
 
         if e = smart.Build(tool); e != nil {
                 return
@@ -988,7 +1090,7 @@ func install(args []string) (e error) {
                 }
         }
 
-        args = append([]string{ "install" }, args...)
+        args = append([]string{ "install", "-r" }, args...)
         args = append(args, apk.String())
 
         smart.Info("install %v..", apk)

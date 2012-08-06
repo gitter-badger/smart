@@ -345,18 +345,31 @@ type DependeeCollector struct {
         ignores []*regexp.Regexp
 }
 
-func NewDependeeCollector(t *Target) *DependeeCollector {
+func NewDependeeCollector(t *Target, class Class, pats ...string) *DependeeCollector {
         if t == nil {
                 Warn("collect for nothing")
                 return nil
         }
 
-        coll := &DependeeCollector{ t:t }
+        coll := &DependeeCollector{ t:t, class:class }
+        if coll.AddPatterns(pats...) != nil {
+                Warn("invalid patterns: %s", pats)
+                return nil
+        }
         return coll
 }
 
 func (coll *DependeeCollector) SetClass(class Class) {
         coll.class = class
+}
+
+func (coll *DependeeCollector) AddPatterns(pats ...string) error {
+        for _, s := range pats {
+                if e := coll.AddPattern(s); e != nil {
+                        return e
+                }
+        }
+        return nil
 }
 
 func (coll *DependeeCollector) AddPattern(s string) error {
@@ -410,6 +423,7 @@ func (coll *DependeeCollector) add(dir string, info FileInfo) (t *Target) {
 }
 
 func (coll *DependeeCollector) Add(dir string, info FileInfo) (t *Target) {
+        //Info("dependee: %v/%v\n", dir, info.Name())
         isdir := info.IsDir()
         if (isdir && coll.class & Dir != 0) || (!isdir && coll.class & File != 0) {
                 return coll.add(dir, info)
@@ -910,6 +924,23 @@ func Clean(tool BuildTool) (e error) {
         var ts []*Target
         for _, t := range targets { ts = append(ts, t) }
         return clean(ts)
+}
+
+// FlagArrayValue could be used to collect multiple values
+type FlagArrayValue []string
+
+func (a *FlagArrayValue) String() string {
+        return fmt.Sprint(*a)
+}
+
+func (a *FlagArrayValue) Set(value string) error {
+        value = strings.TrimSpace(value)
+	for _, v := range strings.Split(value, ",") {
+                v = strings.TrimSpace(v)
+                if v == "" { continue }
+		*a = append(*a, v)
+	}
+        return nil
 }
 
 // CommandLine
