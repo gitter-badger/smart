@@ -58,7 +58,7 @@ func init() {
 }
 
 func IsVerbose() bool {
-        return false
+        return true
 }
 
 // All returns all the targets.
@@ -162,14 +162,7 @@ func (t *Target) Stat() FileInfo {
 }
 
 func (t *Target) Touch() bool {
-        if fi := t.Stat(); fi != nil {
-                at := time.Now()
-                mt := time.Now()
-                if e := os.Chtimes(t.Name, at, mt); e == nil { // utime
-                        return true
-                }
-        }
-        return false
+        return TouchFile(t.Name) == nil
 }
 
 func (t *Target) IsDir() bool {// directory target
@@ -515,6 +508,21 @@ func CopyFile(s, d string) (err error) {
                 }
         }
         return
+}
+
+// TouchFile
+func TouchFile(fn string) (e error) {
+        if _, e = os.Stat(fn); e != nil {
+                return
+        }
+
+        at := time.Now()
+        mt := time.Now()
+        if e = os.Chtimes(fn, at, mt); e != nil { // utime
+                return e
+        }
+
+        return nil
 }
 
 // ForEachLine iterates the file content line by line.

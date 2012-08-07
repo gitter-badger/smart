@@ -1,4 +1,4 @@
-package org.smart.test.ASDK;
+package org.smart.test.a;
 
 import android.app.Activity;
 import android.os.Bundle;

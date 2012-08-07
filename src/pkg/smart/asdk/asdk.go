@@ -124,11 +124,12 @@ func (sdk *asdk) Generate(t *smart.Target) error {
         case isFile(".apk"):            return sdk.align(t)
         case isFile(".jar"):            return sdk.packJar(t)
         case isFile("R.java"):          fallthrough
-        case t.IsDir() && strings.HasPrefix(t.Name, "libs/"):
+        case t.IsDir() && t.Name == "libs": fallthrough
+        case t.IsDir() && strings.HasPrefix(t.Name, ".jar"):
                 return nil
         default:
                 if smart.IsVerbose() {
-                        smart.Info("ignored: %v (generate ??)", t)
+                        smart.Info("ignored: %v (generate)", t)
                 }
         }
 
@@ -558,8 +559,12 @@ func (sdk *asdk) packUnsigned(t *smart.Target) (e error) {
                 if strings.HasPrefix(lib.Name, filepath.Join("out", "lib")) {
                         libs = append(libs, lib.Name[4:])
                 } else if smart.IsVerbose() {
-                        smart.Info("ignored: JNI libary %v", lib)
+                        smart.Info("ignored: JNI library %v", lib)
                 }
+        }
+
+        if len(libs) == 0 {
+                smart.Fatal("pack: %v: %v", sdk.proj.libs, sdk.proj.libs.Dependees)
         }
 
         smart.Info("pack -o %v %v\n", t, strings.Join(libs, ", "))
@@ -775,9 +780,9 @@ func (coll *asdkCollector) makeTargets(dir string) bool {
                 }
                 coll.proj.target.SetVar("package", pkg)
         } else {
-                smart.Info("asdk: no package name in AndroidManifest.xml")
+                smart.Info("asdk: no package name in %v", filepath.Join(dir, "AndroidManifest.xml"))
                 if !strings.HasSuffix(dir, ".jar") {
-                        smart.Fatal("asdk: not a .jar directory %v", dir)
+                        smart.Fatal("asdk: '%v' is not a .jar directory", dir)
                 }
                 if coll.proj.target == nil {
                         coll.proj.target = smart.New(base + tt, smart.FinalFile)
@@ -973,13 +978,13 @@ func (coll *asdkLibsCollector) Add(dir string, info smart.FileInfo) (t *smart.Ta
                 return
         }
 
-        if !strings.HasPrefix(dir, "libs/") {
-                smart.Info("ignore: %v/%v (not libs/)", dir, info.Name())
+        if filepath.Base(dir) != "libs" {
+                smart.Info("ignore: %v/%v (not in libs)", dir, info.Name())
                 return
         }
 
         dname := filepath.Join(dir, info.Name())
-        libName := filepath.Join("out", "lib"+dname[4:])
+        libName := filepath.Join("out", "lib", info.Name())
 
         //smart.Info("lib: %v -> %v", dname, libName)
 
