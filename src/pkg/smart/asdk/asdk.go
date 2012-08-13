@@ -2,8 +2,10 @@ package asdk
 
 import (
         ".." // smart
+	"fmt"
         "bufio"
         "bytes"
+        "flag"
         "io"
         "os"
         "os/exec"
@@ -11,8 +13,7 @@ import (
         "regexp"
         "runtime"
         "strings"
-        "flag"
-	"fmt"
+	//"xml"
 )
 
         // ref: http://developer.android.com/guide/topics/manifest/uses-sdk-element.html
@@ -97,27 +98,41 @@ func (sdk *asdk) NewCollector(t *smart.Target) smart.Collector {
 func (sdk *asdk) Generate(t *smart.Target) error {
         //smart.Info("Generate: %v:%v...", t, t.Dependees)
 
+        outlib := filepath.Join("out", "lib")
+        outsrc := filepath.Join("out", "src")
+        separator := string(filepath.Separator)
+
         isFile := func(s string) bool {
                 return t.IsFile() && strings.HasSuffix(t.Name, s)
         }
 
         isOutDir := func(s string) bool {
                 if !t.IsDir() { return false }
-                separator := string(filepath.Separator)
-                if !strings.HasPrefix(t.Name, sdk.out+separator) { return false }
+                if !strings.HasPrefix(t.Name, "out"+separator) { return false }
                 return strings.HasSuffix(t.Name, separator+s)
         }
 
-        outlib := filepath.Join("out", "lib")
         isLib := func() bool {
                 return t.IsFile() && strings.HasPrefix(t.Name, outlib)
         }
+
+	isJavaFromAidl := func() bool {
+		if !t.IsFile() { return false }
+		if !t.IsIntermediate() { return false }
+		if !strings.HasPrefix(t.Name, outsrc) { return false }
+                if !strings.HasSuffix(t.Name, ".java") { return false }
+		if len(t.Dependees) <= 0 { return false }
+		d0 := t.Dependees[0] // must have and .aidl dependee
+		if !d0.IsFile() { return false }
+		return strings.HasSuffix(d0.Name, ".aidl")
+	}
 
         // .dex+res --(pack)--> .unsigned --(sign)--> .signed --(align)--> .apk
         switch {
         case isLib():                   return sdk.copyJNISharedLib(t)
         case isOutDir("classes"):       return sdk.compileJava(t)
         case isOutDir("res"):           return sdk.compileResource(t)
+	case isJavaFromAidl():          return sdk.compileAidl(t)
         case isFile(".dex"):            return sdk.dx(t)
         case isFile(".unsigned"):       return sdk.packUnsigned(t)
         case isFile(".signed"):         return sdk.sign(t)
@@ -125,7 +140,10 @@ func (sdk *asdk) Generate(t *smart.Target) error {
         case isFile(".jar"):            return sdk.packJar(t)
         case isFile("R.java"):          fallthrough
         case t.IsDir() && t.Name == "libs": fallthrough
-        case t.IsDir() && strings.HasPrefix(t.Name, ".jar"):
+        case t.IsDir() && t.Name == "res": fallthrough
+        case t.IsDir() && strings.HasSuffix(t.Name, ".jar"): fallthrough
+	//case strings.HasPrefix(t.Name, "out"+separator): fallthrough
+	case strings.HasPrefix(t.Name, "res"+separator):
                 return nil
         default:
                 if smart.IsVerbose() {
@@ -184,6 +202,36 @@ func (sdk *asdk) compileResource(t *smart.Target) (e error) {
         return
 }
 
+func (sdk *asdk) compileAidl(t *smart.Target) (e error) {
+        //smart.Fatal("aidl: %v %v", t, t.Dependees)
+
+        if e = os.MkdirAll(filepath.Dir(t.Name), 0755); e != nil {
+		smart.Fatal("mkdir: for %v", t)
+                return
+        }
+
+        smart.Info("compile -o %v %v", t, t.Dependees[0])
+
+        var top string
+        if top = t.Var("top"); top == "" {
+                //smart.Fatal("no top variable in %v", t)
+		top = sdk.top
+        }
+
+	args := []string{
+		//"-b",
+		"-I" + filepath.Join(top, "src"),
+		t.Dependees[0].Name, t.Name,
+	}
+	aidl := filepath.Join(asdkRoot, "platform-tools", "aidl")
+        p := smart.Command(aidl, args...)
+        //if !smart.IsVerbose() {
+        //        p.Stdout, p.Stderr = nil, nil
+        //}
+	e = p.Run()
+	return
+}
+
 // copyJNISharedLib copies libs/XXX/YYY into out/lib/XXX/YYY.
 func (sdk *asdk) copyJNISharedLib(t *smart.Target) (e error) {
         if len(t.Dependees) != 1 {
@@ -196,7 +244,7 @@ func (sdk *asdk) copyJNISharedLib(t *smart.Target) (e error) {
 
         lib := t.Dependees[0]
 
-        smart.Info("copy %v -> %v", lib, t)
+        smart.Info("copy -o %v %v", t, lib)
         if e = smart.CopyFile(lib.Name, t.Name); e != nil {
                 return
         }
@@ -213,8 +261,17 @@ func (sdk *asdk) compileJava(t *smart.Target) (e error) {
         for _, d := range t.Dependees {
                 ext := filepath.Ext(d.Name)
                 switch {
-                case ext == ".java": sources = append(sources, d.Name)
-                case ext == ".jar": classpath = append(classpath, d.Name)
+                case ext == ".java":
+			if d.IsIntermediate() && 0 < len(d.Dependees) && strings.HasSuffix(d.Dependees[0].Name, ".aidl") {
+				if d.Stat() != nil {
+					// .aidl may contains no interfaces
+					sources = append(sources, d.Name)
+				}
+			} else {
+				sources = append(sources, d.Name)
+			}
+                case ext == ".jar":
+			classpath = append(classpath, d.Name)
                 default:
                         if smart.IsVerbose() {
                                 smart.Info("ignored: %v (not Java)", d)
@@ -245,10 +302,11 @@ func (sdk *asdk) compileJava(t *smart.Target) (e error) {
         }
         args = append(args, sources...)
 
-        if true {
-                smart.Info("compile -o %v %v", t.Name, strings.Join(sources, " "))
-        } else {
-                smart.Info("javac %v", strings.Join(args, " "))
+        smart.Info("compile -o %v <%d javas>", t.Name, len(sources))
+	if false && smart.IsVerbose() {
+		for _, s := range sources {
+			smart.Info("\t%v", s)
+		}
         }
 
         p := smart.Command("javac", args...)
@@ -564,12 +622,11 @@ func (sdk *asdk) packUnsigned(t *smart.Target) (e error) {
         }
 
         if len(libs) == 0 {
-                smart.Fatal("pack: %v: %v", sdk.proj.libs, sdk.proj.libs.Dependees)
+                smart.Fatal("pack: no libs: %v", sdk.proj.libs, sdk.proj.libs.Dependees)
         }
 
         smart.Info("pack -o %v %v\n", t, strings.Join(libs, ", "))
 
-        //p = smart.Command("zip", "-r", apkName, "lib")
         args = []string{ "-r", apkName, }
         args = append(args, libs...)
         p = smart.Command("zip", args...)
@@ -668,7 +725,7 @@ func (coll *asdkCollector) extractPackageName(am string) (pkg string, tagline in
         smart.ForEachLine(am, func(lineno int, line []byte) bool {
                 if _regAsdkAMTag.Match(line) {
                         tagline = lineno
-                        return true
+                        //return true
                 }
 
                 if 0 < tagline {
@@ -899,26 +956,44 @@ func (coll *asdkCollector) addJarDir(dir string) (t *smart.Target) {
         return
 }
 
+func (coll *asdkCollector) addAidl(dir string, info smart.FileInfo) (t *smart.Target) {
+        //smart.Info("aidl: %v/%v", dir, info.Name())
+
+        if coll.proj.classes == nil {
+                smart.Fatal("no class output for %v/%v", dir, info.Name())
+        }
+
+	if !strings.HasSuffix(info.Name(), ".aidl") {
+                smart.Fatal("not aidl: %v/%v", dir, info.Name())
+	}
+
+	jname := info.Name()
+	jname = jname[0:len(jname)-5] + ".java"
+        name := filepath.Join(coll.sdk.out, dir, jname)
+        t = coll.proj.classes.Dep(name, smart.IntermediateFile)
+        t.Dep(filepath.Join(dir, info.Name()), smart.File)
+	return
+}
+
 func (coll *asdkCollector) Add(dir string, info smart.FileInfo) (t *smart.Target) {
         //smart.Info("add: %v", filepath.Join(dir, info.Name()))
         if info.IsDir() {
                 return coll.addDir(dir, info)
-        } else {
-                return coll.addFile(dir, info)
         }
-        return nil
+        return coll.addFile(dir, info)
 }
 
 func (coll *asdkCollector) addDir(dir string, info smart.FileInfo) (t *smart.Target) {
         dname := filepath.Join(dir, info.Name())
 
         switch {
+        case info.Name() == "jni": fallthrough
         case info.Name() == "obj": fallthrough
         case info.Name() == "out":
                 return nil
 
         case info.Name() == "src":
-                smart.Collect(dname, `^.*?\.java$`, coll)
+                smart.Collect(dname, `^.*?\.(java|aidl)$`, coll)
 
         case info.Name() == "libs":
                 return coll.addLibsDir(dname)
@@ -932,7 +1007,7 @@ func (coll *asdkCollector) addDir(dir string, info smart.FileInfo) (t *smart.Tar
 
         default:
                 if smart.IsVerbose() {
-                        smart.Info("ignored: %v (unknown source)", filepath.Join(dir, info.Name()))
+                        smart.Info("ignored: %v (unknown dir)", filepath.Join(dir, info.Name()))
                 }
         }
 
@@ -941,7 +1016,6 @@ func (coll *asdkCollector) addDir(dir string, info smart.FileInfo) (t *smart.Tar
 
 func (coll *asdkCollector) addFile(dir string, info smart.FileInfo) (t *smart.Target) {
         //smart.Info("addFile: %v", filepath.Join(dir, info.Name()))
-
         dname := filepath.Join(dir, info.Name())
 
         if coll.proj.target == nil {
@@ -952,7 +1026,6 @@ func (coll *asdkCollector) addFile(dir string, info smart.FileInfo) (t *smart.Ta
                 smart.Fatal("no classes for %v", dname)
         }
 
-
         switch {
         case info.Name() == "AndroidManifest.xml":
                 t =  coll.proj.target.Dep(dname, smart.File)
@@ -960,9 +1033,19 @@ func (coll *asdkCollector) addFile(dir string, info smart.FileInfo) (t *smart.Ta
         case strings.HasSuffix(info.Name(), ".java"):
                 t = coll.proj.classes.Dep(dname, smart.File)
 
+        case strings.HasSuffix(info.Name(), ".aidl"):
+                t = coll.addAidl(dir, info)
+
+        case strings.HasSuffix(info.Name(), ".apk"): fallthrough
+	case dir == "" && info.Name() == "proguard.cfg": fallthrough
+	case dir == "" && info.Name() == "ant.properties": fallthrough
+	case dir == "" && info.Name() == "project.properties": fallthrough
+	case dir == "" && info.Name() == "build.xml":
+		return
+
         default:
                 if smart.IsVerbose() {
-                        smart.Info("ignored: %v (unknown)", dname)
+                        smart.Info("ignored: %v (unknown file)", dname)
                 }
         }
 
@@ -978,13 +1061,14 @@ func (coll *asdkLibsCollector) Add(dir string, info smart.FileInfo) (t *smart.Ta
                 return
         }
 
-        if filepath.Base(dir) != "libs" {
+        //smart.Info("AddLib: %v/%v (%v)", dir, info.Name(), filepath.Dir(dir))
+        if filepath.Dir(dir) != "libs" {
                 smart.Info("ignore: %v/%v (not in libs)", dir, info.Name())
                 return
         }
 
         dname := filepath.Join(dir, info.Name())
-        libName := filepath.Join("out", "lib", info.Name())
+        libName := filepath.Join("out", "lib", filepath.Base(dir), info.Name())
 
         //smart.Info("lib: %v -> %v", dname, libName)
 

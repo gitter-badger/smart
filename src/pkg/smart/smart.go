@@ -2,6 +2,7 @@ package smart
 
 import (
         "bufio"
+	"bytes"
         "fmt"
         "io"
         "io/ioutil"
@@ -10,6 +11,7 @@ import (
         "path/filepath"
         "regexp"
         "strings"
+	"sync"
         "time"
 )
 
@@ -43,6 +45,23 @@ var _regCall = regexp.MustCompile(`([a-z_\-]+)\s*\(\s*(([^"]|"(\\"|[^"])")+?)\s*
 var _regArg = regexp.MustCompile(`\s*(([^,"]|"(\\"|[^"])")*)(,|\s*$)`)
 var targets map[string]*Target
 var actions map[string]Action
+
+//var logInfoR, logInfoW = io.Pipe()
+//var logWarnR, logWarnW = io.Pipe()
+//var logErrorR, logErrorW = io.Pipe()
+var logR, logW = io.Pipe()
+var syncOut = &syncWriter{ base:os.Stdout }
+var syncErr = &syncWriter{ base:os.Stderr }
+
+type syncWriter struct{
+	base io.Writer
+	mutex sync.Mutex
+}
+
+func (sw *syncWriter) Write(b []byte) (int, error) {
+	sw.mutex.Lock(); defer sw.mutex.Unlock();
+	return sw.base.Write(b)
+}
 
 const (
         Separator = string(filepath.Separator)
@@ -452,19 +471,21 @@ func NewErrorf(what string, args ...interface{}) error {
 // Info reports an informative message.
 func Info(f string, a ...interface{}) {
         f = strings.TrimRight(f, " \t\n") + "\n"
-        fmt.Fprintf(os.Stdout, f, a...)
+        fmt.Fprintf(syncOut, f, a...)
 }
 
 // Warn reports a warning message.
 func Warn(f string, a ...interface{}) {
         f = "warn: " + strings.TrimRight(f, " \t\n") + "\n"
-        fmt.Fprintf(os.Stderr, f, a...)
+        //fmt.Fprintf(syncErr, f, a...)
+        fmt.Fprintf(syncOut, f, a...)
 }
 
 // Fatal reports a fatal error and quit all.
 func Fatal(f string, a ...interface{}) {
         f = strings.TrimRight(f, " \t\n") + "\n"
-        fmt.Fprintf(os.Stderr, f, a...)
+        //fmt.Fprintf(syncErr, f, a...)
+        fmt.Fprintf(syncOut, f, a...)
         os.Exit(-1)
 }
 
@@ -746,8 +767,8 @@ func Graph() {
 // Command make system command.
 func Command(name string, args ...string) *exec.Cmd {
         p := exec.Command(name, args...)
-        p.Stdout = os.Stdout
-        p.Stderr = os.Stderr
+        p.Stdout = syncOut
+        p.Stderr = syncErr
         return p
 }
 
@@ -955,6 +976,29 @@ func (a *FlagArrayValue) Set(value string) error {
 func CommandLine(commands map[string] func(args []string) error, args []string) {
         cmd := args[0]
         args = args[1:]
+
+	go func(in io.Reader) {
+		log, line := bufio.NewReader(in), bytes.NewBuffer(nil)
+		for {
+			lb, isPrefix, err := log.ReadLine()
+			line.Write(lb)
+
+		inloop: for isPrefix {
+				lb, isPrefix, err = log.ReadLine()
+				line.Write(lb)
+				if err != nil { break inloop }
+			}
+
+			fmt.Printf("%s\n", os.Stdout, line.String())
+			line.Reset()
+			if err != nil { break }
+		}
+	}(logR)
+
+	defer func() {
+		logR.Close();
+		logW.Close();
+	}()
 
         if proc, ok := commands[cmd]; ok && proc != nil {
                 if e := proc(args); e != nil {
