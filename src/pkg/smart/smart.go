@@ -166,6 +166,9 @@ type Target struct {
         Args []*NamedValues
         Exports []*NamedValues
         Variables map[string]string
+
+        genmutex *sync.Mutex
+        generating bool
 }
 
 func (t *Target) String() string {
@@ -342,6 +345,8 @@ func New(name string, class Class) (t *Target) {
         t.Name = name
         t.Variables = make(map[string]string)
         t.Class = class
+        t.genmutex = new(sync.Mutex)
+        t.generating = false
         targets[name] = t
         return
 }
@@ -870,10 +875,16 @@ func gen(tool BuildTool, caller *Target, t *Target, ch chan genmeta) {
         }
 
         // invoke tool.Generate
-        if needGen {
-                if err = tool.Generate(t); err == nil {
-                        t.Generated = true
+        if needGen && !t.generating && !t.Generated {
+                t.genmutex.Lock()
+                if !t.generating && !t.Generated {
+                        t.generating = true
+                        if err = tool.Generate(t); err == nil {
+                                t.Generated = true
+                        }
+                        t.generating = false
                 }
+                t.genmutex.Unlock()
         }
 
         ch <- genmeta{ t, needGen, err }
