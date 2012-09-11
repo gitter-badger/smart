@@ -897,8 +897,8 @@ func Generate(tool BuildTool, targets []*Target) (error, []*Target) {
         return generate(tool, nil, targets)
 }
 
-// scanTargetGraph scan filesystem for targets and draw target graph
-func scanTargetGraph(tool BuildTool) (e error) {
+// ScanTargetGraph scan filesystem for targets and draw target graph
+func ScanTargetGraph(tool BuildTool) (e error) {
         var top string
 
         if top, e = os.Getwd(); e != nil {
@@ -917,7 +917,7 @@ func scanTargetGraph(tool BuildTool) (e error) {
 
 // Build launches a build process on a tool.
 func Build(tool BuildTool) (e error) {
-        if e = scanTargetGraph(tool); e != nil {
+        if e = ScanTargetGraph(tool); e != nil {
                 return
         }
 
@@ -957,7 +957,7 @@ func clean(ts []*Target) error {
 
 // Clean performs the clean command line
 func Clean(tool BuildTool) (e error) {
-        if e = scanTargetGraph(tool); e != nil {
+        if e = ScanTargetGraph(tool); e != nil {
                 return
         }
 

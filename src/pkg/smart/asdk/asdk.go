@@ -72,6 +72,7 @@ type asdkProject struct {
         top, pkg string
         target, signed, unsigned, dex, classes, libs, res *smart.Target
         //jars []*smart.Target
+	proguard *smart.Target
 }
 
 type asdk struct {
@@ -432,17 +433,32 @@ func (sdk *asdk) dx(t *smart.Target) error {
         if embclasses == nil {
         }
 
+	if (sdk.proj.proguard != nil) {
+		os.Remove(sdk.proj.proguard.Name)
+
+		proguard := filepath.Join(asdkGetTool("proguard"), "lib", "proguard.jar")
+		p := smart.Command("java", "-jar", proguard, "@"+sdk.proj.proguard.Dependees[0].Name)
+		if e := p.Run(); e != nil {
+			return e
+		}
+	}
+
         var args []string
 
         switch runtime.GOOS {
         case "windows": args = append(args, "-JXms16M", "-JXmx1536M")
         }
 
-        args = append(args, "--dex", "--output="+t.Name)
-        args = append(args, classes.Name)
-        //args = append(args, embclasses...)
+	inputClasses := classes.Name
+	if sdk.proj.proguard != nil {
+		os.RemoveAll(classes.Name)
+		inputClasses = sdk.proj.proguard.Name
+	}
 
-        smart.Info("dex -o %v %v", t, classes)
+        args = append(args, "--dex", "--output="+t.Name)
+        args = append(args, inputClasses)
+
+        smart.Info("dex -o %v %v", t, inputClasses)
 	dx := asdkGetPlatformTool("dx")
         p := smart.Command(dx, args...)
         return p.Run() //run("dx", args...)
@@ -695,6 +711,10 @@ func (sdk *asdk) packUnsigned(t *smart.Target) (e error) {
 }
 
 func (sdk *asdk) packJar(t *smart.Target) (e error) {
+	if t == sdk.proj.proguard {
+		return nil
+	}
+
         var classes *smart.Target
         sep := string(filepath.Separator)
         for _, d := range t.Dependees {
@@ -994,6 +1014,14 @@ func (coll *asdkCollector) addAidl(dir string, info smart.FileInfo) (t *smart.Ta
 	return
 }
 
+func (coll *asdkCollector) setProguard(dir string, info smart.FileInfo) (t *smart.Target) {
+	//smart.Info("proguard: %s", info.Name());
+	coll.proj.proguard = coll.proj.target.Dep(filepath.Join(coll.sdk.out, "classes-processed.jar"), smart.File)
+	//coll.proj.target.Dep(filepath.Join(coll.sdk.out, "classes-processed.map"), smart.File)
+	t = coll.proj.proguard.Dep(filepath.Join(dir, info.Name()), smart.File);
+	return
+}
+
 func (coll *asdkCollector) Add(dir string, info smart.FileInfo) (t *smart.Target) {
         //smart.Info("add: %v", filepath.Join(dir, info.Name()))
         if info.IsDir() {
@@ -1047,7 +1075,11 @@ func (coll *asdkCollector) addFile(dir string, info smart.FileInfo) (t *smart.Ta
 
         switch {
         case info.Name() == "AndroidManifest.xml":
-                t =  coll.proj.target.Dep(dname, smart.File)
+                t = coll.proj.target.Dep(dname, smart.File)
+
+	case info.Name() == "proguard.pro": fallthrough
+	case info.Name() == "proguard.cfg":
+		t = coll.setProguard(dir, info)
 
         case strings.HasSuffix(info.Name(), ".java"):
                 t = coll.proj.classes.Dep(dname, smart.File)
@@ -1056,7 +1088,7 @@ func (coll *asdkCollector) addFile(dir string, info smart.FileInfo) (t *smart.Ta
                 t = coll.addAidl(dir, info)
 
         case strings.HasSuffix(info.Name(), ".apk"): fallthrough
-	case dir == "" && info.Name() == "proguard.cfg": fallthrough
+	//case dir == "" && info.Name() == "proguard.cfg": fallthrough
 	case dir == "" && info.Name() == "ant.properties": fallthrough
 	case dir == "" && info.Name() == "project.properties": fallthrough
 	case dir == "" && info.Name() == "build.xml":
@@ -1150,12 +1182,12 @@ func parseToolArgs(tool *asdk, name string, args[]string) []string {
 
 	for _, s := range compats {
                 if s == "" { continue }
-		s = fmt.Sprintf("android-support-%s.jar", s);
-                s = filepath.Join(asdkRoot, "android-compatibility", s)
-                if !smart.IsFile(s) {
-                        smart.Fatal("error: \"%v\" is not file", s)
+		j := fmt.Sprintf("android-support-%s.jar", s);
+                j = filepath.Join(asdkRoot, "android-compatibility", s, j)
+                if !smart.IsFile(j) {
+                        smart.Fatal("error: unsupported compatibility \"%v\"", s)
                 }
-                tool.staticLibs = append(tool.staticLibs, s)
+                tool.staticLibs = append(tool.staticLibs, j)
 	}
 
         for _, s := range libs {
@@ -1219,6 +1251,110 @@ func install(args []string) (e error) {
         p := smart.Command(adb, args...)
         e  = p.Run()
         return
+}
+
+func proguard(args []string) (err error) {
+        tool := New()
+        args = parseToolArgs(tool, "install", args)
+
+	if err = smart.ScanTargetGraph(tool); err != nil {
+		return
+	}
+
+	cfgName := "proguard.cfg"
+
+	if fi, e := os.Stat(cfgName); e == nil && fi != nil {
+		os.Rename(cfgName, cfgName+"_")
+	}
+
+        cfg, err := os.Create(cfgName)
+	fmt.Fprintf(cfg, "-injars %s\n", tool.proj.classes.Name)
+	if fi, e := os.Stat("libs"); e == nil && fi.IsDir() {
+		fmt.Fprintf(cfg, "-injars %s\n", fi.Name())
+	}
+
+	fmt.Fprintf(cfg, "-libraryjars %v\n", asdkGetPlatformFile("android.jar"))
+	/*
+	for _, s := range tool.staticLibs {
+		fmt.Fprintf(cfg, "-libraryjars %v\n", s)
+	}
+	 */
+
+	fmt.Fprintf(cfg, "-outjars %s\n", filepath.Join(tool.out, "classes-processed.jar"))
+	fmt.Fprintf(cfg, "-printmapping %s\n", filepath.Join(tool.out, "classes-processed.map"))
+	fmt.Fprintf(cfg, `
+-dontpreverify
+-repackageclasses ''
+-allowaccessmodification
+-optimizations !code/simplification/arithmetic
+
+-renamesourcefileattribute SourceFile
+-keepattributes SourceFile,LineNumberTable
+-keepattributes *Annotation*
+
+-keep public class * extends android.app.Activity
+-keep public class * extends android.app.Application
+-keep public class * extends android.app.Service
+-keep public class * extends android.content.BroadcastReceiver
+-keep public class * extends android.content.ContentProvider
+
+-keep public class * extends android.view.View {
+    public <init>(android.content.Context);
+    public <init>(android.content.Context, android.util.AttributeSet);
+    public <init>(android.content.Context, android.util.AttributeSet, int);
+    public void set*(...);
+}
+
+-keepclasseswithmembers class * {
+    public <init>(android.content.Context, android.util.AttributeSet);
+}
+
+-keepclasseswithmembers class * {
+    public <init>(android.content.Context, android.util.AttributeSet, int);
+}
+
+-keepclassmembers class * implements android.os.Parcelable {
+    static android.os.Parcelable$Creator CREATOR;
+}
+
+-keepclassmembers class **.R$* {
+  public static <fields>;
+}
+
+-keep public interface com.android.vending.licensing.ILicensingService
+
+-dontnote com.android.vending.licensing.ILicensingService
+-dontnote com.google.analytics.tracking.android.AdMobInfo
+
+-dontwarn android.support.**
+-dontwarn android.annotation.TargetApi
+
+-keepclasseswithmembernames class * {
+    native <methods>;
+}
+
+-keepclassmembers class * extends java.lang.Enum {
+    public static **[] values();
+    public static ** valueOf(java.lang.String);
+}
+
+-keepclassmembers class * implements java.io.Serializable {
+    static final long serialVersionUID;
+    static final java.io.ObjectStreamField[] serialPersistentFields;
+    private void writeObject(java.io.ObjectOutputStream);
+    private void readObject(java.io.ObjectInputStream);
+    java.lang.Object writeReplace();
+    java.lang.Object readResolve();
+}
+
+## Your application may contain more items that need to be preserved; 
+## typically classes that are dynamically created using Class.forName:
+# -keep public class mypackage.MyClass
+# -keep public interface mypackage.MyInterface
+# -keep public class * implements mypackage.MyInterface
+`)
+	cfg.Close()
+	return
 }
 
 // Create invokes "android create" command
@@ -1353,7 +1489,9 @@ func CommandLine(args []string) {
                 "create": create,
                 "clean": clean,
                 "level": level,
+                "levels": level,
                 "logcat": logcat,
+		"proguard": proguard,
         }
 
         smart.CommandLine(commands, args)
