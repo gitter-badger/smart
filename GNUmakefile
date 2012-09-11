@@ -11,7 +11,12 @@ ALLPKGS := $(filter-out $(ALLDIRS) bin/%,$(ALL))
 ALLBINS := $(filter bin/%,$(ALL))
 
 # all bin targets is in src/cmds/%(@F)
-GOBUILD_BIN = ([ -e $(<D) ] || mkdir -p $(<D)) && cd $(<D) && go build -o ../../../$@
+define GOBUILD_BIN
+([ -e $(<D) ] || mkdir -p $(<D)) &&\
+cd $(<D) && (echo "smart: Entering directory \`$$(pwd)'") &&\
+go build -o ../../../$@ ;\
+(echo "smart: Leaving directory \`$$(pwd)'")
+endef #GOBUILD_BIN
 
 #$(info $(ALLDIRS))
 #$(info $(ALLBINS))

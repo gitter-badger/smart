@@ -56,6 +56,18 @@ func init() {
         }
 }
 
+func asdkGetPlatformTool(name string) string {
+        return filepath.Join(asdkRoot, "platform-tools", name)
+}
+
+func asdkGetTool(name string) string {
+        return filepath.Join(asdkRoot, "tools", name)
+}
+
+func asdkGetPlatformFile(name string) string {
+        return filepath.Join(asdkRoot, "platforms", asdkPlatform, name)
+}
+
 type asdkProject struct {
         top, pkg string
         target, signed, unsigned, dex, classes, libs, res *smart.Target
@@ -148,8 +160,13 @@ func (sdk *asdk) Generate(t *smart.Target) error {
                 return nil
         default:
                 segs := strings.SplitN(t.Name, separator, 2);
-                if 0 < len(segs) && strings.HasSuffix(segs[0], ".jar") {
-                        return nil
+                if 0 < len(segs) {
+                        switch {
+                        case segs[0] == "libs": fallthrough
+                        case segs[0] == "assets": fallthrough
+                        case strings.HasSuffix(segs[0], ".jar"):
+                                return nil
+                        }
                 }
 
                 if smart.IsVerbose() {
@@ -171,7 +188,7 @@ func (sdk *asdk) compileResource(t *smart.Target) (e error) {
         args := []string{
                 "package", "-m",
                 "-J", t.Name, // should be out/res
-                "-I", filepath.Join(asdkRoot, "platforms", asdkPlatform, "android.jar"),
+                "-I", asdkGetPlatformFile("android.jar"),
         }
 
         for _, d := range t.Dependees {
@@ -207,7 +224,7 @@ func (sdk *asdk) compileResource(t *smart.Target) (e error) {
         smart.Info("compile -o %v %v", t, strings.Join(sources, " "))
 
         // Produces R.java under t.Name
-	aapt := filepath.Join(asdkRoot, "platform-tools", "aapt")
+	aapt := asdkGetPlatformTool("aapt")
         p := smart.Command(aapt, args...)
         //if !smart.IsVerbose() {
         //        p.Stdout, p.Stderr = nil, nil
@@ -237,7 +254,7 @@ func (sdk *asdk) compileAidl(t *smart.Target) (e error) {
 		"-I" + filepath.Join(top, "src"),
 		t.Dependees[0].Name, t.Name,
 	}
-	aidl := filepath.Join(asdkRoot, "platform-tools", "aidl")
+	aidl := asdkGetPlatformTool("aidl")
         p := smart.Command(aidl, args...)
         //if !smart.IsVerbose() {
         //        p.Stdout, p.Stderr = nil, nil
@@ -267,7 +284,7 @@ func (sdk *asdk) copyJNISharedLib(t *smart.Target) (e error) {
 
 func (sdk *asdk) compileJava(t *smart.Target) (e error) {
         classpath := []string{
-                filepath.Join(asdkRoot, "platforms", asdkPlatform, "android.jar"),
+                asdkGetPlatformFile("android.jar"),
         }
         classpath = append(classpath, sdk.staticLibs...)
 
@@ -426,7 +443,7 @@ func (sdk *asdk) dx(t *smart.Target) error {
         //args = append(args, embclasses...)
 
         smart.Info("dex -o %v %v", t, classes)
-	dx := filepath.Join(asdkRoot, "platform-tools", "dx")
+	dx := asdkGetPlatformTool("dx")
         p := smart.Command(dx, args...)
         return p.Run() //run("dx", args...)
 }
@@ -547,42 +564,39 @@ func (sdk *asdk) align(t *smart.Target) (e error) {
 
         smart.Info("align -o %v %v", t.Name, signed.Name)
 
-        zipalign := filepath.Join(asdkRoot, "tools", "zipalign")
+        zipalign := asdkGetTool("zipalign")
         args := []string{ zipalign, "-f", "4", signed.Name, t.Name, }
         p := smart.Command("linux32", args...)
         return p.Run() //run32(zipalign, args...)
 }
 
-func (sdk *asdk) packUnsigned(t *smart.Target) (e error) {
-        var dex *smart.Target
-        for _, d := range t.Dependees {
-                if d.IsFile() && strings.HasSuffix(d.Name, ".dex") {
-                        dex = d; break
-                }
+func (sdk *asdk) packResource(t *smart.Target) (e error) {
+        os.Remove(t.Name) // remove the .jar or .apk first
+        if e = os.MkdirAll(filepath.Dir(t.Name), 0755); e != nil { // make empty out dir
+                return e
         }
-
-        if dex == nil {
-                return smart.NewErrorf("no dex for %v (%v)", t, t.Dependees)
-        }
-
         if e = sdk.createEmptyPackage(t.Name); e != nil {
                 return e
         }
-        
+
         defer func() {
                 if e != nil {
                         os.Remove(t.Name)
                 }
         }()
 
-        var top string
-        if top = t.Var("top"); top == "" {
-                smart.Fatal("no top variable in %v", t)
+        top := t.Var("top")
+        if top == "" {
+                smart.Fatal("empty top variable in %v", t)
         }
 
         args := []string{ "package", "-u",
-                "-F", t.Name, // e.g. "out/_.unsigned"
-                "-I", filepath.Join(asdkRoot, "platforms", asdkPlatform, "android.jar"),
+                "-F", t.Name, // e.g. "out/_.unsigned", "foo.jar/_.jar"
+                "-I", asdkGetPlatformFile("android.jar"),
+        }
+
+        if t.Type == ".jar" || strings.HasSuffix(t.Name, ".jar") {
+                args = append(args, "-x")
         }
 
         var sources []string
@@ -601,21 +615,49 @@ func (sdk *asdk) packUnsigned(t *smart.Target) (e error) {
         //args = append(args, "--min-sdk-version", "7")
         //args = append(args, "--target-sdk-version", "7")
 
+        if len(sources) == 0 {
+                return
+        }
+
         smart.Info("pack -o %v %v", t, strings.Join(sources, " "))
-	aapt := filepath.Join(asdkRoot, "platform-tools", "aapt")
+	aapt := asdkGetPlatformTool("aapt")
         p := smart.Command(aapt, args...)
-        if !smart.IsVerbose() {
+        if true || !smart.IsVerbose() {
                 p.Stdout, p.Stderr = nil, nil
         }
         if e = p.Run(); e != nil {
                 return
         }
+        return
+}
+
+func (sdk *asdk) packUnsigned(t *smart.Target) (e error) {
+        var dex *smart.Target
+        for _, d := range t.Dependees {
+                if d.IsFile() && strings.HasSuffix(d.Name, ".dex") {
+                        dex = d; break
+                }
+        }
+
+        if dex == nil {
+                return smart.NewErrorf("no dex for %v (%v)", t, t.Dependees)
+        }
+
+        if e = sdk.packResource(t); e != nil {
+                return
+        }
+
+        defer func() {
+                if e != nil {
+                        os.Remove(t.Name)
+                }
+        }()
 
         smart.Info("pack -o %v %v\n", t, dex)
-
         dexName := filepath.Base(dex.Name)
         apkName := filepath.Base(t.Name)
-        p = smart.Command(aapt, "add", "-k", apkName, dexName)
+        aapt := asdkGetPlatformTool("aapt")
+        p := smart.Command(aapt, "add", "-k", apkName, dexName)
         p.Stdout, p.Dir = nil, filepath.Dir(dex.Name)
         if e = p.Run(); e != nil {
                 return
@@ -640,8 +682,7 @@ func (sdk *asdk) packUnsigned(t *smart.Target) (e error) {
         }
 
         smart.Info("pack -o %v %v\n", t, strings.Join(libs, ", "))
-
-        args = []string{ "-r", apkName, }
+        args := []string{ "-r", apkName, }
         args = append(args, libs...)
         p = smart.Command("zip", args...)
         p.Stdout = nil
@@ -654,11 +695,6 @@ func (sdk *asdk) packUnsigned(t *smart.Target) (e error) {
 }
 
 func (sdk *asdk) packJar(t *smart.Target) (e error) {
-        var top string
-        if top = t.Var("top"); top == "" {
-                smart.Fatal("no top variable in %v", t)
-        }
-
         var classes *smart.Target
         sep := string(filepath.Separator)
         for _, d := range t.Dependees {
@@ -667,47 +703,14 @@ func (sdk *asdk) packJar(t *smart.Target) (e error) {
                 }
         }
 
-        os.RemoveAll(t.Name) // clean all in out/classes
-        if e = os.MkdirAll(filepath.Dir(t.Name), 0755); e != nil { // make empty out dir
-                return e
-        }
-        if e = sdk.createEmptyPackage(t.Name); e != nil {
-                return e
-        }
-        
         defer func() {
                 if e != nil {
                         os.Remove(t.Name)
                 }
         }()
 
-        am := filepath.Join(top, "AndroidManifest.xml")
-        if smart.IsFile(am) {
-                args := []string{ "package", "-u", "-M", am,
-                        "-I", filepath.Join(asdkRoot, "platforms", asdkPlatform, "android.jar"),
-                }
-
-                sources := []string{ am }
-                if s := filepath.Join(top, "res"); smart.IsDir(s) {
-                        args = append(args, "-S", s)
-                        sources = append(sources, s)
-                }
-                if s := filepath.Join(top, "assets"); smart.IsDir(s) {
-                        args = append(args, "-A", s)
-                        sources = append(sources, s)
-                }
-                //args = append(args, "--min-sdk-version", "7")
-                //args = append(args, "--target-sdk-version", "7")
-
-                smart.Info("pack -o %v %v", t, strings.Join(sources, " "))
-		aapt := filepath.Join(asdkRoot, "platform-tools", "aapt")
-                p := smart.Command(aapt, args...)
-                if !smart.IsVerbose() {
-                        p.Stdout, p.Stderr = nil, nil
-                }
-                if e = p.Run(); e != nil {
-                        return
-                }
+        if e = sdk.packResource(t); e != nil {
+                return
         }
 
         var args []string
@@ -719,7 +722,6 @@ func (sdk *asdk) packJar(t *smart.Target) (e error) {
         }
 
         smart.Info("pack -o %v %v", t, classes)
-
         args = append(args, t.Name, "-C", classes.Name, ".")
         p := smart.Command("jar", args...)
         if e = p.Run(); e != nil {
@@ -1118,10 +1120,12 @@ func SetPlatformLevel(platformLevel uint) error {
 }
 
 func parseToolArgs(tool *asdk, name string, args[]string) []string {
+	compats := make(smart.FlagArrayValue, 5)
         extras := make(smart.FlagArrayValue, 5)
         libs := make(smart.FlagArrayValue, 5)
 
         fs := flag.NewFlagSet(name, flag.ContinueOnError)
+        fs.Var(&compats, "support", "specify extra libs of Android SDK")
         fs.Var(&extras, "extra", "specify extra libs of Android SDK")
         fs.Var(&libs, "lib", "specify static Jar libs for the project")
 
@@ -1132,7 +1136,7 @@ func parseToolArgs(tool *asdk, name string, args[]string) []string {
         for _, s := range extras {
                 if s == "" { continue }
 
-                s := filepath.Join(asdkRoot, "extras", s)
+                s = filepath.Join(asdkRoot, "extras", s)
                 if !smart.IsFile(s) {
                         smart.Fatal("error: extra \"%v\" is not file", s)
                 }
@@ -1143,6 +1147,16 @@ func parseToolArgs(tool *asdk, name string, args[]string) []string {
                         smart.Warn("unknown extra \"%v\"", s)
                 }
         }
+
+	for _, s := range compats {
+                if s == "" { continue }
+		s = fmt.Sprintf("android-support-%s.jar", s);
+                s = filepath.Join(asdkRoot, "android-compatibility", s)
+                if !smart.IsFile(s) {
+                        smart.Fatal("error: \"%v\" is not file", s)
+                }
+                tool.staticLibs = append(tool.staticLibs, s)
+	}
 
         for _, s := range libs {
                 if s == "" { continue }
@@ -1201,7 +1215,7 @@ func install(args []string) (e error) {
 
         smart.Info("install %v..", apk)
 
-        adb := filepath.Join(asdkRoot, "platform-tools", "adb")
+        adb := asdkGetPlatformTool("adb")
         p := smart.Command(adb, args...)
         e  = p.Run()
         return
@@ -1209,8 +1223,7 @@ func install(args []string) (e error) {
 
 // Create invokes "android create" command
 func create(args []string) (err error) {
-        and := filepath.Join(asdkRoot, "tools", "android")
-        p := smart.Command(and, args...)
+        p := smart.Command(asdkGetTool("android"), args...)
         return p.Run()
 }
 
@@ -1281,7 +1294,7 @@ func logcat(args []string) error {
         a = append(a, "logcat")
 
         logsR, logsW := io.Pipe()
-	adb := filepath.Join(asdkRoot, "platform-tools", "adb")
+	adb := asdkGetPlatformTool("adb")
         p := exec.Command(adb, a...)
         p.Stdout = logsW
         go func() {
