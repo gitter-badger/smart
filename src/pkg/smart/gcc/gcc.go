@@ -161,7 +161,9 @@ func (coll *gccCollector) ensureTarget(dir string) bool {
                         name = filepath.Base(dir)
                 }
 
-                coll.target = smart.New(name, smart.FinalFile)
+                //coll.target = smart.New(name, smart.FinalFile)
+		coll.target = smart.T(name)
+		coll.target.Class = smart.FinalFile
 
                 if coll.gcc.target == nil {
                         coll.gcc.target = coll.target
@@ -185,7 +187,9 @@ func (coll *gccCollector) addDir(dir string, info smart.FileInfo) (t *smart.Targ
 
         switch {
         case strings.HasSuffix(info.Name(), ".o"):
-                t = smart.New(filepath.Join(dir, info.Name(), "_.o"), smart.FinalFile)
+                //t = smart.New(filepath.Join(dir, info.Name(), "_.o"), smart.FinalFile)
+                t = smart.T(filepath.Join(dir, info.Name(), "_.o"))
+		t.Class = smart.FinalFile
                 t.Type = ".o"
         case strings.HasSuffix(info.Name(), ".a"): fallthrough
         case strings.HasSuffix(info.Name(), ".so"):
@@ -195,7 +199,9 @@ func (coll *gccCollector) addDir(dir string, info smart.FileInfo) (t *smart.Targ
                         name = "lib"+name
                 }
 
-                t = smart.New(filepath.Join(dir, name), smart.FinalFile)
+                //t = smart.New(filepath.Join(dir, name), smart.FinalFile)
+                t = smart.T(filepath.Join(dir, name))
+		t.Class = smart.FinalFile
                 t.Type = ext
 
                 l := len(name) - len(ext)

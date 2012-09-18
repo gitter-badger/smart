@@ -43,6 +43,7 @@ var _regComment = regexp.MustCompile(`^\s*//`)
 var _regMeta = regexp.MustCompile(`^\s*//\s*#smart\s+`)
 var _regCall = regexp.MustCompile(`([a-z_\-]+)\s*\(\s*(([^"]|"(\\"|[^"])")+?)\s*\)\s*;?`)
 var _regArg = regexp.MustCompile(`\s*(([^,"]|"(\\"|[^"])")*)(,|\s*$)`)
+var targetsmutex sync.Mutex
 var targets map[string]*Target
 var actions map[string]Action
 
@@ -93,11 +94,16 @@ func Reset() map[string]*Target {
 }
 
 // T maps name to the coresponding target.
-func T(name string) *Target {
-        if t, ok := targets[name]; ok {
-                return t
+func T(name string) (t *Target) {
+	targetsmutex.Lock(); defer targetsmutex.Unlock();
+        t, _ = targets[name]
+	if t == nil {
+		t = new(Target)
+		t.Name = name
+		t.Variables = make(map[string]string)
+		targets[name] = t
         }
-        return nil
+        return
 }
 
 type MetaInfo struct {
@@ -146,6 +152,39 @@ const (
         FinalDir = Final | Dir
 )
 
+type Project struct {
+	dir string
+}
+
+/*
+type Target interface {
+        Type() string
+        Name() string
+
+        Dependees() []Target // the targets this target depends on
+        Dependers() []Target // the targets depends on this target
+        Usees() []Target // the targets used by this target
+        Users() []Target // the targets use this target
+
+        Class() Class
+
+        IsScanned() bool // target is made by scan() or find()
+        IsDirTarget() bool // target is made by Collector.Add
+
+        Generated() bool // target has already generated -- tool.Generate performed
+
+        Meta() []*MetaInfo
+        Args() []*NamedValues
+        Exports() []*NamedValues
+        Variables() map[string]string
+
+	JoinExports(n string) []string
+	JoinUseesArgs(n string) (res []string)
+	JoinDependersUseesArgs(n string) (a []string)
+	Use(usee Target)
+	Dep(i interface {}, class Class) (o Target)
+} */
+
 type Target struct {
         Type string
         Name string
@@ -166,10 +205,24 @@ type Target struct {
         Args []*NamedValues
         Exports []*NamedValues
         Variables map[string]string
-
-        genmutex *sync.Mutex
-        generating bool
 }
+
+/*
+func (t *target) Type() string { return t.type_ }
+func (t *target) Name() string { return t.name }
+func (t *target) Dependees() []Target { return t.dependees }
+func (t *target) Dependers() []Target { return t.dependers }
+func (t *target) Usees() []Target { return t.usees }
+func (t *target) Users() []Target { return t.users }
+func (t *target) Class() Class { return t.class }
+func (t *target) IsScanned() bool { return t.isScanned }
+func (t *target) IsDirTarget() bool { return t.isDirTarget }
+func (t *target) Generated() bool { return t.generated }
+func (t *target) Meta() []*MetaInfo { return t.meta }
+func (t *target) Args() []*NamedValues { return t.args }
+func (t *target) Exports() []*NamedValues { return t.exports }
+func (t *target) Variables() map[string]string { return t.variables }
+ */
 
 func (t *Target) String() string {
         return t.Name
@@ -324,7 +377,8 @@ out:
 func (t *Target) Dep(i interface {}, class Class) (o *Target) {
         switch d := i.(type) {
         case string:
-                o = New(d, class)
+                o = T(d)
+		o.Class = class
         case *Target:
                 for _, a := range t.Dependees {
                         if a == d { return nil }
@@ -340,16 +394,20 @@ func (t *Target) Dep(i interface {}, class Class) (o *Target) {
 }
 
 // New create new target
+/*
 func New(name string, class Class) (t *Target) {
-        t = new(Target)
+	targetsmutex.Lock(); defer targetsmutex.Unlock();
+	t, _ = targets[name]
+	if t == nil {
+		t = new(Target)
+		targets[name] = t
+	}
         t.Name = name
         t.Variables = make(map[string]string)
         t.Class = class
-        t.genmutex = new(sync.Mutex)
-        t.generating = false
-        targets[name] = t
         return
 }
+ */
 
 type Collector interface {
         Add(dir string, info FileInfo) *Target
@@ -449,8 +507,8 @@ func (coll *DependeeCollector) Add(dir string, info FileInfo) (t *Target) {
 }
 
 type BuildTool interface {
-        NewCollector(t *Target) Collector
         SetTop(top string)
+        NewCollector(t *Target) Collector
         Generate(t *Target) error
         Goals() []*Target
 }
@@ -640,7 +698,6 @@ func Scan(coll Collector, top, dir string) (e error) {
                                 fmt.Printf("error: %v\n", e); continue
                         } else {
                                 if s := coll.Add(sd, fi); s != nil {
-                                        //targets[dname] = s
                                         s.IsDirTarget = fi.IsDir()
                                         s.IsScanned = true
                                         if !s.IsDirTarget {
@@ -803,65 +860,78 @@ func Run32InDir(cmd, dir string, args ...string) error {
         return p.Wait()
 }
 
-type genmeta struct {
-        t *Target
-        g bool // tool.Generate invoked
-        e error // error returned by tool.Generate
-}
-
 // generate invoke tool.Generate on targets
-func generate(tool BuildTool, caller *Target, targets []*Target) (error, []*Target) {
+func generate(tool BuildTool, caller *Target, targets []*Target) (err error, updated []*Target) {
         if len(targets) == 0 {
                 return nil, nil
         }
 
-        ch := make(chan genmeta)
-        gn := len(targets)
+	ch := make(chan *Target)
 
-        for _, t := range targets {
-                if !t.Generated {
-                        go gen(tool, caller, t, ch)
-                }
-        }
-        
-        updated := []*Target{}
+	f := func(i int) {
+		var t *Target
+		for {
+			if t = <-ch; t == nil {	break }
+			if t.Generated { continue }
+			if e := gen(i, tool, caller, t); e != nil {
+				//panic(&generr{ e })
+				continue
+			}
+			if t.Generated {
+				updated = append(updated, t)
+			}
+		}
+	}
 
-        for ; 0 < gn; gn -= 1 {
-                if m := <-ch; m.g && m.e == nil {
-                        updated = append(updated, m.t)
-                } else if m.e != nil {
-                        Fatal("error: %v\n", m.e)
-                }
-        }
+	/*
+	defer func() {
+		if i := recover(); i != nil {
+			if ge := i.(*generr); ge != nil {
+				err = ge.e // assign error
+			} else {
+				panic(i)
+			}
+		}
+	}() */
 
-        return nil, updated
+	const count = 10;
+
+	for i := 0; i < count; i += 1 {
+		go f(i)
+	}
+
+	for _, t := range targets {
+		ch <- t
+	}
+
+	for i := 0; i < count; i += 1 {
+		ch <- nil
+	}
+        return
 }
 
 // gen invoke tool.Generate on a single target
-func gen(tool BuildTool, caller *Target, t *Target, ch chan genmeta) {
+func gen(gonum int, tool BuildTool, caller *Target, t *Target) (err error) {
         //Info("gen: %v -> %v", caller, t)
 
-        var err error
         var needGen = false
 
         if t.Generated {
-                ch <- genmeta{ t, needGen, err }
                 return
         }
 
         // check depends
-        if 0 < len(t.Dependees) {
-                if e, u := generate(tool, t, t.Dependees); e == nil {
-                        //Info("updated: %v", u)
-                        needGen = needGen || 0 < len(u)
-                } else {
-                        needGen, err = needGen || false, e
-                }
-        }
+        if e, updated := generate(tool, t, t.Dependees); e == nil {
+		needGen = needGen || (updated != nil && 0 < len(updated))
+        } else {
+		err = e
+                return
+	}
 
         // check for update
         fi := t.Stat()
-        if fi == nil { // not an file target or file not exists
+        if fi == nil {
+		// target not exists, always needs generation
                 needGen = needGen || true
         } else if caller != nil {
                 // compare modification time with caller-target
@@ -869,25 +939,19 @@ func gen(tool BuildTool, caller *Target, t *Target, ch chan genmeta) {
                 if fiCaller == nil {
                         ///Info("caller: no %v", caller)
                 } else if fi.ModTime().After(fiCaller.ModTime()) {
-                        ///Info("%v: %v (%v)", caller, t, fi.ModTime().Sub(fiCaller.ModTime()))
                         needGen = needGen || true
                 }
         }
 
         // invoke tool.Generate
-        if needGen && !t.generating && !t.Generated {
-                t.genmutex.Lock()
-                if !t.generating && !t.Generated {
-                        t.generating = true
-                        if err = tool.Generate(t); err == nil {
-                                t.Generated = true
-                        }
-                        t.generating = false
+        if needGen && !t.Generated {
+		//Info("%d: gen: %v -> %v", gonum, caller, t)
+                if err = tool.Generate(t); err == nil {
+                        t.Generated = true
                 }
-                t.genmutex.Unlock()
         }
 
-        ch <- genmeta{ t, needGen, err }
+	return
 }
 
 

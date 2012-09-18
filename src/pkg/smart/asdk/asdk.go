@@ -42,6 +42,8 @@ var asdkPlatform = "android-10"
 var _regAsdkAMTag = regexp.MustCompile(`^\s*<\s*manifest\s*`)
 var _regAsdkPkgAttr = regexp.MustCompile(`\s+(package\s*=\s*"([^"]*)"\s*)`)
 
+const asdkExtractStaticLibs = false
+
 func init() {
         /****/ if c, e := exec.LookPath("android"); e == nil {
                 asdkRoot = filepath.Dir(filepath.Dir(c))
@@ -69,10 +71,98 @@ func asdkGetPlatformFile(name string) string {
 }
 
 type asdkProject struct {
-        top, pkg string
+	*smart.Project
+        top, out, pkg string
         target, signed, unsigned, dex, classes, libs, res *smart.Target
-        //jars []*smart.Target
 	proguard *smart.Target
+}
+
+func (proj *asdkProject) init(out, top string) {
+	proj.top = top;
+
+	isJar := strings.HasSuffix(proj.top, ".jar")
+        tt := ".apk"
+        if isJar {
+                tt = ".jar"
+        }
+
+        base := filepath.Base(proj.top) // it could be "" for top level
+        out = filepath.Join(out, base)
+        outClasses := filepath.Join(out, "classes")
+
+	proj.out = out
+
+        am := filepath.Join(proj.top, "AndroidManifest.xml")
+        pkg, tagline, pkgline := proj.extractPackageName(am)
+        if 0 < tagline && 0 < pkgline && pkg != "" {
+                if proj.target == nil {
+                        //proj.target = smart.New(pkg + tt, smart.FinalFile)
+                        proj.target = smart.T(pkg + tt)
+			proj.target.Class = smart.FinalFile
+                }
+                proj.target.SetVar("package", pkg)
+        } else if isJar {
+                if proj.target == nil {
+                        //proj.target = smart.New(base + tt, smart.FinalFile)
+                        proj.target = smart.T(base + tt)
+			proj.target.Class = smart.FinalFile
+                }
+                proj.target.DelVar("package")
+        } else {
+                smart.Fatal("asdk: no package name in %v", filepath.Join(proj.top, "AndroidManifest.xml"))
+	}
+
+        proj.target.Type = tt
+        proj.target.SetVar("top", proj.top)
+
+        switch tt {
+        case ".apk":
+                proj.signed = proj.target.Dep(filepath.Join(out, "_.signed"), smart.IntermediateFile)
+                proj.unsigned = proj.signed.Dep(filepath.Join(out, "_.unsigned"), smart.IntermediateFile)
+                proj.unsigned.SetVar("top", proj.top)
+                proj.dex = proj.unsigned.Dep(outClasses + ".dex", smart.IntermediateFile)
+                proj.dex.Type = ".dex"
+                proj.classes = proj.dex.Dep(outClasses, smart.IntermediateDir)
+
+        case ".jar":
+                proj.classes = proj.target.Dep(outClasses, smart.IntermediateDir)
+
+        default:
+                smart.Fatal("unknown type: %v", proj.top)
+        }
+
+        proj.classes.Type = "classes"
+        proj.classes.SetVar("top", proj.top)
+
+        //smart.Info("target: %v (%v)", proj.target, proj.target.Dependees)
+
+        if proj.target == nil {
+                smart.Fatal("no target for '%v'", proj.top)
+        }
+}
+
+func (proj *asdkProject) extractPackageName(am string) (pkg string, tagline, pkgline int) {
+        tagline, pkgline = -1, -1
+        smart.ForEachLine(am, func(lineno int, line []byte) bool {
+                if tagline < 0 && _regAsdkAMTag.Match(line) {
+                        tagline = lineno
+                        //return true
+                }
+
+                //smart.Info("%v:%v: (%d) %v", am, lineno, tagline, string(line))
+                if 0 < tagline {
+			a := _regAsdkPkgAttr.FindStringSubmatch(string(line))
+                        //smart.Info("%v:%v: %v", am, lineno, a)
+                        if a != nil {
+                                pkg, pkgline = a[2], lineno
+                                return false
+                        }
+                }
+
+                //fmt.Printf("%v:%v: %v\n", am, lineno, string(line))
+                return true
+        })
+        return
 }
 
 type asdk struct {
@@ -86,8 +176,10 @@ func New() (sdk *asdk) {
         return
 }
 
-func (sdk *asdk) SetTop(d string) {
-        sdk.top = d
+func (sdk *asdk) SetTop(dir string) {
+	sdk.top = dir;
+	//sdk.proj = new(asdkProject)
+	//sdk.proj.init(sdk.out, dir);
 }
 
 func (sdk *asdk) Goals() (a []*smart.Target) {
@@ -98,22 +190,21 @@ func (sdk *asdk) Goals() (a []*smart.Target) {
 }
 
 func (sdk *asdk) NewCollector(t *smart.Target) smart.Collector {
-        proj := &asdkProject{ target:t }
-        coll := &asdkCollector{ sdk:sdk, proj:proj }
+        coll := &asdkCollector{ sdk:sdk, proj:new(asdkProject) }
+	coll.proj.target = t
 
-        if sdk.proj == nil {
-                sdk.proj = proj
-                coll.makeTargets("") // "" indicates top dir
-        }
-
+	if sdk.proj == nil {
+		sdk.proj = coll.proj
+		sdk.proj.init(sdk.out, sdk.top);
+	}
         return coll
 }
 
 func (sdk *asdk) Generate(t *smart.Target) error {
         //smart.Info("Generate: %v:%v...", t, t.Dependees)
 
-        outlib := filepath.Join("out", "lib")
-        outsrc := filepath.Join("out", "src")
+        outlib := filepath.Join(sdk.proj.out, "lib")
+        outsrc := filepath.Join(sdk.proj.out, "src")
         separator := string(filepath.Separator)
 
         isFile := func(s string) bool {
@@ -122,7 +213,7 @@ func (sdk *asdk) Generate(t *smart.Target) error {
 
         isOutDir := func(s string) bool {
                 if !t.IsDir() { return false }
-                if !strings.HasPrefix(t.Name, "out"+separator) { return false }
+                if !strings.HasPrefix(t.Name, sdk.proj.out+separator) { return false }
                 return strings.HasSuffix(t.Name, separator+s)
         }
 
@@ -156,7 +247,7 @@ func (sdk *asdk) Generate(t *smart.Target) error {
         case t.IsDir() && t.Name == "libs": fallthrough
         case t.IsDir() && t.Name == "res": fallthrough
         case t.IsDir() && strings.HasSuffix(t.Name, ".jar"): fallthrough
-	//case strings.HasPrefix(t.Name, "out"+separator): fallthrough
+	//case strings.HasPrefix(t.Name, sdk.proj.out+separator): fallthrough
 	case strings.HasPrefix(t.Name, "res"+separator):
                 return nil
         default:
@@ -187,10 +278,14 @@ func (sdk *asdk) compileResource(t *smart.Target) (e error) {
         }
 
         args := []string{
-                "package", "-m",
-                "-J", t.Name, // should be out/res
+                "package", "-m", "-J", t.Name, // should be out/res
+		"-P", "out/public_resources.xml",
                 "-I", asdkGetPlatformFile("android.jar"),
         }
+
+	for _, s := range sdk.staticLibs {
+		args = append(args, "-I", s);
+	}
 
         for _, d := range t.Dependees {
                 ext := filepath.Ext(d.Name)
@@ -342,7 +437,12 @@ func (sdk *asdk) compileJava(t *smart.Target) (e error) {
         }
 
         p := smart.Command("javac", args...)
-        e = p.Run() //run("javac", args...)
+        if e = p.Run(); e != nil {
+                return
+        }
+
+        //smart.Info("==== %v ====", t)
+	//smart.Command("find", t.Name, "-type", "f", "-name", "*.class").Run()
         return
 }
 
@@ -428,10 +528,12 @@ func (sdk *asdk) dx(t *smart.Target) error {
                 return smart.NewErrorf("expect 1 depend: %v->%v\n", t, t.Dependees)
         }
 
-        outclasses := filepath.Join(filepath.Dir(t.Name), "classes")
-        embclasses := asdkExtractStaticLibsClasses(outclasses, sdk.staticLibs)
-        if embclasses == nil {
-        }
+	if asdkExtractStaticLibs {
+		outclasses := filepath.Join(filepath.Dir(t.Name), "classes")
+		embclasses := asdkExtractStaticLibsClasses(outclasses, sdk.staticLibs)
+		if embclasses == nil {
+		}
+	}
 
 	if (sdk.proj.proguard != nil) {
 		os.Remove(sdk.proj.proguard.Name)
@@ -457,6 +559,12 @@ func (sdk *asdk) dx(t *smart.Target) error {
 
         args = append(args, "--dex", "--output="+t.Name)
         args = append(args, inputClasses)
+
+	if !asdkExtractStaticLibs {
+		for _, s := range sdk.staticLibs {
+			args = append(args, s)
+		}
+	}
 
         smart.Info("dex -o %v %v", t, inputClasses)
 	dx := asdkGetPlatformTool("dx")
@@ -684,29 +792,32 @@ func (sdk *asdk) packUnsigned(t *smart.Target) (e error) {
                 return
         }
 
+	projOutLib := filepath.Join(sdk.proj.out, "lib")
+
         var libs []string
         for _, lib := range sdk.proj.libs.Dependees {
-                if strings.HasPrefix(lib.Name, filepath.Join("out", "lib")) {
-                        libs = append(libs, lib.Name[4:])
+                if strings.HasPrefix(lib.Name, projOutLib) {
+                        libs = append(libs, lib.Name[len(sdk.proj.out)+1:])
                 } else if smart.IsVerbose() {
                         smart.Info("ignored: JNI library %v", lib)
                 }
         }
 
         if len(libs) == 0 {
-                smart.Fatal("pack: no libs: %v", sdk.proj.libs, sdk.proj.libs.Dependees)
+                //smart.Fatal("pack: no libs: %v, %v", sdk.proj.libs, sdk.proj.libs.Dependees)
+		return
         }
 
         smart.Info("pack -o %v %v\n", t, strings.Join(libs, ", "))
         args := []string{ "-r", apkName, }
         args = append(args, libs...)
         p = smart.Command("zip", args...)
-        p.Stdout = nil
-        p.Dir = "out"
+        p.Dir = sdk.proj.out
+        //p.Stdout = nil
         if e = p.Run(); e != nil {
                 return
         }
-        
+
         return
 }
 
@@ -741,6 +852,9 @@ func (sdk *asdk) packJar(t *smart.Target) (e error) {
                 args = []string{ "-uf" }
         }
 
+        //smart.Info("==== %v ====", t)
+	//smart.Command("jar", "-tf", t.Name).Run()
+
         smart.Info("pack -o %v %v", t, classes)
         args = append(args, t.Name, "-C", classes.Name, ".")
         p := smart.Command("jar", args...)
@@ -748,36 +862,17 @@ func (sdk *asdk) packJar(t *smart.Target) (e error) {
                 return
         }
 
+        //smart.Info("==== %v ==== (%v)", classes, t.Dependees)
+	//smart.Command("find", classes.Name, "-type", "f", "-name", "*.class").Run()
+
+        //smart.Info("==== %v ==== (%v)", t, classes)
+	//smart.Command("jar", "-tf", t.Name).Run()
         return
 }
 
 type asdkCollector struct {
         sdk *asdk
         proj *asdkProject
-}
-
-func (coll *asdkCollector) extractPackageName(am string) (pkg string, tagline, pkgline int) {
-        tagline, pkgline = -1, -1
-        smart.ForEachLine(am, func(lineno int, line []byte) bool {
-                if tagline < 0 && _regAsdkAMTag.Match(line) {
-                        tagline = lineno
-                        //return true
-                }
-
-                //smart.Info("%v:%v: (%d) %v", am, lineno, tagline, string(line))
-                if 0 < tagline {
-			a := _regAsdkPkgAttr.FindStringSubmatch(string(line))
-                        //smart.Info("%v:%v: %v", am, lineno, a)
-                        if a != nil {
-                                pkg, pkgline = a[2], lineno
-                                return false
-                        }
-                }
-
-                //fmt.Printf("%v:%v: %v\n", am, lineno, string(line))
-                return true
-        })
-        return
 }
 
 func (coll *asdkCollector) extractClasses(outclasses, lib string, cs []string) (classes []string) {
@@ -852,68 +947,6 @@ func (coll *asdkCollector) extractStaticLibsClasses(outclasses string, libs []st
         return
 }
 
-func (coll *asdkCollector) makeTargets(dir string) bool {
-        tt := ".apk"
-        if strings.HasSuffix(dir, ".jar") {
-                tt = ".jar"
-        }
-
-        top := dir
-        if top == "" {
-                top = coll.sdk.top
-        }
-
-        base := filepath.Base(dir) // it could be "" for top level
-        out := filepath.Join(coll.sdk.out, base)
-        outClasses := filepath.Join(out, "classes")
-
-        am := filepath.Join(top, "AndroidManifest.xml")
-        pkg, tagline, pkgline := coll.extractPackageName(am)
-        if 0 < tagline && 0 < pkgline && pkg != "" {
-                if coll.proj.target == nil {
-                        coll.proj.target = smart.New(pkg + tt, smart.FinalFile)
-                }
-                coll.proj.target.SetVar("package", pkg)
-        } else if strings.HasSuffix(dir, ".jar") {
-                if coll.proj.target == nil {
-                        coll.proj.target = smart.New(base + tt, smart.FinalFile)
-                }
-                coll.proj.target.DelVar("package")
-        } else {
-                smart.Fatal("asdk: no package name in %v", filepath.Join(dir, "AndroidManifest.xml"))
-	}
-
-        coll.proj.target.Type = tt
-        coll.proj.target.SetVar("top", top)
-
-        switch tt {
-        case ".apk":
-                coll.proj.signed = coll.proj.target.Dep(filepath.Join(out, "_.signed"), smart.IntermediateFile)
-                coll.proj.unsigned = coll.proj.signed.Dep(filepath.Join(out, "_.unsigned"), smart.IntermediateFile)
-                coll.proj.unsigned.SetVar("top", top)
-                coll.proj.dex = coll.proj.unsigned.Dep(outClasses + ".dex", smart.IntermediateFile)
-                coll.proj.dex.Type = ".dex"
-                coll.proj.classes = coll.proj.dex.Dep(outClasses, smart.IntermediateDir)
-
-        case ".jar":
-                coll.proj.classes = coll.proj.target.Dep(outClasses, smart.IntermediateDir)
-
-        default:
-                smart.Fatal("unknown type: %v", dir)
-        }
-
-        coll.proj.classes.Type = "classes"
-        coll.proj.classes.SetVar("top", top)
-
-        //smart.Info("target: %v (%v)", coll.proj.target, coll.proj.target.Dependees)
-
-        if coll.proj.target == nil {
-                smart.Fatal("no target for '%v'", dir)
-        }
-
-        return coll.proj.target != nil
-}
-
 func (coll *asdkCollector) addLibsDir(dir string) (t *smart.Target) {
         if coll.proj.libs != nil {
                 smart.Fatal("more than one 'libs' subdirectories")
@@ -926,7 +959,7 @@ func (coll *asdkCollector) addLibsDir(dir string) (t *smart.Target) {
         }
 
         coll.proj.libs = coll.proj.unsigned.Dep(dir, smart.Dir)
-        smart.Collect(dir, ".*", &asdkLibsCollector{ coll.proj.libs })
+        smart.Collect(dir, ".*", &asdkLibsCollector{ coll.proj })
 
         //smart.Info("libs: %v %v %v", coll.proj.libs, coll.proj.libs.Dependees, coll.proj.unsigned.Dependees)
 
@@ -937,7 +970,9 @@ func (coll *asdkCollector) addLibsDir(dir string) (t *smart.Target) {
 func (coll *asdkCollector) addResDir(dir string) (t *smart.Target) {
         if coll.proj.res == nil {
                 outRes := filepath.Join(filepath.Dir(coll.proj.classes.Name), "res")
-                coll.proj.res = smart.New(outRes, smart.IntermediateDir)
+                //coll.proj.res = smart.New(outRes, smart.IntermediateDir)
+                coll.proj.res = smart.T(outRes)
+		coll.proj.res.Class = smart.IntermediateDir
                 coll.proj.res.SetVar("top", filepath.Dir(dir))
 
                 // Add R.java target
@@ -978,8 +1013,10 @@ func (coll *asdkCollector) addJarDir(dir string) (t *smart.Target) {
         t = coll.proj.classes.Dep(name, smart.IntermediateFile)
         t.Dep(dir, smart.Dir)
 
-        // the "res" also requires the "jar"
-        coll.proj.res.Dep(t, t.Class);
+	if coll.proj.res != nil {
+		// the "res" also requires the "jar"
+		coll.proj.res.Dep(t, t.Class);
+	}
 
         /*
          if s := coll.proj.unsigned.Var("classpath"); s == "" {
@@ -990,7 +1027,7 @@ func (coll *asdkCollector) addJarDir(dir string) (t *smart.Target) {
         */
 
         jarColl := coll.sdk.NewCollector(t).(*asdkCollector)
-        jarColl.makeTargets(dir)
+        jarColl.proj.init(coll.sdk.out, dir)
         smart.Scan(jarColl, coll.sdk.top, dir)
         return
 }
@@ -1104,7 +1141,7 @@ func (coll *asdkCollector) addFile(dir string, info smart.FileInfo) (t *smart.Ta
 }
 
 type asdkLibsCollector struct {
-        libs *smart.Target
+	proj *asdkProject
 }
 
 func (coll *asdkLibsCollector) Add(dir string, info smart.FileInfo) (t *smart.Target) {
@@ -1119,13 +1156,13 @@ func (coll *asdkLibsCollector) Add(dir string, info smart.FileInfo) (t *smart.Ta
         }
 
         dname := filepath.Join(dir, info.Name())
-        libName := filepath.Join("out", "lib", filepath.Base(dir), info.Name())
+        libName := filepath.Join(coll.proj.out, "lib", filepath.Base(dir), info.Name())
 
         //smart.Info("lib: %v -> %v", dname, libName)
 
         // TODO: check dname: libXXX.so, or executibles
 
-        lib := coll.libs.Dep(libName, smart.IntermediateFile)
+        lib := coll.proj.libs.Dep(libName, smart.IntermediateFile)
         t = lib.Dep(dname, smart.File)
         return
 }
