@@ -185,7 +185,7 @@ func New() (sdk *asdk) {
 func (sdk *asdk) SetTop(dir string) {
 	sdk.top = dir;
 	//sdk.proj = new(asdkProject)
-	//sdk.proj.init(sdk.out, dir);
+	//sdk.proj.init(sdk.out, dir)
 }
 
 func (sdk *asdk) Goals() (a []*smart.Target) {
@@ -205,7 +205,7 @@ func (sdk *asdk) NewCollector(t *smart.Target) smart.Collector {
 
 	if sdk.proj == nil {
 		sdk.proj = coll.proj
-		sdk.proj.init(sdk.out, sdk.top);
+		sdk.proj.init(sdk.out, sdk.top)
 	}
         return coll
 }
@@ -289,7 +289,7 @@ func (sdk *asdk) compileResource(t *smart.Target) (e error) {
 
         args := []string{
                 "package", "-m", "-J", t.Name, // should be out/res
-		"-P", filepath.Join(sdk.out, filepath.Base(top), "public_resources.xml"),
+		"-P", filepath.Join(filepath.Dir(t.Name), "public.xml"),
                 "-I", asdkGetPlatformFile("android.jar"),
         }
 
@@ -298,11 +298,14 @@ func (sdk *asdk) compileResource(t *smart.Target) (e error) {
 	}
 
         for _, d := range t.Dependees {
-                ext := filepath.Ext(d.Name)
-                switch {
-                case ext == ".jar":
+                if filepath.Ext(d.Name) == ".jar" {
 			args = append(args, "-I", d.Name)
                 }
+        }
+
+        if strings.HasSuffix(top, ".jar") {
+		//args = append(args, "-x")
+		//--custom-package
         }
 
         var sources []string
@@ -327,15 +330,13 @@ func (sdk *asdk) compileResource(t *smart.Target) (e error) {
                 return
         }
 
+	//smart.Info("compile-resouce: %v", args)
         smart.Info("compile -o %v %v", t, strings.Join(sources, " "))
 
         // Produces R.java under t.Name
 	aapt := asdkGetPlatformTool("aapt")
         p := smart.Command(aapt, args...)
-        //if !smart.IsVerbose() {
-        //        p.Stdout, p.Stderr = nil, nil
-        //}
-        e = p.Run() //return run("aapt", args...)
+        e = p.Run()
         return
 }
 
@@ -362,9 +363,6 @@ func (sdk *asdk) compileAidl(t *smart.Target) (e error) {
 	}
 	aidl := asdkGetPlatformTool("aidl")
         p := smart.Command(aidl, args...)
-        //if !smart.IsVerbose() {
-        //        p.Stdout, p.Stderr = nil, nil
-        //}
 	e = p.Run()
 	return
 }
@@ -578,9 +576,7 @@ func (sdk *asdk) dx(t *smart.Target) error {
 	}
 
 	for _, d := range classes.Dependees {
-		ext := filepath.Ext(d.Name)
-		switch {
-		case ext == ".jar":
+		if filepath.Ext(d.Name) == ".jar" {
 			args = append(args, d.Name)
 		}
 	}
@@ -588,8 +584,7 @@ func (sdk *asdk) dx(t *smart.Target) error {
 	//smart.Info("classes: %v", inputClasses)
 	//smart.Command("find", inputClasses, "-type", "f", "-name", "*.class").Run()
 
-        smart.Info("dex %v", args)
-
+        //smart.Info("dex %v", args)
         smart.Info("dex -o %v %v", t, inputClasses)
 	dx := asdkGetPlatformTool("dx")
         p := smart.Command(dx, args...)
@@ -736,11 +731,8 @@ func (sdk *asdk) packResource(t *smart.Target) (e error) {
         }
 
         top := t.Var("top")
-        if top == "" {
-                smart.Fatal("empty top variable for %v", t)
-        }
 
-        args := []string{ "package", "-u",
+	args := []string{ "package", "-u",
                 "-F", t.Name, // e.g. "out/_.unsigned", "foo.jar/_.jar"
                 "-I", asdkGetPlatformFile("android.jar"),
         }
@@ -749,16 +741,18 @@ func (sdk *asdk) packResource(t *smart.Target) (e error) {
 		args = append(args, "-I", s);
 	}
 
-        for _, d := range t.Dependees {
-                ext := filepath.Ext(d.Name)
-                switch {
-                case ext == ".jar":
+	outRes := filepath.Join(sdk.out, filepath.Base(top), "res")
+	res := smart.T(outRes)
+	//smart.Info("pack-resouce: %v %v", res, res.Dependees)
+        for _, d := range res.Dependees {
+                if filepath.Ext(d.Name) == ".jar" {
 			args = append(args, "-I", d.Name)
                 }
         }
 
         if t.Type == ".jar" || strings.HasSuffix(t.Name, ".jar") {
                 args = append(args, "-x")
+		//args = append(args, "--custom-package", "dozof")
         }
 
         var sources []string
@@ -781,12 +775,9 @@ func (sdk *asdk) packResource(t *smart.Target) (e error) {
                 return
         }
 
-        smart.Info("pack -o %v %v", t, strings.Join(sources, " "))
+        smart.Info("pack -o %v <resource> (%v)", t, sources)
 	aapt := asdkGetPlatformTool("aapt")
         p := smart.Command(aapt, args...)
-        if true || !smart.IsVerbose() {
-                p.Stdout, p.Stderr = nil, nil
-        }
         if e = p.Run(); e != nil {
                 return
         }
@@ -812,6 +803,7 @@ func (sdk *asdk) packUnsigned(t *smart.Target) (e error) {
         }()
 
         if e = sdk.packResource(t); e != nil {
+		smart.Fatal("pack-resource: %v", e)
                 return
         }
 
@@ -820,7 +812,7 @@ func (sdk *asdk) packUnsigned(t *smart.Target) (e error) {
         apkName := filepath.Base(t.Name)
         aapt := asdkGetPlatformTool("aapt")
         p := smart.Command(aapt, "add", "-k", apkName, dexName)
-        p.Stdout, p.Dir = nil, filepath.Dir(dex.Name)
+        p.Dir = filepath.Dir(dex.Name)
         if e = p.Run(); e != nil {
                 return
         }
@@ -846,12 +838,11 @@ func (sdk *asdk) packUnsigned(t *smart.Target) (e error) {
 		return
         }
 
-        smart.Info("pack -o %v %v\n", t, strings.Join(libs, ", "))
+        smart.Info("pack -o %v <libs> %v\n", t, strings.Join(libs, ", "))
         args := []string{ "-r", apkName, }
         args = append(args, libs...)
         p = smart.Command("zip", args...)
         p.Dir = sdk.proj.out
-        //p.Stdout = nil
         if e = p.Run(); e != nil {
                 return
         }
@@ -895,7 +886,7 @@ func (sdk *asdk) packJar(t *smart.Target) (e error) {
         //smart.Info("==== %v ====", t)
 	//smart.Command("jar", "-tf", t.Name).Run()
 
-        smart.Info("pack -o %v %v (%v)", t, classes, t.Dependees)
+        smart.Info("pack -o %v %v <classes> (%v)", t, classes, t.Dependees)
         args = append(args, t.Name, "-C", classes.Name, ".")
         p := smart.Command("jar", args...)
         if e = p.Run(); e != nil {
