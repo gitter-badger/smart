@@ -95,12 +95,18 @@ func Reset() map[string]*Target {
 
 // T maps name to the coresponding target.
 func T(name string) (t *Target) {
+	if name == "" {
+		return nil
+	}
+
 	targetsmutex.Lock(); defer targetsmutex.Unlock();
         t, _ = targets[name]
 	if t == nil {
 		t = new(Target)
+		t.Class = None
 		t.Name = name
 		t.Variables = make(map[string]string)
+		t.genmutex = new(sync.Mutex)
 		targets[name] = t
         }
         return
@@ -200,6 +206,8 @@ type Target struct {
         IsDirTarget bool // target is made by Collector.Add
 
         Generated bool // target has already generated -- tool.Generate performed
+	Generating bool // target is on generating
+	genmutex *sync.Mutex
 
         Meta []*MetaInfo
         Args []*NamedValues
@@ -894,7 +902,7 @@ func generate(tool BuildTool, caller *Target, targets []*Target) (err error, upd
 		}
 	}() */
 
-	const count = 10;
+	const count = 1; //10;
 
 	for i := 0; i < count; i += 1 {
 		go f(i)
@@ -944,11 +952,17 @@ func gen(gonum int, tool BuildTool, caller *Target, t *Target) (err error) {
         }
 
         // invoke tool.Generate
-        if needGen && !t.Generated {
-		//Info("%d: gen: %v -> %v", gonum, caller, t)
-                if err = tool.Generate(t); err == nil {
-                        t.Generated = true
-                }
+        if needGen && !(t.Generating || t.Generated) {
+		//Info("gen(%d): %v -> %v", gonum, caller, t)
+		t.genmutex.Lock()
+		if !(t.Generating || t.Generated) {
+			t.Generating = true
+			if err = tool.Generate(t); err == nil {
+				t.Generated = true
+			}
+			t.Generating = false
+		}
+		t.genmutex.Unlock()
         }
 
 	return
