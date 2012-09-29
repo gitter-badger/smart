@@ -304,8 +304,8 @@ func (sdk *asdk) compileResource(t *smart.Target) (e error) {
         }
 
         if strings.HasSuffix(top, ".jar") {
-		//args = append(args, "-x")
 		//--custom-package
+		//args = append(args, "-x")
         }
 
         var sources []string
@@ -741,9 +741,9 @@ func (sdk *asdk) packResource(t *smart.Target) (e error) {
 		args = append(args, "-I", s);
 	}
 
-	outRes := filepath.Join(sdk.out, filepath.Base(top), "res")
-	res := smart.T(outRes)
+	res := smart.T(filepath.Join(sdk.out, filepath.Base(top), "res"))
 	//smart.Info("pack-resouce: %v %v", res, res.Dependees)
+
         for _, d := range res.Dependees {
                 if filepath.Ext(d.Name) == ".jar" {
 			args = append(args, "-I", d.Name)
@@ -751,11 +751,12 @@ func (sdk *asdk) packResource(t *smart.Target) (e error) {
         }
 
         if t.Type == ".jar" || strings.HasSuffix(t.Name, ".jar") {
-                args = append(args, "-x")
 		//args = append(args, "--custom-package", "dozof")
+		args = append(args, "-x")
         }
 
         var sources []string
+
         if s := filepath.Join(top, "AndroidManifest.xml"); smart.IsFile(s) {
                 args = append(args, "-M", s)
                 sources = append(sources, s)
@@ -770,6 +771,14 @@ func (sdk *asdk) packResource(t *smart.Target) (e error) {
         }
         //args = append(args, "--min-sdk-version", "7")
         //args = append(args, "--target-sdk-version", "7")
+
+	/*
+        if filepath.Ext(t.Name) != ".jar" {
+		args = append(args, "--auto-add-overlay")
+		args = append(args, "-S", "ActionBar.jar/res")
+		sources = append(sources, "ActionBar.jar/res")
+	}
+	 */
 
         if len(sources) == 0 {
                 return
@@ -990,7 +999,7 @@ func (coll *asdkCollector) addLibsDir(dir string) (t *smart.Target) {
         }
 
         coll.proj.outLibs = smart.T(coll.proj.unsigned).Dep(dir, smart.Dir).Name
-        smart.Collect(dir, ".*", &asdkLibsCollector{ coll.proj })
+        smart.Collect(dir, ".*", &asdkLibsCollector{ coll.sdk, coll.proj })
 
         //smart.Info("libs: %v %v %v", coll.proj.outLibs, coll.proj.outLibs.Dependees, coll.proj.unsigned.Dependees)
 
@@ -1168,6 +1177,7 @@ func (coll *asdkCollector) addFile(dir string, info smart.FileInfo) (t *smart.Ta
 }
 
 type asdkLibsCollector struct {
+        sdk *asdk
 	proj *asdkProject
 }
 
@@ -1177,21 +1187,34 @@ func (coll *asdkLibsCollector) Add(dir string, info smart.FileInfo) (t *smart.Ta
         }
 
         //smart.Info("AddLib: %v/%v (%v)", dir, info.Name(), filepath.Dir(dir))
+	/*
         if filepath.Dir(dir) != "libs" {
                 smart.Info("ignore: %v/%v (not in libs)", dir, info.Name())
                 return
-        }
+        } */
+	if dir != "libs" && !strings.HasPrefix(dir, "libs"+smart.Separator) {
+                smart.Info("ignore: %v/%v (not in libs)", dir, info.Name())
+                return
+	}
 
-        dname := filepath.Join(dir, info.Name())
-        libName := filepath.Join(coll.proj.out, "lib", filepath.Base(dir), info.Name())
+	ext := filepath.Ext(info.Name())
+	dname := filepath.Join(dir, info.Name())
+	switch ext {
+	case ".so":
+		libName := filepath.Join(coll.proj.out, "lib", filepath.Base(dir), info.Name())
 
-        //smart.Info("lib: %v -> %v", dname, libName)
+		//smart.Info("lib: %v -> %v", dname, libName)
 
-        // TODO: check dname: libXXX.so, or executibles
+		// TODO: check dname: libXXX.so, or executibles
 
-        lib := smart.T(coll.proj.outLibs).Dep(libName, smart.IntermediateFile)
-        t = lib.Dep(dname, smart.File)
-        return
+		lib := smart.T(coll.proj.outLibs).Dep(libName, smart.IntermediateFile)
+		t = lib.Dep(dname, smart.File)
+
+	case ".jar":
+		//smart.Info("lib: %v", dname)
+		coll.sdk.staticLibs = append(coll.sdk.staticLibs, dname)
+	}
+	return
 }
 
 func SetPlatformLevel(platformLevel uint) error {
@@ -1484,12 +1507,29 @@ func logcat(args []string) error {
         args = fs.Args()
 
         var regs []*regexp.Regexp
+        var autoOn []*regexp.Regexp
+        var autoOff []*regexp.Regexp
         for _, s := range args {
                 re, err := regexp.Compile(s)
                 if err == nil {
                         regs = append(regs, re)
                 }
         }
+
+	var autoRegs []string
+	autoRegs = []string{
+		`./AndroidRuntime(\([0-9]+\)): FATAL EXCEPTION: .+`,
+	}
+        for _, s := range autoRegs {
+		autoOn = append(autoOn, regexp.MustCompile(s))
+	}
+
+	autoRegs = []string{
+		`./AndroidRuntime(\([0-9]+\)): \t\.{3}`,
+	}
+        for _, s := range autoRegs {
+		autoOff = append(autoOff, regexp.MustCompile(s))
+	}
 
         a = append(a, "logcat")
 
@@ -1498,7 +1538,7 @@ func logcat(args []string) error {
         p := exec.Command(adb, a...)
         p.Stdout = logsW
         go func() {
-                in, log := bufio.NewReader(logsR), []byte{}
+                in, log, logon := bufio.NewReader(logsR), []byte{}, false
                 for {
                         line, isPrefix, err := in.ReadLine()
                         log = append(log, line...)
@@ -1508,10 +1548,34 @@ func logcat(args []string) error {
                                 log = append(log, line...)
                         }
 
-                        for _, re := range regs {
-                                if !re.Match(log) { continue }
+			on := logon
+
+			if on {
+				for _, re := range autoOff {
+					if re.Match(log) {
+						on = false
+						logon = false
+						goto do_log
+					}
+				}
+			} else {
+				for _, re := range regs {
+					if re.Match(log) {
+						on = true; goto do_log
+					}
+				}
+				for _, re := range autoOn {
+					if re.Match(log) {
+						on = true
+						logon = true
+						goto do_log
+					}
+				}
+			}
+
+		do_log:	if on {
                                 fmt.Printf("%s\n", string(log))
-                        }
+			}
 
                         log = []byte{}
                         if err != nil { break }
