@@ -13,7 +13,7 @@ func init() {
         ndk := &_androidndk{ root:"", toolchainByAbi:make(map[string]string, 5) }
         registerToolset("android-ndk", ndk)
 
-        /****/ if c, e := exec.LookPath("ndk-build"); e == nil {
+        if c, e := exec.LookPath("ndk-build"); e == nil {
                 ndk.root = filepath.Dir(c)
         } else {
                 if ndk.root = os.Getenv("ANDROIDNDK"); ndk.root == "" {
@@ -27,15 +27,7 @@ func init() {
 
         toolchainsDir := filepath.Join(ndk.root, "toolchains")
 
-        fd, err := os.Open(toolchainsDir)
-        if err != nil {
-                fmt.Printf("no toolchains in Android NDK `%v'\n", ndk.root)
-                return
-        }
-
-        defer fd.Close()
-
-        names, err := fd.Readdirnames(5)
+        names, err := readDirNames(toolchainsDir)
         if err != nil {
                 fmt.Printf("no toolchains in Android NDK `%v' (%v)\n", ndk.root, err)
                 return
@@ -112,11 +104,13 @@ func (ndk *_androidndk) addToolchain(d string) bool {
         return false
 }
 
-func (ndk *_androidndk) toolchain(abi string) string {
+func (ndk *_androidndk) toolchainDir(abi string) string {
         osname := ""
 
         switch runtime.GOOS {
-        case "linux": osname = "linux-x86"
+        case "linux":
+                osname = "linux-x86"
+                osname = "linux-x86_64"
         default:
                 print("TODO: choose Android NDK toolchain for `"+runtime.GOOS+"'\n")
         }
@@ -153,7 +147,7 @@ func (ndk *_androidndk) setupModule(p *parser, args []string, vars map[string]st
         if s, ok := vars["ABI"]; ok { abi = s } else { abi = "armeabi" }
         if s, ok := vars["PLATFORM"]; ok { platform = s } else { platform = "android-9" }
 
-        bin := filepath.Join(ndk.toolchain(abi), "bin")
+        bin := filepath.Join(ndk.toolchainDir(abi), "bin")
         switch ld.name {
         case "ld": ld.path = filepath.Join(bin, "arm-linux-androideabi-ld")
         case "ar": ld.path = filepath.Join(bin, "arm-linux-androideabi-ar")
@@ -191,7 +185,7 @@ func (ndk *_androidndk) buildModule(p *parser, args []string) bool {
                 errorf(0, "unkown platform for `%v'", m.name)
         }
 
-        bin := filepath.Join(ndk.toolchain(p.call("this.abi")), "bin")
+        bin := filepath.Join(ndk.toolchainDir(p.call("this.abi")), "bin")
         binAs := filepath.Join(bin, "arm-linux-androideabi-as")
         binGcc := filepath.Join(bin, "arm-linux-androideabi-gcc")
         binGxx := filepath.Join(bin, "arm-linux-androideabi-g++")

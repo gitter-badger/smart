@@ -2,5 +2,6 @@ make/out
 make/tests/work
 smart.a
 smart.go
+out
 *~
 *.6

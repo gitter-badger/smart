@@ -14,17 +14,19 @@ import (
         "sort"
 )
 
-var toolsets = map[string]*toolsetStub{}
-var generalMetaFiles = []*filerule{
-        { "backup", os.ModeDir |^ os.ModeType, `[^~]*~$` },
-        //{ "git", os.ModeDir |^ os.ModeType, `\.git(ignore)?` },
-        { "git", os.ModeDir, `^\.git$` },
-        { "git", ^os.ModeType, `^\.gitignore$` },
-        { "mercurial", os.ModeDir, `^\.hg$` },
-        { "subversion", os.ModeDir, `^\.svn$` },
-        { "cvs", ^os.ModeType, `^CVS$` },
-}
 var (
+        toolsets = map[string]*toolsetStub{}
+
+        generalMetaFiles = []*filerule{
+                { "backup", os.ModeDir |^ os.ModeType, `[^~]*~$` },
+                //{ "git", os.ModeDir |^ os.ModeType, `\.git(ignore)?` },
+                { "git", os.ModeDir, `^\.git$` },
+                { "git", ^os.ModeType, `^\.gitignore$` },
+                { "mercurial", os.ModeDir, `^\.hg$` },
+                { "subversion", os.ModeDir, `^\.svn$` },
+                { "cvs", ^os.ModeType, `^CVS$` },
+        }
+
         //flag_a = flag.Bool("a", false, "automode")
         flag_g = flag.Bool("g", true, "ignore names like \".git\", \".svn\", etc.")
         flag_o = flag.String("o", "", "output directory")
@@ -422,26 +424,31 @@ func (r *filerule) matchName(fn string) bool {
         return false
 }
 
+// readDirNames reads the directory named by dirname and returns
+// a sorted list of directory entries.
+func readDirNames(dirname string) ([]string, error) {
+	fd, err := os.Open(dirname)
+	if err != nil {
+		return nil, err
+	}
+
+	defer fd.Close()
+
+	names, err := fd.Readdirnames(-1)
+	if err != nil {
+		return nil, err
+	}
+
+	sort.Strings(names)
+	return names, nil
+}
+
 type traverseCallback func(dname string, fi os.FileInfo) bool
 func traverse(d string, fun traverseCallback) (err error) {
-        fd, err := os.Open(d)
+        names, err := readDirNames(d)
         if err != nil {
-                //errorf(0, "open: %v, %v\n", err, d)
+                //errorf(0, "readDirNames: %v, %v\n", err, d)
                 return
-        }
-
-        defer fd.Close()
-
-        var names []string
-        for {
-                if ns, e := fd.Readdirnames(50); e != nil {
-                        if e == io.EOF { names = append(names, ns...) }
-                        break
-                } else if 0 < len(ns) {
-                        names = append(names, ns...)
-                } else {
-                        break
-                }
         }
 
         var fi os.FileInfo
@@ -602,8 +609,8 @@ func run(vars map[string]string, cmds []string) {
 func Main() {
         flag.Parse()
 
-        var vars = map[string]string{}
         var cmds []string
+        var vars = map[string]string{}
         for _, arg := range os.Args[1:] {
                 if arg[0] == '-' { continue }
                 if i := strings.Index(arg, "="); 0 < i /* false at '=foo' */ {

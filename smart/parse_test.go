@@ -1,7 +1,6 @@
 package smart
 
 import (
-        //. "smart"
         "testing"
 )
 
