@@ -1,6 +1,5 @@
 make/out
 make/tests/work
-smart
 smart.a
 smart.go
 *~
