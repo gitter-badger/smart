@@ -39,7 +39,7 @@ func (sdk *_androidsdk) setupModule(p *context, args []string, vars map[string]s
 
         d := filepath.Dir(p.l.file)
         sources, err := findFiles(filepath.Join(d, "src"), `\.java$`)
-        for i, _ := range sources {
+        for i := range sources {
                 if strings.HasPrefix(sources[i], d) {
                         sources[i] = sources[i][len(d)+1:]
                 }
@@ -205,10 +205,9 @@ func (ic *androidsdkGenR) execute(targets []string, prequisites []string) bool {
 
         if ic.r = findFile(outRes, `R\.java$`); ic.r != "" {
                 return true
-        } else {
-                errorf(0, "resources: R.java not found")
         }
 
+        errorf(0, "resources: R.java not found")
         return false
 }
 
@@ -353,9 +352,17 @@ func androidsdkExtractClasses(outclasses, lib string, cs []string) (classes []st
         if err != nil { errorf(0, "open: %v (%v)", lib, err) }
         defer f.Close()
 
-        var wd string
-        if s, e := os.Getwd(); e != nil { errorf(0, "getwd: %v", e); return } else { wd = s }
-        if e := os.Chdir(outclasses); e != nil { errorf(0, "chdir: %v", e); return }
+        wd, err := os.Getwd()
+        if err != nil {
+                errorf(0, "getwd: %v", err)
+                return
+        }
+
+        if e := os.Chdir(outclasses); e != nil {
+                errorf(0, "chdir: %v", e)
+                return
+        }
+
         defer func() {
                 if e := os.Chdir(wd); e != nil { errorf(0, "chdir: %v", e) }
         }()

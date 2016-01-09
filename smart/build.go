@@ -305,7 +305,7 @@ func (a *action) update() (updated bool, updatedTargets []string) {
                 rr = append(rr, outdatedTargets...)
                 sort.Ints(rr)
 
-                for n, _ := range rr {
+                for n := range rr {
                         if n == 0 || rr[n-1] != rr[n] {
                                 request = append(request, targets[rr[n]])
                                 requestfis = append(requestfis, fis[rr[n]])

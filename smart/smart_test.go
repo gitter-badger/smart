@@ -41,17 +41,17 @@ func runToolsetTestCase(t *testing.T, tn string, tf func(t *testing.T)) {
                 fmt.Printf("test: no test `%v' (%v)\n", tc, tn)
         }
 
-        if wd, e := os.Getwd(); e != nil { t.Errorf("Getwd: %v", e); return } else {
-                if e := os.Chdir(tc); e != nil { t.Errorf("Chdir: %v", e); return }
-                fmt.Printf("test: Entering directory `%v'\n", tc)
+        wd, e := os.Getwd()
+        if e != nil { t.Errorf("Getwd: %v", e); return }
+        if e := os.Chdir(tc); e != nil { t.Errorf("Chdir: %v", e); return }
+        fmt.Printf("test: Entering directory `%v'\n", tc)
 
-                modules = map[string]*module{}
-                moduleOrderList = []*module{}
-                moduleBuildList = []pendedBuild{}
+        modules = map[string]*module{}
+        moduleOrderList = []*module{}
+        moduleBuildList = []pendedBuild{}
 
-                tf(t)
+        tf(t)
 
-                fmt.Printf("test: Leaving directory `%v'\n", tc)
-                if e := os.Chdir(wd); e != nil { t.Errorf("Chdir: %v", e); return }
-        }
+        fmt.Printf("test: Leaving directory `%v'\n", tc)
+        if e := os.Chdir(wd); e != nil { t.Errorf("Chdir: %v", e); return }
 }
