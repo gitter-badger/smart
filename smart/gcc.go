@@ -21,7 +21,7 @@ var gccSourcePatterns = []*filerule{
 type _gcc struct {
 }
 
-func (gcc *_gcc) setupModule(p *parser, args []string, vars map[string]string) bool {
+func (gcc *_gcc) setupModule(p *context, args []string, vars map[string]string) bool {
         var m *module
         if m = p.module; m == nil {
                 errorf(0, "no module")
@@ -55,7 +55,7 @@ func (gcc *_gcc) setupModule(p *parser, args []string, vars map[string]string) b
         return true
 }
 
-func (gcc *_gcc) buildModule(p *parser, args []string) bool {
+func (gcc *_gcc) buildModule(p *context, args []string) bool {
         var m *module
         if m = p.module; m == nil { errorf(0, "no module") }
         if m.action == nil { errorf(0, "no action for `%v'", p.module.name) }
@@ -129,7 +129,7 @@ func (gcc *_gcc) buildModule(p *parser, args []string) bool {
                 if fi, err := os.Stat(src); err != nil {
                         fr = matchFileName(src, gccSourcePatterns)
                 } else {
-                        fr = matchFile(fi, gccSourcePatterns)
+                        fr = matchFileInfo(fi, gccSourcePatterns)
                 }
 
                 if fr == nil {
@@ -156,7 +156,7 @@ func (gcc *_gcc) buildModule(p *parser, args []string) bool {
         return m.action != nil
 }
 
-func (gcc *_gcc) useModule(p *parser, m *module) bool {
+func (gcc *_gcc) useModule(p *context, m *module) bool {
         //fmt.Printf("TODO: use: %v by %v\n", m.name, p.module.name)
         return false
 }

@@ -9,8 +9,8 @@ func newTestLex(file, s string) (l *lex) {
         return
 }
 
-func newTestParser(file, s string) (p *parser) {
-        p = &parser{
+func newTestContext(file, s string) (p *context) {
+        p = &context{
                 l: lex{ file:file, s:[]byte(s), pos:0, },
                 variables:make(map[string]*variable, 200),
         }
@@ -299,7 +299,7 @@ bbbb := xxx$(info $(sh$ared),$(stat$ic))-$(a$$a)-xxx
 cccc = xxx-$(sh$ared)-$(stat$ic)-$(a$$a)-xxx
 dddd := xxx-$(sh$ared)-$(stat$ic)-$(a$$a)-xxx
 `
-        p := newTestParser("TestParse", s)
+        p := newTestContext("TestParse", s)
 
         if err := p.parse(); err != nil { t.Error("parse error:", err); return }
         if ex, nl := 10, len(p.l.nodes); nl != ex { t.Error("expect", ex, "but", nl); return }

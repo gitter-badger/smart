@@ -6,7 +6,7 @@ import (
         "strings"
 )
 
-var builtins = map[string]func(p *parser, args []string) string {
+var builtins = map[string]func(p *context, args []string) string {
         "dir": builtinDir,
         "info": builtinInfo,
         "module": builtinModule,
@@ -14,7 +14,7 @@ var builtins = map[string]func(p *parser, args []string) string {
         "use": builtinUse,
 }
 
-func builtinDir(p *parser, args []string) string {
+func builtinDir(p *context, args []string) string {
         var ds []string
         for _, a := range args {
                 ds = append(ds, filepath.Dir(a))
@@ -22,12 +22,12 @@ func builtinDir(p *parser, args []string) string {
         return strings.Join(ds, " ")
 }
 
-func builtinInfo(p *parser, args []string) string {
+func builtinInfo(p *context, args []string) string {
         fmt.Printf("%v\n", strings.Join(args, " "))
         return ""
 }
 
-func builtinModule(p *parser, args []string) string {
+func builtinModule(p *context, args []string) string {
         var name, toolsetName, kind string
         if 0 < len(args) { name = strings.TrimSpace(args[0]) }
         if 1 < len(args) { toolsetName = strings.TrimSpace(args[1]) }
@@ -89,7 +89,7 @@ func builtinModule(p *parser, args []string) string {
         return ""
 }
 
-func builtinBuild(p *parser, args []string) string {
+func builtinBuild(p *context, args []string) string {
         var m *module
         if m = p.module; m == nil { errorf(0, "no module defined") }
 
@@ -99,7 +99,7 @@ func builtinBuild(p *parser, args []string) string {
         return ""
 }
 
-func builtinUse(p *parser, args []string) string {
+func builtinUse(p *context, args []string) string {
         if p.module == nil { errorf(0, "no module defined") }
         if p.module.toolset == nil { errorf(0, "no toolset for `%v'", p.module.name) }
 
@@ -111,11 +111,11 @@ func builtinUse(p *parser, args []string) string {
                         p.module.toolset.useModule(p, m)
                 } else {
                         m = &module{
-                        name: a,
-                        dir: filepath.Dir(p.l.file),
-                        location: p.l.location(),
-                        variables: make(map[string]*variable, 128),
-                        usedBy: []*module{ p.module },
+                                name: a,
+                                dir: filepath.Dir(p.l.file),
+                                location: p.l.location(),
+                                variables: make(map[string]*variable, 128),
+                                usedBy: []*module{ p.module },
                         }
                         p.module.using = append(p.module.using, m)
                         modules[a] = m

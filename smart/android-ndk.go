@@ -48,8 +48,8 @@ type _androidndk struct {
         modules map[string]*module
 }
 
-func (ndk *_androidndk) parseFile(fn string, vars map[string]string) (p *parser, err error) {
-        if p , err = newParser(fn); err != nil {
+func (ndk *_androidndk) parseFile(fn string, vars map[string]string) (p *context, err error) {
+        if p , err = newContext(fn); err != nil {
                 fmt.Printf("error: %v\n", err)
                 return
         }
@@ -125,7 +125,7 @@ func (ndk *_androidndk) toolchainDir(abi string) string {
         return ""
 }
 
-func (ndk *_androidndk) setupModule(p *parser, args []string, vars map[string]string) bool {
+func (ndk *_androidndk) setupModule(p *context, args []string, vars map[string]string) bool {
         if !ndk._gcc.setupModule(p, args, vars) {
                 return false
         }
@@ -172,7 +172,7 @@ func (ndk *_androidndk) setupModule(p *parser, args []string, vars map[string]st
         return true
 }
 
-func (ndk *_androidndk) buildModule(p *parser, args []string) bool {
+func (ndk *_androidndk) buildModule(p *context, args []string) bool {
         if !ndk._gcc.buildModule(p, args) {
                 return false
         }
@@ -243,7 +243,7 @@ func (ndk *_androidndk) loadModules() (ok bool) {
         return ok
 }
 
-func (ndk *_androidndk) useModule(p *parser, m *module) bool {
+func (ndk *_androidndk) useModule(p *context, m *module) bool {
         if !(m.toolset == nil && m.kind == "") {
                 //errorf(0, "no toolset for `%v'", p.module.name)
                 return false

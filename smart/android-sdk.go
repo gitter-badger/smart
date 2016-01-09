@@ -31,14 +31,14 @@ func init() {
 type _androidsdk struct {
 }
 
-func (sdk *_androidsdk) setupModule(p *parser, args []string, vars map[string]string) bool {
+func (sdk *_androidsdk) setupModule(p *context, args []string, vars map[string]string) bool {
         var m *module
         if m = p.module; m == nil {
                 errorf(0, "no module")
         }
 
         d := filepath.Dir(p.l.file)
-        sources, err := findFiles(filepath.Join(d, "src"), `\.java$`, -1)
+        sources, err := findFiles(filepath.Join(d, "src"), `\.java$`)
         for i, _ := range sources {
                 if strings.HasPrefix(sources[i], d) {
                         sources[i] = sources[i][len(d)+1:]
@@ -73,7 +73,7 @@ func (sdk *_androidsdk) getResources(ds ...string) (as []*action) {
         return
 }
 
-func (sdk *_androidsdk) buildModule(p *parser, args []string) bool {
+func (sdk *_androidsdk) buildModule(p *context, args []string) bool {
         var m *module
         if m = p.module; m == nil { errorf(0, "no module") }
 
@@ -147,7 +147,7 @@ func (sdk *_androidsdk) buildModule(p *parser, args []string) bool {
         return true
 }
 
-func (sdk *_androidsdk) useModule(p *parser, m *module) bool {
+func (sdk *_androidsdk) useModule(p *context, m *module) bool {
         return false
 }
 

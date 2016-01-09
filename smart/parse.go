@@ -391,20 +391,27 @@ main_loop:
         return
 }
 
-type parser struct {
+// context hold a parse context and the current module being processed.
+type context struct {
         l lex
+
+        // module is the current module being processed
         module *module
-        line bytes.Buffer // line accumulator
+
+        // line accumulates the current line of text
+        line bytes.Buffer
+
+        // variables holds the context
         variables map[string]*variable
 }
 
-func (p *parser) setModule(m *module) (prev *module) {
+func (p *context) setModule(m *module) (prev *module) {
         prev = p.module
         p.module = m
         return
 }
 
-func (p *parser) getModuleSources() (sources []string) {
+func (p *context) getModuleSources() (sources []string) {
         if p.module == nil {
                 return
         }
@@ -420,7 +427,7 @@ func (p *parser) getModuleSources() (sources []string) {
         return
 }
 
-func (p *parser) expand(str string) string {
+func (p *context) expand(str string) string {
         var buf bytes.Buffer
         var exp func(s []byte) (out string, l int)
         var getRune = func(s []byte) (r rune, l int) {
@@ -520,7 +527,7 @@ func (p *parser) expand(str string) string {
         return buf.String()
 }
 
-func (p *parser) call(name string, args ...string) string {
+func (p *context) call(name string, args ...string) string {
         //fmt.Printf("call: %v %v\n", name, args)
         vars := p.variables
 
@@ -556,7 +563,7 @@ func (p *parser) call(name string, args ...string) string {
         return ""
 }
 
-func (p *parser) setVariable(name, value string) (v *variable) {
+func (p *context) setVariable(name, value string) (v *variable) {
         loc := p.l.location()
 
         if name == "this" {
@@ -592,7 +599,7 @@ func (p *parser) setVariable(name, value string) (v *variable) {
         return
 }
 
-func (p *parser) expandNode(n *node) string {
+func (p *context) expandNode(n *node) string {
         //fmt.Printf("%v:%v:%v: expand '%v' (%v)\n", p.l.file, n.lineno, n.colno, p.l.str(n), len(n.children))
 
         if len(n.children) == 0 {
@@ -627,7 +634,7 @@ func (p *parser) expandNode(n *node) string {
         return b.String()
 }
 
-func (p *parser) processNode(n *node) (err error) {
+func (p *context) processNode(n *node) (err error) {
         //fmt.Printf("%v:%v:%v: node '%v' (%v, %v)\n", p.l.file, n.lineno, n.colno, p.l.str(n), n.kind, len(n.children))
 
         switch n.kind {
@@ -654,7 +661,7 @@ func (p *parser) processNode(n *node) (err error) {
         return
 }
 
-func (p *parser) parse() (err error) {
+func (p *context) parse() (err error) {
         p.l.parse()
 
         for _, n := range p.l.nodes {
@@ -666,7 +673,7 @@ func (p *parser) parse() (err error) {
         return
 }
 
-func newParser(fn string) (p *parser, err error) {
+func newContext(fn string) (p *context, err error) {
         var f *os.File
 
         f, err = os.Open(fn)
@@ -681,16 +688,16 @@ func newParser(fn string) (p *parser, err error) {
                 return
         }
 
-        p = &parser{
-        l: lex{ file: fn, s: s, pos: 0, },
-        variables: make(map[string]*variable, 128),
+        p = &context{
+                l: lex{ file: fn, s: s, pos: 0, },
+                variables: make(map[string]*variable, 128),
         }
 
         return
 }
 
-func parse(conf string) (p *parser, err error) {
-        p, err = newParser(conf)
+func parse(conf string) (p *context, err error) {
+        p, err = newContext(conf)
 
         defer func() {
                 if e := recover(); e != nil {

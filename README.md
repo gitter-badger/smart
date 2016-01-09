@@ -15,4 +15,4 @@ $(build)
 Why
 ===
 
-Build faster the simple way!
+Build faster the simple way! (By comparing to autogen, autoconf, automake.)
