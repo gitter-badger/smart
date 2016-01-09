@@ -20,7 +20,7 @@ func computeTestRunParams() (vars map[string]string, cmds []string) {
                 }
                 cmds = append(cmds, arg)
         }
-        *flag_V, *flag_v = true, false
+        *flagVV, *flagV = true, false
         return
 }
 

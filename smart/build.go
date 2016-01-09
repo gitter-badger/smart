@@ -46,7 +46,7 @@ func errorf(num int, f string, a ...interface{}) {
 
 // verbose prints a message if `V' flag is enabled
 func verbose(s string, a ...interface{}) {
-        if *flag_V {
+        if *flagVV {
                 message(s, a...)
         }
 }
@@ -138,9 +138,9 @@ func (c *excmd) run(target string, args ...string) bool {
                 if c.dir != "" { cmd.Dir = c.dir }
 
                 if !c.slient {
-                        if *flag_v {
+                        if *flagV {
                                 fmt.Printf("%v: %v\n", c.name, target)
-                        } else if *flag_V {
+                        } else if *flagVV {
                                 fmt.Printf("%v\n", strings.Join(cmd.Args, " "))
                         }
                 }
@@ -202,14 +202,14 @@ func computeInterTargets(d, sre string, prequisites []*action) (targets []string
                 for _, p := range prequisites {
                         if pc, ok := p.command.(incommand); ok {
                                 if _, nu := pc.targets(p.prequisites); nu {
-                                        outdateMap[i] += 1
+                                        outdateMap[i]++
                                 }
                         } else {
                                 for _, t := range p.targets {
                                         if pfi, _ := os.Stat(t); pfi == nil {
                                                 errorf(0, "`%v' not found", t)
                                         } else if fi.ModTime().Before(pfi.ModTime()) {
-                                                outdateMap[i] += 1
+                                                outdateMap[i]++
                                         }
                                 }
                         }
@@ -500,8 +500,7 @@ func findNumFiles(d string, sre string, num int) (files []string, err error) {
         err = traverse(d, func(dname string, fi os.FileInfo) bool {
                 if re.MatchString(dname) {
                         files = append(files, dname)
-                        num -= 1
-                        if num == 0 { return false }
+                        if num--; num == 0 { return false }
                 }
                 return true
         })
@@ -566,12 +565,12 @@ func Build(vars map[string]string, cmds []string) {
         }()
 
         var d string
-        if d = *flag_C; d == "" { d = "." }
+        if d = *flagC; d == "" { d = "." }
 
         // Find and process modules.
         err := traverse(d, func(fn string, fi os.FileInfo) bool {
                 fr := matchFileInfo(fi, generalMetaFiles)
-                if *flag_g && fr != nil { return false }
+                if *flagG && fr != nil { return false }
                 if fi.Name() == ".smart" {
                         if _, err := parse(fn); err != nil { errorf(0, "parse: `%v', %v\n", fn, err) }
                 }
@@ -595,7 +594,7 @@ func Build(vars map[string]string, cmds []string) {
                         return false
                 }
                 if !mod.built {
-                        if *flag_V {
+                        if *flagVV {
                                 fmt.Printf("smart: build `%v' (%v)\n", mod.name, mod.dir)
                         }
                         p.module = mod
@@ -608,7 +607,7 @@ func Build(vars map[string]string, cmds []string) {
                 return mod.built
         }
         buildDeps = func(p *context, mod *module) (num int) {
-                for _, u := range mod.using { if buildMod(p, u) { num += 1 } }
+                for _, u := range mod.using { if buildMod(p, u) { num++ } }
                 return
         }
 

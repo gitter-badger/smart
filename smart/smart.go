@@ -8,12 +8,12 @@ import (
 
 var (
         //flag_a = flag.Bool("a", false, "automode")
-        flag_g = flag.Bool("g", true, "ignore names like \".git\", \".svn\", etc.")
-        flag_o = flag.String("o", "", "output directory")
-        flag_v = flag.Bool("v", false, "prompt command")
-        flag_C = flag.String("C", "", "change directory")
-        flag_T = flag.String("T", "", "traverse")
-        flag_V = flag.Bool("V", false, "print command verbosely")
+        flagG = flag.Bool("g", true, "ignore names like \".git\", \".svn\", etc.")
+        flagO = flag.String("o", "", "output directory")
+        flagV = flag.Bool("v", false, "prompt command")
+        flagC = flag.String("C", "", "change directory")
+        flagT = flag.String("T", "", "traverse")
+        flagVV = flag.Bool("V", false, "print command verbosely")
 )
 
 // Main starts build from the command line.

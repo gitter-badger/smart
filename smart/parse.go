@@ -116,7 +116,7 @@ func (l *lex) get() bool {
         case l.runeLen > 1:
                 l.colno += 2
         default:
-                l.colno += 1
+                l.colno ++
         }
         return true
 }
@@ -419,7 +419,7 @@ func (p *context) getModuleSources() (sources []string) {
         if s, ok := p.module.variables["this.sources"]; ok {
                 dir, str := p.module.dir, p.expand(s.value)
                 sources = strings.Split(str, " ")
-                for i, _ := range sources {
+                for i := range sources {
                         if sources[i][0] == '/' { continue }
                         sources[i] = filepath.Join(dir, sources[i])
                 }
@@ -535,7 +535,7 @@ func (p *context) call(name string, args ...string) string {
         default:
                 if f, ok := builtins[name]; ok {
                         // All arguments should be expended.
-                        for i, _ := range args { args[i] = p.expand(args[i]) }
+                        for i := range args { args[i] = p.expand(args[i]) }
                         return f(p, args)
                 }
         case name == "$": return "$";
@@ -547,9 +547,8 @@ func (p *context) call(name string, args ...string) string {
         case name == "this":
                 if p.module != nil {
                         return p.module.name
-                } else {
-                        return ""
                 }
+                return ""
         case strings.HasPrefix(name, "this.") && p.module != nil:
                 vars = p.module.variables
         }

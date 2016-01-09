@@ -40,7 +40,7 @@ foobac=# comment 6	`
         if len(l.nodes) != 16 { t.Error("expecting 16 nodes but", len(l.nodes)); return }
 
         count := 0
-        for _, n := range l.nodes { if n.kind == node_comment { count += 1 } }
+        for _, n := range l.nodes { if n.kind == node_comment { count++ } }
         if ex := 9; count != ex { t.Error("expecting", ex, "comments but", count); return }
 
         var c *node
@@ -94,7 +94,7 @@ $(a) \
         
         count := 0
         for _, n := range l.nodes {
-                if n.kind == node_assign || n.kind == node_simple_assign { count += 1 }
+                if n.kind == node_assign || n.kind == node_simple_assign { count++ }
         }
         if ex := 6; count != ex { t.Error("expecting", ex, "assigns, but", count); return }
 
@@ -180,7 +180,7 @@ $(info $($(foo)),$($($(foo)$(bar))))
         if ex := 9; len(l.nodes) != ex { t.Error("expecting", ex, "nodes but", len(l.nodes)); return }
         
         count := 0
-        for _, n := range l.nodes { if n.kind == node_call { count += 1 } }
+        for _, n := range l.nodes { if n.kind == node_call { count++ } }
         if ex := 5; count != ex { t.Error("expecting", ex, "calls, but", count); return }
 
         var c, cc *node
@@ -351,40 +351,41 @@ dddd := xxx-$(sh$ared)-$(stat$ic)-$(a$$a)-xxx
         if s := p.l.str(nd.children[1]); s != "=" { t.Error("expect =, but", s); return }
         if s := p.l.str(nd.children[2]); s != "xxx$(info $(sh$ared),$(stat$ic))-$(a$$a)-xxx" { t.Error("expect xxx$(info $(sh$ared),$(stat$ic))-$(a$$a)-xxx, but", s); return }
         if nd = nd.children[2]; nd == nil {
-                t.Error("expecting a node, but nil"); return
-        } else {
-                if num := len(nd.children); num != 5 { t.Error("expecting 5 children for 'aaaa', but", num); return }
-                if s := p.l.str(nd.children[0]); s != "xxx" { t.Error("expecting xxx for 'aaaa', but", s); return }
-                if s := p.l.str(nd.children[1]); s != "$(info $(sh$ared),$(stat$ic))" { t.Error("expecting $(info $(sh$ared),$(stat$ic)) for 'aaaa', but", s); return }
-                if s := p.l.str(nd.children[2]); s != "-" { t.Error("expecting - for 'aaaa', but", s); return }
-                if s := p.l.str(nd.children[3]); s != "$(a$$a)" { t.Error("expecting $(a$$a) for 'aaaa', but", s); return }
-                if s := p.l.str(nd.children[4]); s != "-xxx" { t.Error("expecting -xxx for 'aaaa', but", s); return }
-
-                var cc *node
-                cn := nd.children[1]
-                if len(cn.children) != 3 { t.Error("expecting 3 children, but", len(cn.children)); return }
-                if s := p.l.str(cn.children[0]); s != "info" { t.Error("expecting 'info', but", s); return }
-
-                cc = cn.children[1]
-                if s := p.l.str(cc); s != "$(sh$ared)" { t.Error("expecting '$(sh$ared)', but", s); return }
-                if cc.kind != node_call { t.Error("expecting call, but", cc.kind); return }
-                if l := len(cc.children); l != 1 { t.Error("expecting 1 child, but", l); return }
-                cc = cc.children[0]
-                if l := len(cc.children); l != 3 { t.Error("expecting 3 children, but", l, "'"+p.l.str(cc)+"'"); return }
-                if ccc := cc.children[0]; p.l.str(ccc) != "sh" { t.Error("expecting sh, but", p.l.str(ccc)); return }
-                if ccc := cc.children[1]; p.l.str(ccc) != "$a" { t.Error("expecting $a, but", p.l.str(ccc)); return }
-                if ccc := cc.children[2]; p.l.str(ccc) != "red" { t.Error("expecting red, but", p.l.str(ccc)); return }
-                
-                cc = cn.children[2]
-                if s := p.l.str(cc); s != "$(stat$ic)" { t.Error("expecting '$(stat$ic)', but", s); return }
-                if cc.kind != node_call { t.Error("expecting call, but", cc.kind); return }
-                if l := len(cc.children); l != 1 { t.Error("expecting 1 child, but", l); return }
-                cc = cc.children[0]
-                if l := len(cc.children); l != 3 { t.Error("expecting 3 children, but", l, "'"+p.l.str(cc)+"'"); return }
-                if ccc := cc.children[0]; p.l.str(ccc) != "stat" { t.Error("expecting stat, but", p.l.str(ccc)); return }
-                if ccc := cc.children[1]; p.l.str(ccc) != "$i" { t.Error("expecting $i, but", p.l.str(ccc)); return }
-                if ccc := cc.children[2]; p.l.str(ccc) != "c" { t.Error("expecting c, but", p.l.str(ccc)); return }
+                t.Error("expecting a node, but nil")
+                return
         }
+
+        if num := len(nd.children); num != 5 { t.Error("expecting 5 children for 'aaaa', but", num); return }
+        if s := p.l.str(nd.children[0]); s != "xxx" { t.Error("expecting xxx for 'aaaa', but", s); return }
+        if s := p.l.str(nd.children[1]); s != "$(info $(sh$ared),$(stat$ic))" { t.Error("expecting $(info $(sh$ared),$(stat$ic)) for 'aaaa', but", s); return }
+        if s := p.l.str(nd.children[2]); s != "-" { t.Error("expecting - for 'aaaa', but", s); return }
+        if s := p.l.str(nd.children[3]); s != "$(a$$a)" { t.Error("expecting $(a$$a) for 'aaaa', but", s); return }
+        if s := p.l.str(nd.children[4]); s != "-xxx" { t.Error("expecting -xxx for 'aaaa', but", s); return }
+
+        var cc *node
+        cn := nd.children[1]
+        if len(cn.children) != 3 { t.Error("expecting 3 children, but", len(cn.children)); return }
+        if s := p.l.str(cn.children[0]); s != "info" { t.Error("expecting 'info', but", s); return }
+
+        cc = cn.children[1]
+        if s := p.l.str(cc); s != "$(sh$ared)" { t.Error("expecting '$(sh$ared)', but", s); return }
+        if cc.kind != node_call { t.Error("expecting call, but", cc.kind); return }
+        if l := len(cc.children); l != 1 { t.Error("expecting 1 child, but", l); return }
+        cc = cc.children[0]
+        if l := len(cc.children); l != 3 { t.Error("expecting 3 children, but", l, "'"+p.l.str(cc)+"'"); return }
+        if ccc := cc.children[0]; p.l.str(ccc) != "sh" { t.Error("expecting sh, but", p.l.str(ccc)); return }
+        if ccc := cc.children[1]; p.l.str(ccc) != "$a" { t.Error("expecting $a, but", p.l.str(ccc)); return }
+        if ccc := cc.children[2]; p.l.str(ccc) != "red" { t.Error("expecting red, but", p.l.str(ccc)); return }
+        
+        cc = cn.children[2]
+        if s := p.l.str(cc); s != "$(stat$ic)" { t.Error("expecting '$(stat$ic)', but", s); return }
+        if cc.kind != node_call { t.Error("expecting call, but", cc.kind); return }
+        if l := len(cc.children); l != 1 { t.Error("expecting 1 child, but", l); return }
+        cc = cc.children[0]
+        if l := len(cc.children); l != 3 { t.Error("expecting 3 children, but", l, "'"+p.l.str(cc)+"'"); return }
+        if ccc := cc.children[0]; p.l.str(ccc) != "stat" { t.Error("expecting stat, but", p.l.str(ccc)); return }
+        if ccc := cc.children[1]; p.l.str(ccc) != "$i" { t.Error("expecting $i, but", p.l.str(ccc)); return }
+        if ccc := cc.children[2]; p.l.str(ccc) != "c" { t.Error("expecting c, but", p.l.str(ccc)); return }
 
         checkVar := func(name, value string) bool {
                 if v, ok := p.variables[name]; !ok {

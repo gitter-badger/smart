@@ -193,7 +193,7 @@ func (ic *androidsdkGenR) execute(targets []string, prequisites []string) bool {
                 name: "aapt", slient: androidsdkSlientSome, mkdir: outRes,
                 path: filepath.Join(androidsdk, "platform-tools", "aapt"),
         }
-        if *flag_v || *flag_V {
+        if *flagV || *flagVV {
                 if ic.res != "" { fmt.Printf("smart: resources `%v'...\n", ic.res) }
                 if ic.assets != "" { fmt.Printf("smart: assets `%v'...\n", ic.assets) }
         }
@@ -291,7 +291,7 @@ func (ic *androidsdkGenTar) targets(prequisites []*action) (targets []string, ne
                 if afi == nil { return false }
                 if strings.HasSuffix(fn, ".class") && !fi.IsDir() {
                         if afi.ModTime().Before(fi.ModTime()) {
-                                newerCount += 1
+                                newerCount ++
                         }
                 }
                 return true
@@ -417,7 +417,7 @@ func (ic *androidsdkGenApk) execute(targets []string, prequisites []string) bool
                 } else {
                         args = append(args, s)
                 }
-                countClasses += 1
+                countClasses ++
         }
         if countClasses == 0 { errorf(0, "no classes for `%v'", targets) }
 
@@ -426,7 +426,7 @@ func (ic *androidsdkGenApk) execute(targets []string, prequisites []string) bool
         //fmt.Printf("dex: %v\n", prequisites);
         //fmt.Printf("dex: %v\n", embclasses);
 
-        if *flag_v || *flag_V { fmt.Printf("smart: preparing classes.dex for %v...\n", targets) }
+        if *flagV || *flagVV { fmt.Printf("smart: preparing classes.dex for %v...\n", targets) }
 
         c := &excmd{ name:"dx", dir:outclasses, slient:androidsdkSlientSome, path: filepath.Join(androidsdk, "platform-tools", "dx"), }
         if !c.run("classes.dex", args...) { errorf(0, "dex: %v\n", "classes.dex") }
@@ -452,13 +452,13 @@ func (ic *androidsdkGenApk) execute(targets []string, prequisites []string) bool
         if ic.assets != "" { args = append(args, "-A", ic.assets) }
         //args = append(args, "--min-sdk-version", "7")
         //args = append(args, "--target-sdk-version", "7")
-        if *flag_v || *flag_V { fmt.Printf("smart: pack resources for %v...\n", targets) }
+        if *flagV || *flagVV { fmt.Printf("smart: pack resources for %v...\n", targets) }
         if !c.run("package resources", args...) { errorf(0, "pack classes: %v", targets) }
 
         // add classes.dex into unsigned.apk
 
         args = []string{ "add", "-k", filepath.Join(ic.out, "unsigned.apk"), filepath.Join(ic.out, "classes.dex") }
-        if *flag_v || *flag_V { fmt.Printf("smart: pack classes for %v...\n", targets) }
+        if *flagV || *flagVV { fmt.Printf("smart: pack classes for %v...\n", targets) }
         if !c.run("package dex file", args...) { errorf(0, "pack classes: %v", targets) }
 
         fmt.Printf("TODO: package JNI files\n")
@@ -470,7 +470,7 @@ func (ic *androidsdkGenApk) execute(targets []string, prequisites []string) bool
                 //return true
         }
 
-        if *flag_v || *flag_V { fmt.Printf("smart: signing %v (%v)...\n", targets, keystore) }
+        if *flagV || *flagVV { fmt.Printf("smart: signing %v (%v)...\n", targets, keystore) }
         if e := copyFile(filepath.Join(ic.out, "unsigned.apk"), filepath.Join(ic.out, "signed.apk")); e != nil {
                 return false
         }
@@ -489,7 +489,7 @@ func (ic *androidsdkGenApk) execute(targets []string, prequisites []string) bool
 
         // zipalign signed.apk into aligned.apk then rename aligned.apk into final target
 
-        if *flag_v || *flag_V { fmt.Printf("smart: aligning %v...\n", targets) }
+        if *flagV || *flagVV { fmt.Printf("smart: aligning %v...\n", targets) }
         c = &excmd{ name:"zipalign", ia32:true, slient:true/*androidsdkSlientSome*/,
                 path:filepath.Join(androidsdk, "tools", "zipalign"),
         }
@@ -521,7 +521,7 @@ func (ic *androidsdkGenJar) execute(targets []string, prequisites []string) bool
                 errorf(0, "pack resources: %v", libname)
         }
 
-        if *flag_v || *flag_V {
+        if *flagV || *flagVV {
                 fmt.Printf("smart: pack classes for %v...\n", targets)
         }
 
