@@ -1,8 +1,12 @@
+/*
+        Package smart builds complex project faster in the simple way.
+
+
+*/
 package smart
 
 import (
         "flag"
-        "os"
         "strings"
 )
 
@@ -16,20 +20,26 @@ var (
         flagVV = flag.Bool("V", false, "print command verbosely")
 )
 
+// splitVarArgs split arguments in the form of "NAME=value" with the others.
+func splitVarArgs(args []string) (vars map[string]string, rest []string) {
+        vars = make(map[string]string, 10)
+
+        for _, arg := range args {
+                if i := strings.Index(arg, "="); 0 < i /* false at '=foo' */ {
+                        vars[strings.TrimSpace(arg[0:i])] = strings.TrimSpace(arg[i+1:])
+                } else {
+                        rest = append(rest, arg)
+                }
+        }
+
+        return
+}
+
 // Main starts build from the command line.
 func Main() {
         flag.Parse()
 
-        var cmds []string
-        var vars = map[string]string{}
-        for _, arg := range os.Args[1:] {
-                if arg[0] == '-' { continue }
-                if i := strings.Index(arg, "="); 0 < i /* false at '=foo' */ {
-                        vars[arg[0:i]] = arg[i+1:]
-                        continue
-                }
-                cmds = append(cmds, arg)
-        }
+        vars, cmds := splitVarArgs(flag.Args())
 
         if 0 == len(cmds) {
                 cmds = append(cmds, "update")

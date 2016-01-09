@@ -51,12 +51,12 @@ func builtinModule(p *context, args []string) string {
         var has bool
         if m, has = modules[name]; !has {
                 m = &module{
-                name: name,
-                toolset: toolset,
-                kind: kind,
-                dir: filepath.Dir(p.l.file),
-                location: p.l.location(),
-                variables: make(map[string]*variable, 128),
+                        name: name,
+                        toolset: toolset,
+                        kind: kind,
+                        dir: filepath.Dir(p.l.file),
+                        location: p.l.location(),
+                        variables: make(map[string]*variable, 128),
                 }
                 modules[m.name] = m
                 moduleOrderList = append(moduleOrderList, m)
@@ -75,17 +75,8 @@ func builtinModule(p *context, args []string) string {
         p.setModule(m)
 
         // parsed arguments in forms like "PLATFORM=android-9"
-        var vars = map[string]string{}
-        for _, a := range args[3:] {
-                a = strings.TrimSpace(a)
-                i := strings.Index(a, "=")
-                switch {
-                case 0 < i:
-                        vars[a[0:i]] = strings.TrimSpace(a[i+1:])
-                }
-        }
-
-        toolset.setupModule(p, args[3:], vars)
+        vars, rest := splitVarArgs(args[3:])
+        toolset.setupModule(p, rest, vars)
         return ""
 }
 
