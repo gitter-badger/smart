@@ -93,9 +93,7 @@ func builtinBuild(p *parser, args []string) string {
         var m *module
         if m = p.module; m == nil { errorf(0, "no module defined") }
 
-        if *flag_V {
-                fmt.Printf("smart: submit building `%v' (%v)\n", m.name, m.dir)
-        }
+        verbose("pending `%v' (%v)", m.name, m.dir)
 
         moduleBuildList = append(moduleBuildList, pendedBuild{m, p, args})
         return ""

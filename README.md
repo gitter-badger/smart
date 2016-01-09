@@ -11,3 +11,8 @@ this.export.libs := foo_static
 
 $(build)
 ```
+
+Why
+===
+
+Build faster the simple way!

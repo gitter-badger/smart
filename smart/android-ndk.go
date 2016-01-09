@@ -49,9 +49,8 @@ type _androidndk struct {
 }
 
 func (ndk *_androidndk) parseFile(fn string, vars map[string]string) (p *parser, err error) {
-        p , err = newParser(fn)
-        if err != nil {
-                fmt.Printf("error: %v (%v)", err, fn)
+        if p , err = newParser(fn); err != nil {
+                fmt.Printf("error: %v\n", err)
                 return
         }
 

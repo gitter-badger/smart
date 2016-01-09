@@ -33,7 +33,7 @@ var (
         flag_v = flag.Bool("v", false, "prompt command")
         flag_C = flag.String("C", "", "change directory")
         flag_T = flag.String("T", "", "traverse")
-        flag_V = flag.Bool("V", false, "print command verbolly")
+        flag_V = flag.Bool("V", false, "print command verbosely")
 )
 
 type smarterror struct {
@@ -204,7 +204,7 @@ func computeInterTargets(d, sre string, prequisites []*action) (targets []string
         return
 }
 
-// An action represents a action to be performed while generating a required target.
+// action performs a command for updating targets
 type action struct {
         targets []string
         prequisites []*action
@@ -240,7 +240,7 @@ func (a *action) update() (updated bool, updatedTargets []string) {
         }
 
         if len(fis) != len(targets) {
-                panic("internal unmatched arrayes") //errorf(-1, "internal")
+                panic("internal unmatched arrays") //errorf(-1, "internal")
         }
 
         updatedPreNum := 0
@@ -279,7 +279,7 @@ func (a *action) update() (updated bool, updatedTargets []string) {
         }
 
         if 0 < updatedPreNum || targetsNeedUpdate {
-                updated, updatedTargets = a.updateForcibly(targets, fis, prequisites)
+                updated, updatedTargets = a.force(targets, fis, prequisites)
         } else {
                 var rr []int
                 var request []string
@@ -298,14 +298,14 @@ func (a *action) update() (updated bool, updatedTargets []string) {
 
                 //fmt.Printf("targets: %v, %v, %v, %v\n", targets, request, len(a.prequisites), prequisites)
                 if 0 < len(request) {
-                        updated, updatedTargets = a.updateForcibly(request, requestfis, prequisites)
+                        updated, updatedTargets = a.force(request, requestfis, prequisites)
                 }
         }
 
         return
 }
 
-func (a *action) updateForcibly(targets []string, tarfis []os.FileInfo, prequisites []string) (updated bool, updatedTargets []string) {
+func (a *action) force(targets []string, tarfis []os.FileInfo, prequisites []string) (updated bool, updatedTargets []string) {
         updated = a.command.execute(targets, prequisites)
 
         if updated {
@@ -525,7 +525,8 @@ func matchFileName(fn string, rules []*filerule) *filerule {
         return nil
 }
 
-func run(vars map[string]string, cmds []string) {
+// build builds the project with specified variables and commands.
+func build(vars map[string]string, cmds []string) {
         defer func() {
                 if e := recover(); e != nil {
                         if se, ok := e.(*smarterror); ok {
@@ -606,6 +607,24 @@ func run(vars map[string]string, cmds []string) {
         for _, m := range moduleOrderList { updateMod(m) }
 }
 
+// verbose print a message if `V' flag is enabled
+func verbose(s string, a ...interface{}) {
+        if *flag_V {
+                message(s, a...)
+        }
+}
+
+// message print a message
+func message(s string, a ...interface{}) {
+        if !strings.HasPrefix(s, "smart:") {
+                s = "smart: " + s
+        }
+        if !strings.HasSuffix(s, "\n") {
+                s = s + "\n"
+        }
+        fmt.Printf(s, a...)
+}
+
 func Main() {
         flag.Parse()
 
@@ -624,5 +643,5 @@ func Main() {
                 cmds = append(cmds, "update")
         }
 
-        run(vars, cmds);
+        build(vars, cmds);
 }
