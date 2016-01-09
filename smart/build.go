@@ -27,41 +27,6 @@ var (
         }
 )
 
-type smarterror struct {
-        number int
-        message string
-}
-
-func (e *smarterror) String() string {
-        return fmt.Sprintf("%v (%v)", e.message, e.number)
-}
-
-// errorf throw a panic message
-func errorf(num int, f string, a ...interface{}) {
-        panic(&smarterror{
-                number: num,
-                message: fmt.Sprintf(f, a...),
-        })
-}
-
-// verbose prints a message if `V' flag is enabled
-func verbose(s string, a ...interface{}) {
-        if *flagVV {
-                message(s, a...)
-        }
-}
-
-// message prints a message
-func message(s string, a ...interface{}) {
-        if !strings.HasPrefix(s, "smart:") {
-                s = "smart: " + s
-        }
-        if !strings.HasSuffix(s, "\n") {
-                s = s + "\n"
-        }
-        fmt.Printf(s, a...)
-}
-
 // toolset represents a toolchain like gcc and related utilities.
 type toolset interface {
         // setupModule setup the current module being processed by parser.
@@ -88,14 +53,24 @@ func registerToolset(name string, ts toolset) {
         toolsets[name] = &toolsetStub{ name:name, toolset:ts };
 }
 
+func isIA32Command(s string) bool {
+        buf := new(bytes.Buffer)
+        cmd := exec.Command("file", "-b", s)
+        cmd.Stdout = buf
+        if err := cmd.Run(); err != nil {
+                message("error: %v", err)
+        }
+        //message("%v", buf.String())
+        //return strings.HasPrefix(buf.String(), "ELF 32-bit")
+        return strings.Contains(buf.String(), "ELF 32-bit")
+}
+
 // A command executed by an action while updating a target.
 type command interface {
         execute(targets []string, prequisites []string) bool
 }
 
 type excmd struct {
-        slient bool
-        name string
         path string
         dir string
         mkdir string
@@ -123,59 +98,56 @@ func (c *excmd) run(target string, args ...string) bool {
         c.stderr.Reset()
 
         updated := false
-        if c.name == "" {
+        if c.path == "" {
                 if c.cmd != nil {
                         updated = c.cmd()
                 } else {
-                        errorf(0, "can't update `%v' (%v)", target, c.name)
+                        errorf(0, "can't update `%v'", target)
                         return false
                 }
         } else {
-                cmd := exec.Command(c.name, args...)
-                cmd.Stdout, cmd.Stderr = c.stdout, c.stderr //&buf, &buf
+                cmd := exec.Command(c.path, args...)
+                cmd.Stdout, cmd.Stderr = c.stdout, c.stderr
                 if c.stdin != nil { cmd.Stdin = c.stdin }
-                if c.path != "" { cmd.Path = c.path }
                 if c.dir != "" { cmd.Dir = c.dir }
 
-                if !c.slient {
-                        if *flagV {
-                                fmt.Printf("%v: %v\n", c.name, target)
-                        } else if *flagVV {
-                                fmt.Printf("%v\n", strings.Join(cmd.Args, " "))
-                        }
+                if *flagV {
+                        message("%v -> %v", filepath.Base(c.path), target)
+                } else if *flagVV {
+                        fmt.Printf("%v\n", strings.Join(cmd.Args, " "))
                 }
 
                 if c.precall != nil && c.precall() == false {
                         return false
                 }
 
-                ia32Command := func() {
+                if c.ia32 && runtime.GOOS == "linux" {
                         switch runtime.GOARCH {
                         case "amd64":
                                 cmd = exec.Command("linux32", append([]string{ cmd.Path }, args...)...)
-                                cmd.Stdout, cmd.Stderr = c.stdout, c.stderr //&buf, &buf
+                                cmd.Stdout, cmd.Stderr = c.stdout, c.stderr
                                 if c.stdin != nil { cmd.Stdin = c.stdin }
                                 //fmt.Printf("%v\n", strings.Join(cmd.Args, " "))
                         }
                 }
 
-                if c.ia32 && runtime.GOOS == "linux" {
-                        ia32Command()
-                }
-
                 if err := cmd.Run(); err == nil {
                         updated = true
                 } else {
+                        message("%v", err)
+                        if c.path != "" {
+                                message(`"%v %v"`, c.path, strings.Join(args, " "))
+                        }
                         so, se := c.stdout.String(), c.stderr.String()
-                        fmt.Printf("smart:0: %v:\n", err)
-                        if so != "" && se != "" {
-                                fmt.Printf("%v\n====\n%v\n", so, se)
-                        } else if so != "" && se == "" {
+                        if so != "" {
+                                fmt.Printf("------------------------------ stdout\n")
                                 fmt.Printf("%v\n", so)
-                        } else if so == "" && se != "" {
+                        }
+                        if se != "" {
+                                fmt.Printf("------------------------------ stderr\n")
                                 fmt.Printf("%v\n", se)
                         }
-                        errorf(0, "failed executing command \"%v\"", c.name)
+                        errorf(0, `failed executing "%v"`, c.path)
                 }
 
                 if c.postcall != nil {

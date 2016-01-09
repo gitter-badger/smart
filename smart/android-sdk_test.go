@@ -56,5 +56,5 @@ func testToolsetAndroidSDK(t *testing.T) {
 }
 
 func TestToolsetAndroidSDK(t *testing.T) {
-        //runToolsetTestCase(t, "android-sdk", testToolsetAndroidSDK)
+        runToolsetTestCase(t, "android-sdk", testToolsetAndroidSDK)
 }

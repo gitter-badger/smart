@@ -21,9 +21,9 @@ var gccSourcePatterns = []*filerule{
 type _gcc struct {
 }
 
-func (gcc *_gcc) setupModule(p *context, args []string, vars map[string]string) bool {
+func (gcc *_gcc) setupModule(ctx *context, args []string, vars map[string]string) bool {
         var m *module
-        if m = p.module; m == nil {
+        if m = ctx.module; m == nil {
                 errorf(0, "no module")
         }
 
@@ -55,11 +55,11 @@ func (gcc *_gcc) setupModule(p *context, args []string, vars map[string]string) 
         return true
 }
 
-func (gcc *_gcc) buildModule(p *context, args []string) bool {
+func (gcc *_gcc) buildModule(ctx *context, args []string) bool {
         var m *module
-        if m = p.module; m == nil { errorf(0, "no module") }
-        if m.action == nil { errorf(0, "no action for `%v'", p.module.name) }
-        if m.action.command == nil { errorf(0, "no command for `%v'", p.module.name) }
+        if m = ctx.module; m == nil { errorf(0, "no module") }
+        if m.action == nil { errorf(0, "no action for `%v'", ctx.module.name) }
+        if m.action.command == nil { errorf(0, "no command for `%v'", ctx.module.name) }
 
         var ld *gccCommand
         if l, ok := m.action.command.(*gccCommand); !ok {
@@ -68,8 +68,8 @@ func (gcc *_gcc) buildModule(p *context, args []string) bool {
                 ld = l
         }
 
-        sources := p.getModuleSources()
-        if len(sources) == 0 { errorf(0, "no sources for `%v'", p.module.name) }
+        sources := ctx.getModuleSources()
+        if len(sources) == 0 { errorf(0, "no sources for `%v'", ctx.module.name) }
 
         //fmt.Printf("sources: %v: %v\n", m.name, sources)
 
@@ -91,9 +91,9 @@ func (gcc *_gcc) buildModule(p *context, args []string) bool {
                 }
                 return
         }
-        includes := ls(p.call("this.includes"), "-I")
-        libdirs := ls(p.call("this.libdirs"), "-L")
-        libs := ls(p.call("this.libs"), "-l")
+        includes := ls(ctx.call("this.includes"), "-I")
+        libdirs := ls(ctx.call("this.libdirs"), "-L")
+        libs := ls(ctx.call("this.libs"), "-l")
 
         var useMod func(mod *module)
         useMod = func(mod *module) {
@@ -139,9 +139,9 @@ func (gcc *_gcc) buildModule(p *context, args []string) bool {
                 switch fr.name {
                 case "asm": c = cmdAs
                 case "c":   c = cmdGcc
-                        if ld.name == "ld" { ld.name = "gcc" }
+                        if ld.path == "ld" { ld.path = "gcc" }
                 case "c++": c = cmdGxx
-                        if ld.name != "g++" && ld.name != "ar" { ld.name = "g++" }
+                        if ld.path != "g++" && ld.path != "ar" { ld.path = "g++" }
                 default:
                         errorf(0, "unknown language for source `%v'", src)
                 }
@@ -156,8 +156,8 @@ func (gcc *_gcc) buildModule(p *context, args []string) bool {
         return m.action != nil
 }
 
-func (gcc *_gcc) useModule(p *context, m *module) bool {
-        //fmt.Printf("TODO: use: %v by %v\n", m.name, p.module.name)
+func (gcc *_gcc) useModule(ctx *context, m *module) bool {
+        //fmt.Printf("TODO: use: %v by %v\n", m.name, ctx.module.name)
         return false
 }
 
@@ -169,7 +169,7 @@ type gccCommand struct {
 
 func gccNewCommand(name string, args ...string) *gccCommand {
         return &gccCommand{
-                excmd{ name: name, },
+                excmd{ path: name, },
                 args, []string{}, []string{},
         }
 }
@@ -178,7 +178,7 @@ func (c *gccCommand) execute(targets []string, prequisites []string) bool {
         var args []string
         var target = targets[0]
 
-        isar := c.name == "ar" || strings.HasSuffix(c.name, "-ar")
+        isar := c.path == "ar" || strings.HasSuffix(c.path, "-ar")
 
         if isar {
                 args = append(c.args, target)

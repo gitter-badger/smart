@@ -7,6 +7,7 @@ package smart
 
 import (
         "flag"
+        "fmt"
         "strings"
 )
 
@@ -19,6 +20,41 @@ var (
         flagT = flag.String("T", "", "traverse")
         flagVV = flag.Bool("V", false, "print command verbosely")
 )
+
+type smarterror struct {
+        number int
+        message string
+}
+
+func (e *smarterror) String() string {
+        return fmt.Sprintf("%v (%v)", e.message, e.number)
+}
+
+// errorf throw a panic message
+func errorf(num int, f string, a ...interface{}) {
+        panic(&smarterror{
+                number: num,
+                message: fmt.Sprintf(f, a...),
+        })
+}
+
+// verbose prints a message if `V' flag is enabled
+func verbose(s string, a ...interface{}) {
+        if *flagVV {
+                message(s, a...)
+        }
+}
+
+// message prints a message
+func message(s string, a ...interface{}) {
+        if !strings.HasPrefix(s, "smart:") {
+                s = "smart: " + s
+        }
+        if !strings.HasSuffix(s, "\n") {
+                s = s + "\n"
+        }
+        fmt.Printf(s, a...)
+}
 
 // splitVarArgs split arguments in the form of "NAME=value" with the others.
 func splitVarArgs(args []string) (vars map[string]string, rest []string) {
