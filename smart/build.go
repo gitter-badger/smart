@@ -552,8 +552,8 @@ func matchFileName(fn string, rules []*filerule) *filerule {
         return nil
 }
 
-// build builds the project with specified variables and commands.
-func build(vars map[string]string, cmds []string) {
+// Build builds the project with specified variables and commands.
+func Build(vars map[string]string, cmds []string) {
         defer func() {
                 if e := recover(); e != nil {
                         if se, ok := e.(*smarterror); ok {

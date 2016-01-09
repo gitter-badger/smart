@@ -13,7 +13,7 @@ func testToolsetAndroidSDK(t *testing.T) {
         if l := len(moduleBuildList); l != 0 { t.Errorf("expecting len(moduleBuildList) for 0, but %v", l); return }
         if e := os.RemoveAll("out"); e != nil { t.Errorf("failed remove `out' directory") }
 
-        build(computeTestRunParams())
+        Build(computeTestRunParams())
 
         if fi, e := os.Stat("out"); fi == nil || e != nil || !fi.IsDir() { t.Errorf("failed: %v", e); return }
         if fi, e := os.Stat("out/foo_androidsdk_jar"); fi == nil || e != nil || !fi.IsDir() { t.Errorf("failed: %v", e); return }

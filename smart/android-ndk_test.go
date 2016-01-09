@@ -13,7 +13,7 @@ func testToolsetAndroidNDK(t *testing.T) {
         if l := len(moduleBuildList); l != 0 { t.Errorf("expecting len(moduleBuildList) for 0, but %v", l); return }
         if e := os.RemoveAll("out"); e != nil { t.Errorf("failed remove `out' directory") }
 
-        build(computeTestRunParams())
+        Build(computeTestRunParams())
 
         var m *module
         var ok bool
