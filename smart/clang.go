@@ -11,14 +11,14 @@ func init() {
 type _clang struct {
 }
 
-func (clang *_clang) setupModule(p *context, args []string, vars map[string]string) bool {
+func (clang *_clang) configModule(ctx *context, args []string, vars map[string]string) bool {
         return true
 }
 
-func (clang *_clang) buildModule(p *context, args []string) bool {
+func (clang *_clang) createActions(ctx *context, args []string) bool {
         return false
 }
 
-func (clang *_clang) useModule(p *context, m *module) bool {
+func (clang *_clang) useModule(ctx *context, m *module) bool {
         return false
 }

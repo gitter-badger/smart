@@ -21,99 +21,73 @@ var gccSourcePatterns = []*filerule{
 type _gcc struct {
 }
 
-func (gcc *_gcc) setupModule(ctx *context, args []string, vars map[string]string) bool {
-        var m *module
-        if m = ctx.module; m == nil {
-                errorf(0, "no module")
-        }
-
-        out := "out"
-
-        if m.action != nil {
-                errorf(0, "module `%v' already has a action", m.name)
+func (gcc *_gcc) configModule(ctx *context, args []string, vars map[string]string) bool {
+        if ctx.module != nil {
                 return true
         }
-
-        var c *gccCommand
-        var name = m.name
-        switch m.kind {
-        case "exe":
-                c = gccNewCommand("ld")
-        case "shared":
-                if !strings.HasSuffix(name, ".so") { name = name + ".so" }
-                c = gccNewCommand("ld", "-shared")
-        case "static":
-                if !strings.HasPrefix(name, "lib") { name = "lib" + name }
-                if !strings.HasSuffix(name, ".a") { name = name + ".a" }
-                c = gccNewCommand("ar", "crs")
-        default:
-                errorf(0, fmt.Sprintf("unknown type `%v'", m.kind))
-        }
-
-        c.mkdir = filepath.Join(out, m.name)
-        m.action = newAction(filepath.Join(out, m.name, name), c)
-        return true
+        return false
 }
 
-func (gcc *_gcc) buildModule(ctx *context, args []string) bool {
-        var m *module
-        if m = ctx.module; m == nil { errorf(0, "no module") }
-        if m.action == nil { errorf(0, "no action for `%v'", ctx.module.name) }
-        if m.action.command == nil { errorf(0, "no command for `%v'", ctx.module.name) }
-
-        var ld *gccCommand
-        if l, ok := m.action.command.(*gccCommand); !ok {
-                errorf(0, "internal: wrong module command")
-        } else {
-                ld = l
+func (gcc *_gcc) createActions(ctx *context, args []string) bool {
+        var cmd *gccCommand
+        var targetName = ctx.module.name
+        switch ctx.module.kind {
+        case "exe":
+                cmd = gccNewCommand("ld")
+        case "shared":
+                if !strings.HasSuffix(targetName, ".so") { targetName = targetName + ".so" }
+                cmd = gccNewCommand("ld", "-shared")
+        case "static":
+                if !strings.HasPrefix(targetName, "lib") { targetName = "lib" + targetName }
+                if !strings.HasSuffix(targetName, ".a")  { targetName = targetName + ".a" }
+                cmd = gccNewCommand("ar", "crs")
+        default:
+                errorf(0, fmt.Sprintf("unknown type `%v'", ctx.module.kind))
         }
+        cmd.mkdir = filepath.Join("out", ctx.module.name)
+        ctx.module.action = newAction(filepath.Join("out", ctx.module.name, targetName), cmd)
 
-        sources := ctx.getModuleSources()
-        if len(sources) == 0 { errorf(0, "no sources for `%v'", ctx.module.name) }
-
-        //fmt.Printf("sources: %v: %v\n", m.name, sources)
-
-        ls := func(ss, prefix string) (l []string) {
+        // Add proper prefixes to includes, libdirs, libs.
+        splitFieldsWithPrefix := func(ss, prefix string) (l []string) {
                 for _, s := range strings.Split(ss, " ") {
-                        noprefix := false
-                        if prefix=="-l" {
-                                noprefix = noprefix || strings.ContainsAny(s, "/\\")
-                                noprefix = noprefix || strings.HasSuffix(s, ".so")
-                                noprefix = noprefix || strings.HasSuffix(s, ".a")
-                        }
-                        if noprefix {
+                        if dont := strings.HasPrefix(s, prefix); s != "" {
+                                if prefix == "-l" {
+                                        dont = dont || strings.ContainsAny(s, "/\\")
+                                        dont = dont || strings.HasSuffix(s, ".so")
+                                        dont = dont || strings.HasSuffix(s, ".a")
+                                }
+
+                                if !dont { s = prefix + s }
+
                                 l = append(l, s)
-                        } else {
-                                if strings.HasPrefix(s, prefix) { s = s[len(prefix):] }
-                                if s == "" { continue }
-                                l = append(l, prefix+s)
                         }
                 }
                 return
         }
-        includes := ls(ctx.call("this.includes"), "-I")
-        libdirs := ls(ctx.call("this.libdirs"), "-L")
-        libs := ls(ctx.call("this.libs"), "-l")
+        includes := splitFieldsWithPrefix(ctx.call("this.includes"), "-I")
+        libdirs := splitFieldsWithPrefix(ctx.call("this.libdirs"), "-L")
+        libs := splitFieldsWithPrefix(ctx.call("this.libs"), "-l")
 
+        // Import includes and libs from using modules.
         var useMod func(mod *module)
         useMod = func(mod *module) {
                 for _, u := range mod.using {
                         if v, ok := u.variables["this.export.includes"]; ok {
-                                includes = append(includes, ls(v.value, "-I")...)
+                                includes = append(includes, splitFieldsWithPrefix(v.value, "-I")...)
                         }
                         if v, ok := u.variables["this.export.libdirs"]; ok {
-                                libdirs = append(libdirs, ls(v.value, "-L")...)
+                                libdirs = append(libdirs, splitFieldsWithPrefix(v.value, "-L")...)
                         }
                         if v, ok := u.variables["this.export.libs"]; ok {
                                 //fmt.Printf("libs: (%v) %v\n", u.name, v.value)
-                                libs = append(libs, ls(v.value, "-l")...)
+                                libs = append(libs, splitFieldsWithPrefix(v.value, "-l")...)
                         }
                         useMod(u)
                 }
         }
-        useMod(m)
+        useMod(ctx.module)
 
-        //fmt.Printf("libs: (%v) %v %v\n", m.name, libdirs, libs)
+        //fmt.Printf("libs: (%v) %v %v\n", ctx.module.name, libdirs, libs)
 
         cmdAs  := gccNewCommand("as",  "-c")
         cmdGcc := gccNewCommand("gcc", "-c")
@@ -122,9 +96,15 @@ func (gcc *_gcc) buildModule(ctx *context, args []string) bool {
         for _, c := range []*gccCommand{cmdAs, cmdGcc, cmdGxx} {
                 c.args = append(c.args, includes...)
         }
-        ld.libdirs, ld.libs = libdirs, libs
 
-        as := drawSourceTransformActions(sources, func(src string) (name string, c command) {
+        if ctx.module.kind != "static" {
+                cmd.libdirs, cmd.libs = libdirs, libs
+        }
+
+        sources := ctx.getModuleSources()
+        if len(sources) == 0 { errorf(0, "no sources for `%v'", ctx.module.name) }
+        //fmt.Printf("sources: %v: %v\n", ctx.module.name, sources)
+        actions := createSourceTransformActions(sources, func(src string) (name string, c command) {
                 var fr *filerule
                 if fi, err := os.Stat(src); err != nil {
                         fr = matchFileName(src, gccSourcePatterns)
@@ -139,9 +119,9 @@ func (gcc *_gcc) buildModule(ctx *context, args []string) bool {
                 switch fr.name {
                 case "asm": c = cmdAs
                 case "c":   c = cmdGcc
-                        if ld.path == "ld" { ld.path = "gcc" }
+                        if cmd.path == "ld" { cmd.path = "gcc" }
                 case "c++": c = cmdGxx
-                        if ld.path != "g++" && ld.path != "ar" { ld.path = "g++" }
+                        if cmd.path != "g++" && cmd.path != "ar" { cmd.path = "g++" }
                 default:
                         errorf(0, "unknown language for source `%v'", src)
                 }
@@ -149,11 +129,10 @@ func (gcc *_gcc) buildModule(ctx *context, args []string) bool {
                 name = src + ".o"
                 return
         })
+        ctx.module.action.prequisites = append(ctx.module.action.prequisites, actions...)
 
-        m.action.prequisites = append(m.action.prequisites, as...)
-
-        //fmt.Printf("module: %v, %v, %v\n", m.name, m.action.targets, len(m.action.prequisites))
-        return m.action != nil
+        //fmt.Printf("module: %v, %v, %v\n", ctx.module.name, ctx.module.action.targets, len(ctx.module.action.prequisites))
+        return ctx.module.action != nil
 }
 
 func (gcc *_gcc) useModule(ctx *context, m *module) bool {

@@ -412,3 +412,18 @@ dddd := xxx-$(sh$ared)-$(stat$ic)-$(a$$a)-xxx
         if !checkVar("cccc", "xxx-$(sh$ared)-$(stat$ic)-$(a$$a)-xxx") { return }
         if !checkVar("dddd", "xxx-shared-static-foo-xxx") { return }
 }
+
+func TestEmptyValue(t *testing.T) {
+        s := `
+foo =
+bar = bar
+foobar := 
+foobaz := foo-baz
+`
+        ctx := newTestContext("TestLexCalls", s)
+        if err := ctx.parse(); err != nil { t.Errorf("parse error:", err); return }
+        if s := ctx.call("foo"); s != "" { t.Errorf("foo: %s", s); return }
+        if s := ctx.call("bar"); s != "bar" { t.Errorf("bar: %s", s); return }
+        if s := ctx.call("foobar"); s != "" { t.Errorf("foobar: %s", s); return }
+        if s := ctx.call("foobaz"); s != "foobaz" { t.Errorf("foobaz: %s", s); return }
+}

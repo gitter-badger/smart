@@ -6,15 +6,17 @@ import (
         "strings"
 )
 
-var builtins = map[string]func(p *context, args []string) string {
-        "dir": builtinDir,
-        "info": builtinInfo,
-        "module": builtinModule,
-        "build": builtinBuild,
-        "use": builtinUse,
+type builtin func(ctx *context, args []string) string
+
+var builtins = map[string]builtin {
+        "build":        builtinBuild,
+        "dir":          builtinDir,
+        "info":         builtinInfo,
+        "module":       builtinModule,
+        "use":          builtinUse,
 }
 
-func builtinDir(p *context, args []string) string {
+func builtinDir(ctx *context, args []string) string {
         var ds []string
         for _, a := range args {
                 ds = append(ds, filepath.Dir(a))
@@ -22,24 +24,24 @@ func builtinDir(p *context, args []string) string {
         return strings.Join(ds, " ")
 }
 
-func builtinInfo(p *context, args []string) string {
+func builtinInfo(ctx *context, args []string) string {
         fmt.Printf("%v\n", strings.Join(args, " "))
         return ""
 }
 
-func builtinModule(p *context, args []string) string {
+func builtinModule(ctx *context, args []string) string {
         var name, toolsetName, kind string
         if 0 < len(args) { name = strings.TrimSpace(args[0]) }
         if 1 < len(args) { toolsetName = strings.TrimSpace(args[1]) }
         if 2 < len(args) { kind = strings.TrimSpace(args[2]) }
         if name == "" {
-                p.setModule(nil)
+                ctx.setModule(nil)
                 return ""
         }
 
         var toolset toolset
         if ts, ok := toolsets[toolsetName]; !ok {
-                //p.lineno -= 1; p.colno = p.prevColno + 1
+                //ctx.lineno -= 1; ctx.colno = ctx.prevColno + 1
                 errorf(0, "toolset `%v' unknown", toolsetName)
                 if ts == nil { errorf(0, "builtin fatal error") }
                 // TODO: send arguments to toolset
@@ -54,14 +56,14 @@ func builtinModule(p *context, args []string) string {
                         name: name,
                         toolset: toolset,
                         kind: kind,
-                        dir: filepath.Dir(p.l.file),
-                        location: p.l.location(),
+                        dir: filepath.Dir(ctx.l.file),
+                        location: ctx.l.location(),
                         variables: make(map[string]*variable, 128),
                 }
                 modules[m.name] = m
                 moduleOrderList = append(moduleOrderList, m)
         } else if (m.toolset != nil && toolsetName != "") && (m.kind != "" || kind != "") {
-                //p.lineno -= 1; p.colno = p.prevColno + 1
+                //ctx.lineno -= 1; ctx.colno = ctx.prevColno + 1
                 fmt.Printf("%v: previous module declaration `%v'\n", &(m.location), m.name)
                 errorf(0, fmt.Sprintf("module already been defined as \"%v, $v\"", m.toolset, m.kind))
         }
@@ -71,46 +73,48 @@ func builtinModule(p *context, args []string) string {
                 m.kind = kind
         }
 
-        m.dir = filepath.Dir(p.l.file)
-        p.setModule(m)
+        m.dir = filepath.Dir(ctx.l.file)
+        ctx.setModule(m)
 
         // parsed arguments in forms like "PLATFORM=android-9"
-        vars, rest := splitVarArgs(args[3:])
-        toolset.setupModule(p, rest, vars)
+        var a []string
+        if 3 < len(args) { a = args[3:] }
+        vars, rest := splitVarArgs(a)
+        toolset.configModule(ctx, rest, vars)
         return ""
 }
 
-func builtinBuild(p *context, args []string) string {
+func builtinBuild(ctx *context, args []string) string {
         var m *module
-        if m = p.module; m == nil { errorf(0, "no module defined") }
+        if m = ctx.module; m == nil { errorf(0, "no module defined") }
 
         verbose("pending `%v' (%v)", m.name, m.dir)
 
-        moduleBuildList = append(moduleBuildList, pendedBuild{m, p, args})
+        moduleBuildList = append(moduleBuildList, pendedBuild{m, ctx, args})
         return ""
 }
 
-func builtinUse(p *context, args []string) string {
-        if p.module == nil { errorf(0, "no module defined") }
-        if p.module.toolset == nil { errorf(0, "no toolset for `%v'", p.module.name) }
+func builtinUse(ctx *context, args []string) string {
+        if ctx.module == nil { errorf(0, "no module defined") }
+        if ctx.module.toolset == nil { errorf(0, "no toolset for `%v'", ctx.module.name) }
 
         for _, a := range args {
                 a = strings.TrimSpace(a)
                 if m, ok := modules[a]; ok {
-                        p.module.using = append(p.module.using, m)
-                        m.usedBy = append(m.usedBy, p.module)
-                        p.module.toolset.useModule(p, m)
+                        ctx.module.using = append(ctx.module.using, m)
+                        m.usedBy = append(m.usedBy, ctx.module)
+                        ctx.module.toolset.useModule(ctx, m)
                 } else {
                         m = &module{
                                 name: a,
-                                dir: filepath.Dir(p.l.file),
-                                location: p.l.location(),
+                                dir: filepath.Dir(ctx.l.file),
+                                location: ctx.l.location(),
                                 variables: make(map[string]*variable, 128),
-                                usedBy: []*module{ p.module },
+                                usedBy: []*module{ ctx.module },
                         }
-                        p.module.using = append(p.module.using, m)
+                        ctx.module.using = append(ctx.module.using, m)
                         modules[a] = m
-                        p.module.toolset.useModule(p, m)
+                        ctx.module.toolset.useModule(ctx, m)
                 }
         }
         return ""

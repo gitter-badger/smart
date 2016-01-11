@@ -1,6 +1,3 @@
 # -*- makefile -*-
 $(module foo_androidsdk_jar, android-sdk, jar)
-
-#$(info java $(this.sources))
-
 $(build)

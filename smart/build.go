@@ -29,12 +29,12 @@ var (
 
 // toolset represents a toolchain like gcc and related utilities.
 type toolset interface {
-        // setupModule setup the current module being processed by parser.
+        // configModule setup the current module being processed by parser.
         // `args' and `vars' is passed in on the `$(module)' invocation.
-        setupModule(p *context, args []string, vars map[string]string) bool
+        configModule(p *context, args []string, vars map[string]string) bool
 
-        // buildModule builds the build graph and commands for the current module
-        buildModule(p *context, args []string) bool
+        // createActions builds the action graph the current module
+        createActions(p *context, args []string) bool
 
         // useModule
         useModule(p *context, m *module) bool
@@ -158,7 +158,8 @@ func (c *excmd) run(target string, args ...string) bool {
         return updated
 }
 
-type incommand interface {
+// intercommand represents a intermdiate action command
+type intercommand interface {
         command
         targets(prequisites []*action) (names []string, needsUpdate bool)
 }
@@ -168,12 +169,12 @@ func computeInterTargets(d, sre string, prequisites []*action) (targets []string
         outdateMap = map[int]int{}
         traverse(d, func(fn string, fi os.FileInfo) bool {
                 if !re.MatchString(fn) { return true }
-                var i int;
-                i, targets = len(targets), append(targets, fn)
+                i := len(targets)
                 outdateMap[i] = 0
+                targets = append(targets, fn)
                 for _, p := range prequisites {
-                        if pc, ok := p.command.(incommand); ok {
-                                if _, nu := pc.targets(p.prequisites); nu {
+                        if pc, ok := p.command.(intercommand); ok {
+                                if _, needsUpdate := pc.targets(p.prequisites); needsUpdate {
                                         outdateMap[i]++
                                 }
                         } else {
@@ -197,21 +198,20 @@ type action struct {
         targets []string
         prequisites []*action
         command command
-        intermediate bool // indicates that the targets are intermediate
 }
 
 func (a *action) update() (updated bool, updatedTargets []string) {
         var targets []string
         var targetsNeedUpdate bool
-        var isIncommand bool
+        var isIntercommand bool
         if a.command != nil {
-                if c, ok := a.command.(incommand); ok {
+                if c, ok := a.command.(intercommand); ok {
                         targets, targetsNeedUpdate = c.targets(a.prequisites)
-                        isIncommand = true
+                        isIntercommand = true
                 }
         }
 
-        if !isIncommand {
+        if !isIntercommand {
                 //fmt.Printf("targets: %v\n", a.targets)
                 targets = append(targets, a.targets...)
         }
@@ -237,7 +237,7 @@ func (a *action) update() (updated bool, updatedTargets []string) {
                 if u, pres := p.update(); u {
                         prequisites = append(prequisites, pres...)
                         updatedPreNum++
-                } else if pc, ok := p.command.(incommand); ok {
+                } else if pc, ok := p.command.(intercommand); ok {
                         pres, nu := pc.targets(p.prequisites)
                         if nu { errorf(0, "requiring updating %v for %v", pres, targets) }
                         prequisites = append(prequisites, pres...)
@@ -298,7 +298,7 @@ func (a *action) force(targets []string, tarfis []os.FileInfo, prequisites []str
 
         if updated {
                 var targetsNeedUpdate bool
-                if c, ok := a.command.(incommand); ok {
+                if c, ok := a.command.(intercommand); ok {
                         updatedTargets, targetsNeedUpdate = c.targets(a.prequisites)
                         updated = !targetsNeedUpdate
                 } else {
@@ -327,11 +327,7 @@ func newAction(target string, c command, pre ...*action) *action {
         return a
 }
 
-func newInAction(target string, c incommand, pre ...*action) *action {
-        return newAction(target, c, pre...)
-}
-
-func drawSourceTransformActions(sources []string, namecommand func(src string) (string, command)) []*action {
+func createSourceTransformActions(sources []string, namecommand func(src string) (string, command)) []*action {
         var inters []*action
         if namecommand == nil {
                 errorf(-1, "can't draw source rules (%v)", namecommand)
@@ -355,9 +351,10 @@ func drawSourceTransformActions(sources []string, namecommand func(src string) (
         return inters
 }
 
+// module is defined by a $(module) invocation in .smart script.
 type module struct {
-        dir string
         location *location // where does it defined
+        dir string
         name string
         toolset toolset
         kind string
@@ -570,7 +567,7 @@ func Build(vars map[string]string, cmds []string) {
                                 fmt.Printf("smart: build `%v' (%v)\n", mod.name, mod.dir)
                         }
                         p.module = mod
-                        if mod.toolset.buildModule(p, []string{}) {
+                        if mod.toolset.createActions(p, []string{}) {
                                 mod.built = true
                         } else {
                                 fmt.Printf("%v: module `%v' not built\n", mod.location, mod.name)

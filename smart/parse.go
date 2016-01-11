@@ -181,7 +181,7 @@ func (l *lex) parseSpaces(off int) *node {
         n := l.new(nodeSpaces, off)
         for {
                 if !l.get() { break }
-                if !unicode.IsSpace(l.rune) { l.unget(); break }
+                if l.rune == '\n' || !unicode.IsSpace(l.rune) { l.unget(); break }
         }
         n.end = l.pos
         return n
@@ -405,19 +405,19 @@ type context struct {
         variables map[string]*variable
 }
 
-func (p *context) setModule(m *module) (prev *module) {
-        prev = p.module
-        p.module = m
+func (ctx *context) setModule(m *module) (prev *module) {
+        prev = ctx.module
+        ctx.module = m
         return
 }
 
-func (p *context) getModuleSources() (sources []string) {
-        if p.module == nil {
+func (ctx *context) getModuleSources() (sources []string) {
+        if ctx.module == nil {
                 return
         }
 
-        if s, ok := p.module.variables["this.sources"]; ok {
-                dir, str := p.module.dir, p.expand(s.value)
+        if s, ok := ctx.module.variables["this.sources"]; ok {
+                dir, str := ctx.module.dir, ctx.expand(s.value)
                 sources = strings.Split(str, " ")
                 for i := range sources {
                         if sources[i][0] == '/' { continue }
@@ -427,7 +427,7 @@ func (p *context) getModuleSources() (sources []string) {
         return
 }
 
-func (p *context) expand(str string) string {
+func (ctx *context) expand(str string) string {
         var buf bytes.Buffer
         var exp func(s []byte) (out string, l int)
         var getRune = func(s []byte) (r rune, l int) {
@@ -453,7 +453,7 @@ func (p *context) expand(str string) string {
                 var t bytes.Buffer
                 if rr == 0 {
                         t.WriteRune(r)
-                        out = p.call(t.String(), args...)
+                        out = ctx.call(t.String(), args...)
                         return
                 }
 
@@ -497,7 +497,7 @@ func (p *context) expand(str string) string {
                                         t.Reset()
                                 }
                                 //fmt.Printf("expcall: %v, %v, %v, %v\n", name, string(s[0:rs]), string(s[rs:]), rs)
-                                out, l = p.call(name, args...), l + rs
+                                out, l = ctx.call(name, args...), l + rs
                                 return /* do not "break" */
                         }
 
@@ -527,30 +527,30 @@ func (p *context) expand(str string) string {
         return buf.String()
 }
 
-func (p *context) call(name string, args ...string) string {
+func (ctx *context) call(name string, args ...string) string {
         //fmt.Printf("call: %v %v\n", name, args)
-        vars := p.variables
+        vars := ctx.variables
 
         switch {
         default:
                 if f, ok := builtins[name]; ok {
                         // All arguments should be expended.
-                        for i := range args { args[i] = p.expand(args[i]) }
-                        return f(p, args)
+                        for i := range args { args[i] = ctx.expand(args[i]) }
+                        return f(ctx, args)
                 }
         case name == "$": return "$";
         case name == "call":
                 if 0 < len(args) {
-                        return p.call(args[0], args[1:]...)
+                        return ctx.call(args[0], args[1:]...)
                 }
                 return ""
         case name == "this":
-                if p.module != nil {
-                        return p.module.name
+                if ctx.module != nil {
+                        return ctx.module.name
                 }
                 return ""
-        case strings.HasPrefix(name, "this.") && p.module != nil:
-                vars = p.module.variables
+        case strings.HasPrefix(name, "this.") && ctx.module != nil:
+                vars = ctx.module.variables
         }
 
         if vars != nil {
@@ -562,17 +562,17 @@ func (p *context) call(name string, args ...string) string {
         return ""
 }
 
-func (p *context) setVariable(name, value string) (v *variable) {
-        loc := p.l.location()
+func (ctx *context) set(name, value string) (v *variable) {
+        loc := ctx.l.location()
 
         if name == "this" {
                 fmt.Printf("%v:warning: ignore attempts on \"this\"\n", loc)
                 return
         }
 
-        vars := p.variables
-        if strings.HasPrefix(name, "this.") && p.module != nil {
-                vars = p.module.variables
+        vars := ctx.variables
+        if strings.HasPrefix(name, "this.") && ctx.module != nil {
+                vars = ctx.module.variables
         }
         if vars == nil {
                 fmt.Printf("%v:warning: no \"this\" module\n", &loc)
@@ -592,87 +592,87 @@ func (p *context) setVariable(name, value string) (v *variable) {
         
         v.name = name
         v.value = value
-        v.loc = *p.l.location()
+        v.loc = *ctx.l.location()
 
         //fmt.Printf("%v: '%s' = '%s'\n", &v.loc, name, value)
         return
 }
 
-func (p *context) expandNode(n *node) string {
-        //fmt.Printf("%v:%v:%v: expand '%v' (%v)\n", p.l.file, n.lineno, n.colno, p.l.str(n), len(n.children))
+func (ctx *context) expandNode(n *node) string {
+        //fmt.Printf("%v:%v:%v: expand '%v' (%v)\n", ctx.l.file, n.lineno, n.colno, ctx.l.str(n), len(n.children))
 
         if len(n.children) == 0 {
                 switch n.kind {
-                case nodeComment: errorf(0, "can't expand comment: %v", p.l.str(n))
-                case nodeCall: errorf(0, "invalid call: %v", p.l.str(n))
+                case nodeComment: errorf(0, "can't expand comment: %v", ctx.l.str(n))
+                case nodeCall: errorf(0, "invalid call: %v", ctx.l.str(n))
                 case nodeContinual: return " "
                 }
-                //fmt.Printf("%v:%v:%v: %v '%v' (%v)\n", p.l.file, n.lineno, n.colno, n.kind, p.l.str(n), len(n.children))
-                return p.l.str(n)
+                //fmt.Printf("%v:%v:%v: %v '%v' (%v)\n", ctx.l.file, n.lineno, n.colno, n.kind, ctx.l.str(n), len(n.children))
+                return ctx.l.str(n)
         }
 
         if n.kind == nodeCall {
-                //fmt.Printf("expand: call: %v, %v\n", p.l.str(n), len(n.children))
-                name, args := p.expandNode(n.children[0]), []string{}
+                //fmt.Printf("expand: call: %v, %v\n", ctx.l.str(n), len(n.children))
+                name, args := ctx.expandNode(n.children[0]), []string{}
                 for _, an := range n.children[1:] {
-                        s := p.expandNode(an); args = append(args, s)
-                        //fmt.Printf("%v:%v:%v: arg '%v' ((%v) '%v') (%v)\n", p.l.file, an.lineno, an.colno, p.l.str(an), len(an.children), s, name)
+                        s := ctx.expandNode(an); args = append(args, s)
+                        //fmt.Printf("%v:%v:%v: arg '%v' ((%v) '%v') (%v)\n", ctx.l.file, an.lineno, an.colno, ctx.l.str(an), len(an.children), s, name)
                 }
-                v := p.call(name, args...)
-                //fmt.Printf("%v:%v:%v: call '%v' %v '%v'\n", p.l.file, n.lineno, n.colno, name, args, v)
+                v := ctx.call(name, args...)
+                //fmt.Printf("%v:%v:%v: call '%v' %v '%v'\n", ctx.l.file, n.lineno, n.colno, name, args, v)
                 return v
         }
 
-        //fmt.Printf("%v:%v:%v: %v '%v' (%v)\n", p.l.file, n.lineno, n.colno, n.kind, p.l.str(n), len(n.children))
+        //fmt.Printf("%v:%v:%v: %v '%v' (%v)\n", ctx.l.file, n.lineno, n.colno, n.kind, ctx.l.str(n), len(n.children))
         var b bytes.Buffer
         for _, cn := range n.children {
-                v := p.expandNode(cn)
+                v := ctx.expandNode(cn)
                 b.WriteString(v)
-                //fmt.Printf("%v:%v:%v: %v '%v' '%v'\n", p.l.file, cn.lineno, cn.colno, cn.kind, p.l.str(cn), v)
+                //fmt.Printf("%v:%v:%v: %v '%v' '%v'\n", ctx.l.file, cn.lineno, cn.colno, cn.kind, ctx.l.str(cn), v)
         }
         return b.String()
 }
 
-func (p *context) processNode(n *node) (err error) {
-        //fmt.Printf("%v:%v:%v: node '%v' (%v, %v)\n", p.l.file, n.lineno, n.colno, p.l.str(n), n.kind, len(n.children))
+func (ctx *context) processNode(n *node) (err error) {
+        //fmt.Printf("%v:%v:%v: node '%v' (%v, %v)\n", ctx.l.file, n.lineno, n.colno, ctx.l.str(n), n.kind, len(n.children))
 
         switch n.kind {
         case nodeComment:
         case nodeSpaces:
         case nodeAssign:
                 nn, nv := n.children[0], n.children[2]
-                p.setVariable(p.expandNode(nn), p.l.str(nv))
-                //fmt.Printf("%v:%v:%v: %v %v\n", p.l.file, n.lineno, n.colno, p.l.str(nn), p.l.str(nv))
-                //fmt.Printf("%v:%v:%v: '%v' '%v'\n", p.l.file, n.lineno, n.colno, p.expandNode(nn), p.l.str(nv))
+                ctx.set(ctx.expandNode(nn), ctx.l.str(nv))
+                //fmt.Printf("%v:%v:%v: %v %v\n", ctx.l.file, n.lineno, n.colno, ctx.l.str(nn), ctx.l.str(nv))
+                //fmt.Printf("%v:%v:%v: '%v' '%v'\n", ctx.l.file, n.lineno, n.colno, ctx.expandNode(nn), ctx.l.str(nv))
         case nodeSimpleAssign:
                 nn, nv := n.children[0], n.children[2]
-                p.setVariable(p.expandNode(nn), p.expandNode(nv))
-                //fmt.Printf("%v:%v:%v: %v %v\n", p.l.file, n.lineno, n.colno, p.l.str(nn), p.l.str(nv))
-                //fmt.Printf("%v:%v:%v: '%v' '%v'\n", p.l.file, n.lineno, n.colno, p.expandNode(nn), p.expandNode(nv))
+                ctx.set(ctx.expandNode(nn), ctx.expandNode(nv))
+                //fmt.Printf("%v:%v:%v: %v %v\n", ctx.l.file, n.lineno, n.colno, ctx.l.str(nn), ctx.l.str(nv))
+                //fmt.Printf("%v:%v:%v: '%v' '%v'\n", ctx.l.file, n.lineno, n.colno, ctx.expandNode(nn), ctx.expandNode(nv))
         case nodeQuestionAssign:
                 // TODO: ...
         case nodeCall:
-                //fmt.Printf("%v:%v:%v: call %v\n", p.l.file, n.lineno, n.colno, p.l.str(n))
-                if s := p.expandNode(n); s != "" {
-                        errorf(0, "illigal: %v (%v)", s, p.l.str(n))
+                //fmt.Printf("%v:%v:%v: call %v\n", ctx.l.file, n.lineno, n.colno, ctx.l.str(n))
+                if s := ctx.expandNode(n); s != "" {
+                        errorf(0, "illigal: %v (%v)", s, ctx.l.str(n))
                 }
         }
         return
 }
 
-func (p *context) parse() (err error) {
-        p.l.parse()
+func (ctx *context) parse() (err error) {
+        ctx.l.parse()
 
-        for _, n := range p.l.nodes {
+        for _, n := range ctx.l.nodes {
                 if n.kind == nodeComment { continue }
-                if e := p.processNode(n); e != nil {
+                if e := ctx.processNode(n); e != nil {
                         break
                 }
         }
         return
 }
 
-func newContext(fn string) (p *context, err error) {
+func newContext(fn string) (ctx *context, err error) {
         var f *os.File
 
         f, err = os.Open(fn)
@@ -687,7 +687,7 @@ func newContext(fn string) (p *context, err error) {
                 return
         }
 
-        p = &context{
+        ctx = &context{
                 l: lex{ file: fn, s: s, pos: 0, },
                 variables: make(map[string]*variable, 128),
         }
@@ -695,20 +695,20 @@ func newContext(fn string) (p *context, err error) {
         return
 }
 
-func parse(conf string) (p *context, err error) {
-        p, err = newContext(conf)
+func parse(conf string) (ctx *context, err error) {
+        ctx, err = newContext(conf)
 
         defer func() {
                 if e := recover(); e != nil {
                         if se, ok := e.(*smarterror); ok {
-                                fmt.Printf("%v: %v\n", p.l.location(), se)
+                                fmt.Printf("%v: %v\n", ctx.l.location(), se)
                         } else {
                                 panic(e)
                         }
                 }
         }()
 
-        if err = p.parse(); err != nil {
+        if err = ctx.parse(); err != nil {
                 return
         }
 
