@@ -1,3 +1,6 @@
+//
+//  Copyright (C) 2012-2016, Duzy Chan <code@duzy.info>, all rights reserverd.
+//
 package smart
 
 import (
@@ -78,7 +81,7 @@ func builtinModule(ctx *context, args []string) string {
 
         // parsed arguments in forms like "PLATFORM=android-9"
         var a []string
-        if 3 < len(args) { a = args[3:] }
+        if 2 < len(args) { a = args[2:] }
         vars, rest := splitVarArgs(a)
         toolset.configModule(ctx, rest, vars)
         return ""

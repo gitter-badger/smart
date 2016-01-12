@@ -1,3 +1,6 @@
+//
+//  Copyright (C) 2012-2016, Duzy Chan <code@duzy.info>, all rights reserverd.
+//
 package smart
 
 import (
@@ -82,7 +85,7 @@ type excmd struct {
         stdin io.Reader
 }
 
-func (c *excmd) run(target string, args ...string) bool {
+func (c *excmd) run(targetHint string, args ...string) bool {
         if strings.HasPrefix(c.path, "~/") {
                 c.path = os.Getenv("HOME") + c.path[1:]
         }
@@ -102,7 +105,7 @@ func (c *excmd) run(target string, args ...string) bool {
                 if c.cmd != nil {
                         updated = c.cmd()
                 } else {
-                        errorf(0, "can't update `%v'", target)
+                        errorf(0, "can't update `%v'", targetHint)
                         return false
                 }
         } else {
@@ -112,7 +115,9 @@ func (c *excmd) run(target string, args ...string) bool {
                 if c.dir != "" { cmd.Dir = c.dir }
 
                 if *flagV {
-                        message("%v -> %v", filepath.Base(c.path), target)
+                        if targetHint != "" {
+                                message("%v -> %v", filepath.Base(c.path), targetHint)
+                        }
                 } else if *flagVV {
                         fmt.Printf("%v\n", strings.Join(cmd.Args, " "))
                 }

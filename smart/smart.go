@@ -1,3 +1,7 @@
+//
+//  Copyright (C) 2012-2016, Duzy Chan <code@duzy.info>, all rights reserverd.
+//
+
 /*
         Package smart builds complex project faster in the simple way.
 

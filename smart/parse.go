@@ -1,3 +1,6 @@
+//
+//  Copyright (C) 2012-2016, Duzy Chan <code@duzy.info>, all rights reserverd.
+//
 package smart
 
 import (
@@ -288,6 +291,8 @@ func (l *lex) parseAssign(at nodeType) *node {
         // value
         nn, t := l.new(nodeText, 0), l.new(nodeText, 0)
         n.children = append(n.children, nn)
+
+        //fmt.Printf("assign: '%v', %v\n", l.str(n), l.rune)
 
         var r rune
 out_loop: for {

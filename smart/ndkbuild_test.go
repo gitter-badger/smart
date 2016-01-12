@@ -1,3 +1,6 @@
+//
+//  Copyright (C) 2012-2016, Duzy Chan <code@duzy.info>, all rights reserverd.
+//
 package smart
 
 import (
@@ -10,6 +13,8 @@ func testToolsetNdkBuild(t *testing.T) {
         defer os.RemoveAll("out")
 
         Build(computeTestRunParams())
+
+        
 }
 
 func TestToolsetNdkBuild(t *testing.T) {

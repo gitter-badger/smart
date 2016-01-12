@@ -1,3 +1,6 @@
+//
+//  Copyright (C) 2012-2016, Duzy Chan <code@duzy.info>, all rights reserverd.
+//
 package smart
 
 import (
@@ -425,5 +428,5 @@ foobaz := foo-baz
         if s := ctx.call("foo"); s != "" { t.Errorf("foo: %s", s); return }
         if s := ctx.call("bar"); s != "bar" { t.Errorf("bar: %s", s); return }
         if s := ctx.call("foobar"); s != "" { t.Errorf("foobar: %s", s); return }
-        if s := ctx.call("foobaz"); s != "foobaz" { t.Errorf("foobaz: %s", s); return }
+        if s := ctx.call("foobaz"); s != "foo-baz" { t.Errorf("foobaz: %s", s); return }
 }
