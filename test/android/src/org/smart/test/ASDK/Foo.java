@@ -16,5 +16,6 @@ public class Foo extends Activity
         test();
     }
 
+    static { System.loadLibrary("foo"); }
     private native void test();
 }
