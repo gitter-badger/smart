@@ -146,12 +146,15 @@ func (c *excmd) run(targetHint string, args ...string) bool {
                         so, se := c.stdout.String(), c.stderr.String()
                         if so != "" {
                                 fmt.Printf("------------------------------ stdout\n")
-                                fmt.Printf("%v\n", so)
+                                fmt.Printf("%v", so)
+                                if !strings.HasSuffix(so, "\n") { fmt.Printf("\n") }
                         }
                         if se != "" {
                                 fmt.Printf("------------------------------ stderr\n")
-                                fmt.Printf("%v\n", se)
+                                fmt.Printf("%v", se)
+                                if !strings.HasSuffix(se, "\n") { fmt.Printf("\n") }
                         }
+                        fmt.Printf("-------------------------------------\n")
                         errorf(0, `failed executing "%v"`, c.path)
                 }
 

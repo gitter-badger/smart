@@ -43,7 +43,7 @@ func (ndk *_ndkbuild) configModule(ctx *context, args []string, vars map[string]
                         abi = "armeabi" // all
                         optim = "debug" // release|debug
                         platform = "android-9" // minimal is "android-8"
-                        script = "obj/boot.mk"
+                        script = "out/boot.mk"
                         stl = "system" // system|stlport_static|gnustl_static
                 )
 
@@ -218,8 +218,8 @@ func (n *_ndkbuildCmd) getBuildVars(abi string, script string) []string {
         return []string{
                 fmt.Sprintf("NDK_PROJECT_PATH=%s", "."),
                 //fmt.Sprintf("NDK_MODULE_PATH=%s", "."),
-                //fmt.Sprintf("NDK_OUT=%s", "obj"),
                 //fmt.Sprintf("NDK_LIBS_OUT=%s", "libs"),
+                fmt.Sprintf("NDK_OUT=%s", "out"),
                 fmt.Sprintf("APP_BUILD_SCRIPT=%s", script),
                 fmt.Sprintf("APP_ABI=%s", abi),
                 fmt.Sprintf("APP_PLATFORM=%s", n.platform),
@@ -279,9 +279,9 @@ func (n *_ndkbuildCmd) dumpSingle(abi string) (res *_ndkbuildDump) {
         vars := []string{
                 fmt.Sprintf("NDK_PROJECT_PATH=%s", "."),
                 //fmt.Sprintf("NDK_MODULE_PATH=%s", "."),
-                //fmt.Sprintf("NDK_OUT=%s", "obj"),
-                //fmt.Sprintf("NDK_LIBS_OUT=%s", "libs"),
                 //fmt.Sprintf("NDK_APP_NAME=%s", "."),
+                //fmt.Sprintf("NDK_LIBS_OUT=%s", "libs"),
+                fmt.Sprintf("NDK_OUT=%s", "out"),
                 fmt.Sprintf("APP_BUILD_SCRIPT=%s", tf),
                 fmt.Sprintf("APP_ABI=%s", abi),
                 fmt.Sprintf("APP_PLATFORM=%s", n.platform),
@@ -387,15 +387,15 @@ $~:
 	@echo "TARGET_GDB_SERVER :=$(DUMMY_TARGET_GDB_SERVER)"
 	@echo "MODULES :=$(DUMMY_MODULES)"
 	@$(foreach s,$(DUMMY_MODULES),\
-echo "$s.NAME :=$(__ndk_modules.$s.MODULE)" &&\
-echo "$s.FILENAME :=$(__ndk_modules.$s.MODULE_FILENAME)" &&\
-echo "$s.PATH :=$(__ndk_modules.$s.PATH)" &&\
-echo "$s.SOURCES :=$(__ndk_modules.$s.SRC_FILES)" &&\
-echo "$s.SCRIPT :=$(__ndk_modules.$s.MAKEFILE)" &&\
-echo "$s.OBJS_DIR :=$(__ndk_modules.$s.OBJS_DIR)" &&\
-echo "$s.BUILT :=$(__ndk_modules.$s.BUILT_MODULE)" &&\
-echo "$s.INSTALLED :=$(__ndk_modules.$s.INSTALLED)" &&\
-echo "$s.CLASS :=$(__ndk_modules.$s.MODULE_CLASS)" &&\
+echo "$s.NAME := $(__ndk_modules.$s.MODULE)" &&\
+echo "$s.FILENAME := $(__ndk_modules.$s.MODULE_FILENAME)" &&\
+echo "$s.PATH := $(__ndk_modules.$s.PATH)" &&\
+echo "$s.SOURCES := $(__ndk_modules.$s.SRC_FILES)" &&\
+echo "$s.SCRIPT := $(__ndk_modules.$s.MAKEFILE)" &&\
+echo "$s.OBJS_DIR := $(__ndk_modules.$s.OBJS_DIR)" &&\
+echo "$s.BUILT := $(__ndk_modules.$s.BUILT_MODULE)" &&\
+echo "$s.INSTALLED := $(__ndk_modules.$s.INSTALLED)" &&\
+echo "$s.CLASS := $(__ndk_modules.$s.MODULE_CLASS)" &&\
 ) true
 	@echo
 `, filepath.Base(tf.Name()))

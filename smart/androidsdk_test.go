@@ -5,6 +5,7 @@ package smart
 
 import (
         //"path/filepath"
+        "strings"
         "testing"
         //"fmt"
         "os"
@@ -15,6 +16,10 @@ func testToolsetAndroidSDK(t *testing.T) {
         if l := len(moduleOrderList); l != 0 { t.Errorf("expecting len(moduleOrderList) for 0, but %v", l); return }
         if l := len(moduleBuildList); l != 0 { t.Errorf("expecting len(moduleBuildList) for 0, but %v", l); return }
         if e := os.RemoveAll("out"); e != nil { t.Errorf("failed remove `out' directory") }
+
+        defer func() {
+                os.RemoveAll("out")
+        }()
 
         Build(computeTestRunParams())
 
@@ -55,9 +60,91 @@ func testToolsetAndroidSDK(t *testing.T) {
         if fi, e := os.Stat("out/foo_androidsdk_apk/signed.apk"); fi == nil || e != nil { t.Errorf("failed: %v", e); return }
         if fi, e := os.Stat("out/foo_androidsdk_apk/foo_androidsdk_apk.apk"); fi == nil || e != nil { t.Errorf("failed: %v", e); return }
 
-        os.RemoveAll("out")
+        l1 := runcmd("jar", "tf", "out/foo_androidsdk_jar/foo_androidsdk_jar.jar")
+        l2 := runcmd("jar", "tf", "out/foo_androidsdk_use_jar/foo_androidsdk_use_jar.apk")
+        l3 := runcmd("jar", "tf", "out/foo_androidsdk_apk/foo_androidsdk_apk.apk")
+
+        if s := "org/smart/test/foo/Foo.class\n"; !strings.Contains(l1, s)      { t.Errorf("missing %v----------\n%v", s, l1); return }
+        if s := "org/smart/test/foo/R.class\n"; !strings.Contains(l1, s)        { t.Errorf("missing %v----------\n%v", s, l1); return }
+        if s := "org/smart/test/foo/R$attr.class\n"; !strings.Contains(l1, s)   { t.Errorf("missing %v----------\n%v", s, l1); return }
+        if s := "org/smart/test/foo/R$id.class\n"; !strings.Contains(l1, s)     { t.Errorf("missing %v----------\n%v", s, l1); return }
+        if s := "org/smart/test/foo/R$layout.class\n"; !strings.Contains(l1, s) { t.Errorf("missing %v----------\n%v", s, l1); return }
+        if s := "org/smart/test/foo/R$string.class\n"; !strings.Contains(l1, s) { t.Errorf("missing %v----------\n%v", s, l1); return }
+        if s := "META-INF/MANIFEST.MF\n"; !strings.Contains(l2, s)              { t.Errorf("missing %v----------\n%v", s, l2); return }
+        if s := "META-INF/CERT.SF\n"; !strings.Contains(l2, s)                  { t.Errorf("missing %v----------\n%v", s, l2); return }
+        if s := "META-INF/CERT.RSA\n"; !strings.Contains(l2, s)                 { t.Errorf("missing %v----------\n%v", s, l2); return }
+        if s := "res/layout/main.xml\n"; !strings.Contains(l2, s)               { t.Errorf("missing %v----------\n%v", s, l2); return }
+        if s := "resources.arsc\n"; !strings.Contains(l2, s)                    { t.Errorf("missing %v----------\n%v", s, l2); return }
+        if s := "classes.dex\n"; !strings.Contains(l2, s)                       { t.Errorf("missing %v----------\n%v", s, l2); return }
+        if s := "AndroidManifest.xml\n"; !strings.Contains(l2, s)               { t.Errorf("missing %v----------\n%v", s, l2); return }
+        if s := "META-INF/MANIFEST.MF\n"; !strings.Contains(l3, s)              { t.Errorf("missing %v----------\n%v", s, l3); return }
+        if s := "META-INF/CERT.SF\n"; !strings.Contains(l3, s)                  { t.Errorf("missing %v----------\n%v", s, l3); return }
+        if s := "META-INF/CERT.RSA\n"; !strings.Contains(l3, s)                 { t.Errorf("missing %v----------\n%v", s, l3); return }
+        if s := "res/layout/main.xml\n"; !strings.Contains(l3, s)               { t.Errorf("missing %v----------\n%v", s, l3); return }
+        if s := "resources.arsc\n"; !strings.Contains(l3, s)                    { t.Errorf("missing %v----------\n%v", s, l3); return }
+        if s := "classes.dex\n"; !strings.Contains(l3, s)                       { t.Errorf("missing %v----------\n%v", s, l3); return }
+        if s := "AndroidManifest.xml\n"; !strings.Contains(l3, s)               { t.Errorf("missing %v----------\n%v", s, l3); return }
+}
+
+func testToolsetAndroidSDKJNI(t *testing.T) {
+        if l := len(modules); l != 0 { t.Errorf("expecting len(modules) for 0, but %v", l); return }
+        if l := len(moduleOrderList); l != 0 { t.Errorf("expecting len(moduleOrderList) for 0, but %v", l); return }
+        if l := len(moduleBuildList); l != 0 { t.Errorf("expecting len(moduleBuildList) for 0, but %v", l); return }
+        if e := os.RemoveAll("obj"); e != nil { t.Errorf("failed remove `obj' directory") }
+        if e := os.RemoveAll("out"); e != nil { t.Errorf("failed remove `out' directory") }
+
+        defer func() {
+                os.RemoveAll("out")
+                os.RemoveAll("libs")
+        }()
+
+        Build(computeTestRunParams())
+
+        if fi, e := os.Stat("out"); fi == nil || e != nil || !fi.IsDir() { t.Errorf("failed: %v", e); return }
+        if fi, e := os.Stat("out/local/armeabi"); fi == nil || e != nil || !fi.IsDir() { t.Errorf("failed: %v", e); return }
+        if fi, e := os.Stat("out/local/armeabi/objs-debug"); fi == nil || e != nil || !fi.IsDir() { t.Errorf("failed: %v", e); return }
+        if fi, e := os.Stat("out/local/armeabi/objs-debug/foo"); fi == nil || e != nil || !fi.IsDir() { t.Errorf("failed: %v", e); return }
+        if fi, e := os.Stat("out/local/armeabi-v7a"); fi == nil || e != nil || !fi.IsDir() { t.Errorf("failed: %v", e); return }
+        if fi, e := os.Stat("out/local/armeabi-v7a/objs-debug"); fi == nil || e != nil || !fi.IsDir() { t.Errorf("failed: %v", e); return }
+        if fi, e := os.Stat("out/local/armeabi-v7a/objs-debug/foo"); fi == nil || e != nil || !fi.IsDir() { t.Errorf("failed: %v", e); return }
+        if fi, e := os.Stat("out/local/armeabi-v7a-hard"); fi == nil || e != nil || !fi.IsDir() { t.Errorf("failed: %v", e); return }
+        if fi, e := os.Stat("out/local/armeabi-v7a-hard/objs-debug"); fi == nil || e != nil || !fi.IsDir() { t.Errorf("failed: %v", e); return }
+        if fi, e := os.Stat("out/local/armeabi-v7a-hard/objs-debug/foo"); fi == nil || e != nil || !fi.IsDir() { t.Errorf("failed: %v", e); return }
+
+        if fi, e := os.Stat("out/boot.mk"); fi == nil || e != nil { t.Errorf("failed: %v", e); return }
+        if fi, e := os.Stat("out/local/armeabi/libfoo.so"); fi == nil || e != nil { t.Errorf("failed: %v", e); return }
+        if fi, e := os.Stat("out/local/armeabi-v7a/libfoo.so"); fi == nil || e != nil { t.Errorf("failed: %v", e); return }
+        if fi, e := os.Stat("out/local/armeabi-v7a-hard/libfoo.so"); fi == nil || e != nil { t.Errorf("failed: %v", e); return }
+        if fi, e := os.Stat("out/local/armeabi/objs-debug/foo/foo.o"); fi == nil || e != nil { t.Errorf("failed: %v", e); return }
+        if fi, e := os.Stat("out/local/armeabi/objs-debug/foo/foo.o.d"); fi == nil || e != nil { t.Errorf("failed: %v", e); return }
+        if fi, e := os.Stat("out/local/armeabi-v7a/objs-debug/foo/foo.o"); fi == nil || e != nil { t.Errorf("failed: %v", e); return }
+        if fi, e := os.Stat("out/local/armeabi-v7a/objs-debug/foo/foo.o.d"); fi == nil || e != nil { t.Errorf("failed: %v", e); return }
+        if fi, e := os.Stat("out/local/armeabi-v7a-hard/objs-debug/foo/foo.o"); fi == nil || e != nil { t.Errorf("failed: %v", e); return }
+        if fi, e := os.Stat("out/local/armeabi-v7a-hard/objs-debug/foo/foo.o.d"); fi == nil || e != nil { t.Errorf("failed: %v", e); return }
+
+        if fi, e := os.Stat("libs"); fi == nil || e != nil || !fi.IsDir() { t.Errorf("failed: %v", e); return }
+        if fi, e := os.Stat("libs/armeabi"); fi == nil || e != nil || !fi.IsDir() { t.Errorf("failed: %v", e); return }
+        if fi, e := os.Stat("libs/armeabi-v7a"); fi == nil || e != nil || !fi.IsDir() { t.Errorf("failed: %v", e); return }
+
+        if fi, e := os.Stat("libs/armeabi/libfoo.so"); fi == nil || e != nil || fi.IsDir() { t.Errorf("failed: %v", e); return }
+        if fi, e := os.Stat("libs/armeabi-v7a/libfoo.so"); fi == nil || e != nil || fi.IsDir() { t.Errorf("failed: %v", e); return }
+
+        if fi, e := os.Stat("out"); fi == nil || e != nil || !fi.IsDir() { t.Errorf("failed: %v", e); return }
+        if fi, e := os.Stat("out/foo_apk"); fi == nil || e != nil || !fi.IsDir() { t.Errorf("failed: %v", e); return }
+        if fi, e := os.Stat("out/foo_apk/res"); fi == nil || e != nil || !fi.IsDir() { t.Errorf("failed: %v", e); return }
+        if fi, e := os.Stat("out/foo_apk/classes"); fi == nil || e != nil || !fi.IsDir() { t.Errorf("failed: %v", e); return }
+        if fi, e := os.Stat("out/foo_apk/classes.dex"); fi == nil || e != nil { t.Errorf("failed: %v", e); return }
+        if fi, e := os.Stat("out/foo_apk/unsigned.apk"); fi == nil || e != nil { t.Errorf("failed: %v", e); return }
+        if fi, e := os.Stat("out/foo_apk/signed.apk"); fi == nil || e != nil { t.Errorf("failed: %v", e); return }
+        if fi, e := os.Stat("out/foo_apk/foo_apk.apk"); fi == nil || e != nil { t.Errorf("failed: %v", e); return }
+
+        l := runcmd("jar", "tf", "out/foo_apk/foo_apk.apk")
+
+        if s := "lib/armeabi/libfoo.so\n"; !strings.Contains(l, s) { t.Errorf("missing %v----------\n%v", s, l); return }
+        if s := "lib/armeabi-v7a/libfoo.so\n"; !strings.Contains(l, s) { t.Errorf("missing %v----------\n%v", s, l); return }
 }
 
 func TestToolsetAndroidSDK(t *testing.T) {
-        //runToolsetTestCase(t, "android-sdk", testToolsetAndroidSDK)
+        runToolsetTestCase(t, "android-sdk", testToolsetAndroidSDK)
+        runToolsetTestCase(t, "android", testToolsetAndroidSDKJNI)
 }
