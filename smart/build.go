@@ -436,8 +436,8 @@ func readDirNames(dirname string) ([]string, error) {
 	return names, nil
 }
 
-type traverseCallback func(dname string, fi os.FileInfo) bool
-func traverse(d string, fun traverseCallback) (err error) {
+type traverseFunc func(dname string, fi os.FileInfo) bool
+func traverse(d string, fun traverseFunc) (err error) {
         names, err := readDirNames(d)
         if err != nil {
                 //errorf(0, "readDirNames: %v, %v\n", err, d)
@@ -470,9 +470,9 @@ func traverse(d string, fun traverseCallback) (err error) {
         return
 }
 
-// findNumFiles finds `num' files underneath the directory `d' recursively. It's going to
-// find all files if `num' is less than 1.
-func findNumFiles(d string, sre string, num int) (files []string, err error) {
+// findNFiles finds N files underneath the directory `d' recursively. It's going to
+// find all files if N is less than 1.
+func findNFiles(d string, sre string, num int) (files []string, err error) {
         re := regexp.MustCompile(sre)
         err = traverse(d, func(dname string, fi os.FileInfo) bool {
                 if re.MatchString(dname) {
@@ -486,12 +486,12 @@ func findNumFiles(d string, sre string, num int) (files []string, err error) {
 
 // findFiles finds all files underneath the directory `d' recursively.
 func findFiles(d string, sre string) (files []string, err error) {
-        return findNumFiles(d, sre, -1)
+        return findNFiles(d, sre, -1)
 }
 
 // findFile finds one file underneath the directory `d' recursively.
 func findFile(d string, sre string) (file string) {
-        if fs, err := findNumFiles(d, sre, 1); err == nil {
+        if fs, err := findNFiles(d, sre, 1); err == nil {
                 if 0 < len(fs) { file = fs[0] }
         }
         return
@@ -549,7 +549,7 @@ func Build(vars map[string]string, cmds []string) {
                 fr := matchFileInfo(fi, generalMetaFiles)
                 if *flagG && fr != nil { return false }
                 if fi.Name() == ".smart" {
-                        if _, err := parse(fn); err != nil { errorf(0, "parse: `%v', %v\n", fn, err) }
+                        if _, err := parseFile(fn, nil); err != nil { errorf(0, "parse: `%v', %v\n", fn, err) }
                 }
                 return true
         })

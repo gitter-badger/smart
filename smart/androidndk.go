@@ -50,35 +50,6 @@ type _androidndk struct {
         modules map[string]*module
 }
 
-func (ndk *_androidndk) parseFile(fn string, vars map[string]string) (ctx *context, err error) {
-        if ctx , err = newContext(fn); err != nil {
-                //message("error: %v", err)
-                return
-        }
-
-        if vars != nil {
-                for n, v := range vars {
-                        ctx.set(n, v)
-                }
-        }
-
-        defer func() {
-                if e := recover(); e != nil {
-                        if se, ok := e.(*smarterror); ok {
-                                message("%v: %v", ctx.l.location(), se)
-                        } else {
-                                panic(e)
-                        }
-                }
-        }()
-
-        if err = ctx.parse(); err != nil {
-                return
-        }
-
-        return
-}
-
 func (ndk *_androidndk) addToolchain(d string) bool {
         toolchain := filepath.Base(d)
         if toolchain == "" {
@@ -87,7 +58,7 @@ func (ndk *_androidndk) addToolchain(d string) bool {
         }
 
         fn := filepath.Join(d, "config.mk")
-        ctx, err := ndk.parseFile(fn, nil)
+        ctx, err := parseFile(fn, nil)
         if err != nil {
                 //message("error: toolchain: %v", err)
                 return false
@@ -216,7 +187,7 @@ func (ndk *_androidndk) createActions(ctx *context, args []string) bool {
 }
 
 func (ndk *_androidndk) loadModule(fn, ndksrc, subdir string) (ok bool) {
-        ctx, err := ndk.parseFile(fn, map[string]string{
+        ctx, err := parseFile(fn, map[string]string{
                 "my-dir": filepath.Join(ndksrc, subdir),
         })
 

@@ -61,5 +61,5 @@ func testToolsetNdkBuild(t *testing.T) {
 }
 
 func TestToolsetNdkBuild(t *testing.T) {
-        runToolsetTestCase(t, "ndkbuild", testToolsetNdkBuild)
+        //runToolsetTestCase(t, "ndkbuild", testToolsetNdkBuild)
 }

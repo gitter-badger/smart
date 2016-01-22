@@ -70,7 +70,7 @@ func (sdk *_androidsdk) configModule(ctx *context, args []string, vars map[strin
                 errorf(0, "no module")
         }
 
-        d := filepath.Dir(ctx.l.file)
+        d := filepath.Dir(ctx.l.scope)
         sources, err := findFiles(filepath.Join(d, "src"), `\.java$`)
         for i := range sources {
                 if strings.HasPrefix(sources[i], d) {
@@ -103,7 +103,7 @@ func (sdk *_androidsdk) createActions(ctx *context, args []string) bool {
 
         //fmt.Printf("platform: %v\n", platform)
 
-        gen := &androidGen{ platform:platform, out:filepath.Join("out", m.name), d:filepath.Dir(ctx.l.file) }
+        gen := &androidGen{ platform:platform, out:filepath.Join("out", m.name), d:filepath.Dir(ctx.l.scope) }
 
         var a *action
         var prequisites []*action

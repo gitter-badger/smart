@@ -59,7 +59,7 @@ func builtinModule(ctx *context, args []string) string {
                         name: name,
                         toolset: toolset,
                         kind: kind,
-                        dir: filepath.Dir(ctx.l.file),
+                        dir: filepath.Dir(ctx.l.scope),
                         location: ctx.l.location(),
                         variables: make(map[string]*variable, 128),
                 }
@@ -76,13 +76,16 @@ func builtinModule(ctx *context, args []string) string {
                 m.kind = kind
         }
 
-        m.dir = filepath.Dir(ctx.l.file)
+        m.dir = filepath.Dir(ctx.l.scope)
         ctx.setModule(m)
 
         // parsed arguments in forms like "PLATFORM=android-9"
         var a []string
         if 2 < len(args) { a = args[2:] }
         vars, rest := splitVarArgs(a)
+
+        fmt.Printf("vars: %v\n", vars)
+
         toolset.configModule(ctx, rest, vars)
         return ""
 }
@@ -110,7 +113,7 @@ func builtinUse(ctx *context, args []string) string {
                 } else {
                         m = &module{
                                 name: a,
-                                dir: filepath.Dir(ctx.l.file),
+                                dir: filepath.Dir(ctx.l.scope),
                                 location: ctx.l.location(),
                                 variables: make(map[string]*variable, 128),
                                 usedBy: []*module{ ctx.module },

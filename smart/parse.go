@@ -17,13 +17,12 @@ import (
 )
 
 type location struct {
-        file *string
-        lineno int
-        colno int
+        buf *parseBuffer
+        lineno, colno int
 }
 
 func (l *location) String() string {
-        return fmt.Sprintf("%v:%v:%v", *l.file, l.lineno, l.colno)
+        return fmt.Sprintf("%v:%v:%v", l.buf.scope, l.lineno, l.colno)
 }
 
 type variable struct {
@@ -76,9 +75,13 @@ func (n *node) len() int {
         return n.end - n.pos
 }
 
-type lex struct {
-        file string
+type parseBuffer struct {
+        scope string // file or named scope
         s []byte // the content of the file
+}
+
+type lex struct {
+        *parseBuffer
         pos int // the current read position
         start int // begins of the current node
         lnod *node // the end position of the last node
@@ -89,7 +92,7 @@ type lex struct {
 }
 
 func (l *lex) location() *location {
-        return &location{ &l.file, l.lineno, l.colno }
+        return &location{ l.parseBuffer, l.lineno, l.colno }
 }
 
 func (l *lex) str(n *node) string {
@@ -166,7 +169,7 @@ func (l *lex) parseComment() *node {
         }
         n.end = l.pos
 
-        //fmt.Printf("%v:%v: %v, '%v'\n", l.file, n.lineno, n.kind, l.str(n))
+        //fmt.Printf("%v:%v: %v, '%v'\n", l.scope, n.lineno, n.kind, l.str(n))
         return n
 }
 
@@ -336,19 +339,19 @@ out_loop: for {
 
         n.end = nn.end
 
-        //fmt.Printf("%v:%v: %v, '%v', '%v'\n", l.file, n.lineno, n.kind, l.str(n), l.str(nn))
+        //fmt.Printf("%v:%v: %v, '%v', '%v'\n", l.scope, n.lineno, n.kind, l.str(n), l.str(nn))
         return n
 }
 
 func (l *lex) parseDoubleColonRule() *node {
         n := l.new(nodeDoubleColonRule, -2)
-        fmt.Printf("%v:%v: '%v'\n", l.file, n.lineno, n.kind)
+        fmt.Printf("%v:%v: '%v'\n", l.scope, n.lineno, n.kind)
         return n
 }
 
 func (l *lex) parseRule() *node {
         n := l.new(nodeRule, -1)
-        fmt.Printf("%v:%v: '%v'\n", l.file, n.lineno, n.kind)
+        fmt.Printf("%v:%v: '%v'\n", l.scope, n.lineno, n.kind)
         return n
 }
 
@@ -358,7 +361,7 @@ func (l *lex) parse() {
 main_loop:
         for {
                 if !l.get() { break main_loop } else { r = l.rune }
-        the_sw: switch {
+                the_sw: switch {
                 case r == '#':
                         l.nodes = append(l.nodes, l.parseComment())
                 case r == '\\':
@@ -604,7 +607,7 @@ func (ctx *context) set(name, value string) (v *variable) {
 }
 
 func (ctx *context) expandNode(n *node) string {
-        //fmt.Printf("%v:%v:%v: expand '%v' (%v)\n", ctx.l.file, n.lineno, n.colno, ctx.l.str(n), len(n.children))
+        //fmt.Printf("%v:%v:%v: expand '%v' (%v)\n", ctx.l.scope, n.lineno, n.colno, ctx.l.str(n), len(n.children))
 
         if len(n.children) == 0 {
                 switch n.kind {
@@ -612,7 +615,7 @@ func (ctx *context) expandNode(n *node) string {
                 case nodeCall: errorf(0, "invalid call: %v", ctx.l.str(n))
                 case nodeContinual: return " "
                 }
-                //fmt.Printf("%v:%v:%v: %v '%v' (%v)\n", ctx.l.file, n.lineno, n.colno, n.kind, ctx.l.str(n), len(n.children))
+                //fmt.Printf("%v:%v:%v: %v '%v' (%v)\n", ctx.l.scope, n.lineno, n.colno, n.kind, ctx.l.str(n), len(n.children))
                 return ctx.l.str(n)
         }
 
@@ -621,25 +624,25 @@ func (ctx *context) expandNode(n *node) string {
                 name, args := ctx.expandNode(n.children[0]), []string{}
                 for _, an := range n.children[1:] {
                         s := ctx.expandNode(an); args = append(args, s)
-                        //fmt.Printf("%v:%v:%v: arg '%v' ((%v) '%v') (%v)\n", ctx.l.file, an.lineno, an.colno, ctx.l.str(an), len(an.children), s, name)
+                        //fmt.Printf("%v:%v:%v: arg '%v' ((%v) '%v') (%v)\n", ctx.l.scope, an.lineno, an.colno, ctx.l.str(an), len(an.children), s, name)
                 }
                 v := ctx.call(name, args...)
-                //fmt.Printf("%v:%v:%v: call '%v' %v '%v'\n", ctx.l.file, n.lineno, n.colno, name, args, v)
+                //fmt.Printf("%v:%v:%v: call '%v' %v '%v'\n", ctx.l.scope, n.lineno, n.colno, name, args, v)
                 return v
         }
 
-        //fmt.Printf("%v:%v:%v: %v '%v' (%v)\n", ctx.l.file, n.lineno, n.colno, n.kind, ctx.l.str(n), len(n.children))
+        //fmt.Printf("%v:%v:%v: %v '%v' (%v)\n", ctx.l.scope, n.lineno, n.colno, n.kind, ctx.l.str(n), len(n.children))
         var b bytes.Buffer
         for _, cn := range n.children {
                 v := ctx.expandNode(cn)
                 b.WriteString(v)
-                //fmt.Printf("%v:%v:%v: %v '%v' '%v'\n", ctx.l.file, cn.lineno, cn.colno, cn.kind, ctx.l.str(cn), v)
+                //fmt.Printf("%v:%v:%v: %v '%v' '%v'\n", ctx.l.scope, cn.lineno, cn.colno, cn.kind, ctx.l.str(cn), v)
         }
         return b.String()
 }
 
 func (ctx *context) processNode(n *node) (err error) {
-        //fmt.Printf("%v:%v:%v: node '%v' (%v, %v)\n", ctx.l.file, n.lineno, n.colno, ctx.l.str(n), n.kind, len(n.children))
+        //fmt.Printf("%v:%v:%v: node '%v' (%v, %v)\n", ctx.l.scope, n.lineno, n.colno, ctx.l.str(n), n.kind, len(n.children))
 
         switch n.kind {
         case nodeComment:
@@ -647,17 +650,17 @@ func (ctx *context) processNode(n *node) (err error) {
         case nodeAssign:
                 nn, nv := n.children[0], n.children[2]
                 ctx.set(ctx.expandNode(nn), ctx.l.str(nv))
-                //fmt.Printf("%v:%v:%v: %v %v\n", ctx.l.file, n.lineno, n.colno, ctx.l.str(nn), ctx.l.str(nv))
-                //fmt.Printf("%v:%v:%v: '%v' '%v'\n", ctx.l.file, n.lineno, n.colno, ctx.expandNode(nn), ctx.l.str(nv))
+                //fmt.Printf("%v:%v:%v: %v %v\n", ctx.l.scope, n.lineno, n.colno, ctx.l.str(nn), ctx.l.str(nv))
+                //fmt.Printf("%v:%v:%v: '%v' '%v'\n", ctx.l.scope, n.lineno, n.colno, ctx.expandNode(nn), ctx.l.str(nv))
         case nodeSimpleAssign:
                 nn, nv := n.children[0], n.children[2]
                 ctx.set(ctx.expandNode(nn), ctx.expandNode(nv))
-                //fmt.Printf("%v:%v:%v: %v %v\n", ctx.l.file, n.lineno, n.colno, ctx.l.str(nn), ctx.l.str(nv))
-                //fmt.Printf("%v:%v:%v: '%v' '%v'\n", ctx.l.file, n.lineno, n.colno, ctx.expandNode(nn), ctx.expandNode(nv))
+                //fmt.Printf("%v:%v:%v: %v %v\n", ctx.l.scope, n.lineno, n.colno, ctx.l.str(nn), ctx.l.str(nv))
+                //fmt.Printf("%v:%v:%v: '%v' '%v'\n", ctx.l.scope, n.lineno, n.colno, ctx.expandNode(nn), ctx.expandNode(nv))
         case nodeQuestionAssign:
                 // TODO: ...
         case nodeCall:
-                //fmt.Printf("%v:%v:%v: call %v\n", ctx.l.file, n.lineno, n.colno, ctx.l.str(n))
+                //fmt.Printf("%v:%v:%v: call %v\n", ctx.l.scope, n.lineno, n.colno, ctx.l.str(n))
                 if s := ctx.expandNode(n); s != "" {
                         errorf(0, "illigal: %v (%v)", s, ctx.l.str(n))
                 }
@@ -677,7 +680,40 @@ func (ctx *context) parse() (err error) {
         return
 }
 
-func newContext(fn string) (ctx *context, err error) {
+func newParseContext(scope string, s []byte, vars map[string]string) (ctx *context, err error) {
+        ctx = &context{
+                l: lex{ parseBuffer:&parseBuffer{ scope:scope, s: s }, pos: 0, },
+                variables: make(map[string]*variable, 32),
+        }
+        for k, v := range vars {
+                ctx.set(k, v)
+        }
+        return
+}
+
+func parse(scope string, s []byte, vars map[string]string) (ctx *context, err error) {
+        if ctx, err = newParseContext(scope, s, vars); err != nil {
+                return
+        }
+
+        defer func() {
+                if e := recover(); e != nil {
+                        if se, ok := e.(*smarterror); ok {
+                                message("%v: %v", ctx.l.location(), se)
+                        } else {
+                                panic(e)
+                        }
+                }
+        }()
+
+        if err = ctx.parse(); err != nil {
+                return
+        }
+
+        return
+}
+
+func parseFile(fn string, vars map[string]string) (ctx *context, err error) {
         var f *os.File
 
         f, err = os.Open(fn)
@@ -692,30 +728,6 @@ func newContext(fn string) (ctx *context, err error) {
                 return
         }
 
-        ctx = &context{
-                l: lex{ file: fn, s: s, pos: 0, },
-                variables: make(map[string]*variable, 128),
-        }
-
-        return
-}
-
-func parse(conf string) (ctx *context, err error) {
-        ctx, err = newContext(conf)
-
-        defer func() {
-                if e := recover(); e != nil {
-                        if se, ok := e.(*smarterror); ok {
-                                fmt.Printf("%v: %v\n", ctx.l.location(), se)
-                        } else {
-                                panic(e)
-                        }
-                }
-        }()
-
-        if err = ctx.parse(); err != nil {
-                return
-        }
-
+        ctx, err = parse(fn, s, vars)
         return
 }

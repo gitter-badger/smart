@@ -60,7 +60,7 @@ func (ndk *_ndkbuild) configModule(ctx *context, args []string, vars map[string]
                 ctx.set("this.script",   strings.TrimSpace(script))
                 ctx.set("this.stl",      strings.TrimSpace(stl))
 
-                //message("ndk-build: config: name=%v, dir=%v, args=%v, vars=%v", ctx.module.name, ctx.module.dir, args, vars)
+                message("ndk-build: config: name=%v, dir=%v, args=%v, vars=%v", ctx.module.name, ctx.module.dir, args, vars)
                 return script != ""
         }
         return false
@@ -239,13 +239,8 @@ func (n *_ndkbuildCmd) dumpAll(abi string, scripts []string) (res *_ndkbuildDump
         c := &excmd{ path:"ndk-build" }
         if c.run("" /*fmt.Sprintf("%s (%s)", filepath.Base(tf), abi)*/, vars...) {
                 //fmt.Printf("%v", c.stdout.String())
-                ctx := &context{
-                        l: lex{ s:c.stdout.Bytes() },
-                        variables: make(map[string]*variable, 16),
-                }
-                if e := ctx.parse(); e != nil {
-                        errorf(0, "DummyDump: %v", e)
-                }
+                ctx, e := parse("DummyDump", c.stdout.Bytes(), nil)
+                if e != nil { errorf(0, "DummyDump: %v", e) }
                 res.ndkRoot = ctx.call("NDK_ROOT")
                 res.targetOut = ctx.call("TARGET_OUT")
                 res.targetObjs = ctx.call("TARGET_OBJS")
@@ -292,13 +287,8 @@ func (n *_ndkbuildCmd) dumpSingle(abi string) (res *_ndkbuildDump) {
 
         if c.run("", vars...) {
                 //fmt.Printf( "%v", c.stdout.String() )
-                ctx := &context{
-                        l: lex{ s:c.stdout.Bytes() },
-                        variables: make(map[string]*variable, 16),
-                }
-                if e := ctx.parse(); e != nil {
-                        errorf(0, "DummyDump: %v", e)
-                }
+                ctx, e := parse("DummyDump", c.stdout.Bytes(), nil)
+                if e != nil { errorf(0, "DummyDump: %v", e) }
                 //res.appName = ctx.call("NDK_APP_NAME")
                 //res.module = ctx.call("LOCAL_MODULE")
                 //res.moduleClass = ctx.call("LOCAL_MODULE_CLASS")

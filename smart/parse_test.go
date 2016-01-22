@@ -8,13 +8,13 @@ import (
 )
 
 func newTestLex(file, s string) (l *lex) {
-        l = &lex{ file:file, s:[]byte(s), pos:0, }
+        l = &lex{ parseBuffer:&parseBuffer{ scope:file, s:[]byte(s) }, pos:0, }
         return
 }
 
 func newTestContext(file, s string) (p *context) {
         p = &context{
-                l: lex{ file:file, s:[]byte(s), pos:0, },
+                l: lex{ parseBuffer:&parseBuffer{ scope:file, s:[]byte(s) }, pos:0, },
                 variables:make(map[string]*variable, 200),
         }
         return
