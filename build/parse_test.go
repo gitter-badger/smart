@@ -15,8 +15,8 @@ func newTestLex(file, s string) (l *lex) {
         return
 }
 
-func newTestContext(file, s string) (p *context) {
-        p, _ = newContext(file, []byte(s), nil)
+func newTestContext(file, s string) (p *Context, e error) {
+        p, e = NewContext(file, []byte(s), nil)
         return
 }
 
@@ -98,10 +98,16 @@ cc ::= cc
 n != n
 
 f_$a_$b_$c_3 := f_$($a)_$($($b))_$(${$($c)})
+
+empty1 =
+empty2 :=
+empty3 = 
+empty4 =    
+empty5 =	
 `)
         l.parse()
 
-        if ex := 14; len(l.nodes) != ex { t.Errorf("expecting %v nodes but got %v", ex, len(l.nodes)) }
+        if ex := 19; len(l.nodes) != ex { t.Errorf("expecting %v nodes but got %v", ex, len(l.nodes)) }
 
         var (
                 countDeferredDefines = 0
@@ -121,9 +127,9 @@ f_$a_$b_$c_3 := f_$($a)_$($($b))_$(${$($c)})
                 case nodeDefineNot:             countNotDefines++
                 }
         }
-        if ex := 7; countDeferredDefines != ex          { t.Errorf("expecting %v %v nodes, but got %v", ex, nodeDefineDeferred,      countDeferredDefines) }
+        if ex := 11; countDeferredDefines != ex         { t.Errorf("expecting %v %v nodes, but got %v", ex, nodeDefineDeferred,      countDeferredDefines) }
         if ex := 1; countQuestionedDefines != ex        { t.Errorf("expecting %v %v nodes, but got %v", ex, nodeDefineQuestioned,    countQuestionedDefines) }
-        if ex := 2; countSingleColonedDefines != ex     { t.Errorf("expecting %v %v nodes, but got %v", ex, nodeDefineSingleColoned, countSingleColonedDefines) }
+        if ex := 3; countSingleColonedDefines != ex     { t.Errorf("expecting %v %v nodes, but got %v", ex, nodeDefineSingleColoned, countSingleColonedDefines) }
         if ex := 1; countDoubleColonedDefines != ex     { t.Errorf("expecting %v %v nodes, but got %v", ex, nodeDefineDoubleColoned, countDoubleColonedDefines) }
         if ex := 2; countAppendDefines != ex            { t.Errorf("expecting %v %v nodes, but got %v", ex, nodeDefineAppend,        countAppendDefines) }
         if ex := 1; countNotDefines != ex               { t.Errorf("expecting %v %v nodes, but got %v", ex, nodeDefineNot,           countNotDefines) }
@@ -143,7 +149,7 @@ f_$a_$b_$c_3 := f_$($a)_$($($b))_$(${$($c)})
                 var cn int
                 for cn = 0; cn < len(c.children) && cn < len(cs); cn++ {
                         nd := c.children[cn]
-                        if nd.end <= nd.pos {
+                        if nd.end < nd.pos {
                                 t.Errorf("%v: child %v has bad range [%v, %v) (%v)", i, cn, nd.pos, nd.end, l.str(c))
                         }
                         if s := l.str(nd); s != cs[cn] {
@@ -250,6 +256,12 @@ $(a) \
         cc = cc.children[0]; checkNode(cc, nodeCall, 1, "$($b)", "$b")
         cc = cc.children[0]; checkNode(cc, nodeCallName, 1, "$b", "$b")
         cc = cc.children[0]; checkNode(cc, nodeCall, 1, "$b", "b")
+
+        i = 14; c = l.nodes[i]; checkNode(c, nodeDefineDeferred, 2, `=`, "empty1", "")
+        i = 15; c = l.nodes[i]; checkNode(c, nodeDefineSingleColoned, 2, `:=`, "empty2", "")
+        i = 16; c = l.nodes[i]; checkNode(c, nodeDefineDeferred, 2, `=`, "empty3", "")
+        i = 17; c = l.nodes[i]; checkNode(c, nodeDefineDeferred, 2, `=`, "empty4", "")
+        i = 18; c = l.nodes[i]; checkNode(c, nodeDefineDeferred, 2, `=`, "empty5", "")
 }
 
 func TestLexCalls(t *testing.T) {
@@ -304,7 +316,7 @@ aaa |$(foo)|$(bar)| aaa
                 var cn int
                 for cn = 0; cn < len(c.children) && cn < len(cs); cn++ {
                         nd := c.children[cn]
-                        if nd.end <= nd.pos {
+                        if nd.end < nd.pos {
                                 t.Errorf("%v: child %v has bad range [%v, %v) (%v)", i, cn, nd.pos, nd.end, l.str(c))
                         }
                         if s := l.str(nd); s != cs[cn] {
@@ -412,7 +424,7 @@ c = xxx \#\
                 var cn int
                 for cn = 0; cn < len(c.children) && cn < len(cs); cn++ {
                         nd := c.children[cn]
-                        if nd.end <= nd.pos {
+                        if nd.end < nd.pos {
                                 t.Errorf("%v: child %v has bad range [%v, %v) (%v)", i, cn, nd.pos, nd.end, l.str(c))
                         }
                         if s := l.str(nd); s != cs[cn] {
@@ -491,7 +503,7 @@ blah : blah.c
                 var cn int
                 for cn = 0; cn < len(c.children) && cn < len(cs); cn++ {
                         nd := c.children[cn]
-                        if nd.end <= nd.pos {
+                        if nd.end < nd.pos {
                                 t.Errorf("%v: child %v has bad range [%v, %v) (%v)", i, cn, nd.pos, nd.end, l.str(c))
                         }
                         if s := l.str(nd); s != cs[cn] {
@@ -522,15 +534,13 @@ func TestParse(t *testing.T) {
                 fmt.Fprintf(info, "%v\n", strings.Join(args, " "))
         }
 
-        p := newTestContext("TestParse#1", `
+        p, err := newTestContext("TestParse#1", `
 a = a
 i = i
 ii = x x $a $i x x
 i1 = $a$i-$(ii)
 i2 = $a$($i)-$($i$i)
-`)
-
-        //if err := p.parse();          err != nil { t.Error("parse error:", err) }
+`);     if err != nil { t.Error("parse error:", err) }
         if ex, nl := 5, len(p.l.nodes); nl != ex { t.Error("expect", ex, "but", nl) }
 
         for _, s := range []string{ "a", "i", "ii", "i1", "i2" } {
@@ -546,7 +556,7 @@ i2 = $a$($i)-$($i$i)
         if s, ex := p.call("i2"), "ai-x x a i x x";     s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
 
         //////////////////////////////////////////////////
-        p = newTestContext("TestParse#2", `
+        p, err = newTestContext("TestParse#2", `
 a = a
 i = i
 ii = i $a i a \
@@ -558,9 +568,7 @@ aaaa = xxx$(info 1:$(sh$ared),$(stat$ic))-$(a$$a)-xxx
 bbbb := xxx$(info 2:$(sh$ared),$(stat$ic))-$(a$$a)-xxx
 cccc = xxx-$(sh$ared)-$(stat$ic)-$(a$$a)-xxx
 dddd := xxx-$(sh$ared)-$(stat$ic)-$(a$$a)-xxx
-`)
-
-        //if err := p.parse();           err != nil { t.Error("parse error:", err) }
+`);     if err != nil { t.Error("parse error:", err) }
         if ex, nl := 10, len(p.defines); nl != ex { t.Error("expect", ex, "defines, but", nl) }
 
         for _, s := range []string{ "a", "i", "ii", "shared", "static", "a$a", "aaaa", "bbbb", "cccc", "dddd" } {
@@ -584,16 +592,15 @@ dddd := xxx-$(sh$ared)-$(stat$ic)-$(a$$a)-xxx
         }
 }
 
-func _TestEmptyValue(t *testing.T) {
-        ctx := newTestContext("TestLexCalls", `
+func TestEmptyValue(t *testing.T) {
+        ctx, err := newTestContext("TestLexCalls", `
 foo =
 bar = bar
 foobar := 
 foobaz := foo-baz
-`)
-        //if err := ctx.parse(); err != nil { t.Errorf("parse error:", err) }
-        if s := ctx.call("foo"); s != "" { t.Errorf("foo: %s", s) }
-        if s := ctx.call("bar"); s != "bar" { t.Errorf("bar: %s", s) }
-        if s := ctx.call("foobar"); s != "" { t.Errorf("foobar: %s", s) }
-        if s := ctx.call("foobaz"); s != "foo-baz" { t.Errorf("foobaz: %s", s) }
+`);     if err != nil { t.Errorf("parse error:", err) }
+        if s := ctx.call("foo"); s != "" { t.Errorf("foo: '%s'", s) }
+        if s := ctx.call("bar"); s != "bar" { t.Errorf("bar: '%s'", s) }
+        if s := ctx.call("foobar"); s != "" { t.Errorf("foobar: '%s'", s) }
+        if s := ctx.call("foobaz"); s != "foo-baz" { t.Errorf("foobaz: '%s'", s) }
 }

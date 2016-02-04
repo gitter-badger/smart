@@ -4,13 +4,7 @@
 package smart
 
 import (
-        "bytes"
-        "fmt"
-        "os"
-        "os/exec"
-        "strings"
         "testing"
-        "path/filepath"
 )
 
 func TestSplitVarArgs(t *testing.T) {

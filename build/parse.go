@@ -411,8 +411,17 @@ func (l *lex) stateDefineTextLine() {
 
 state_loop:
         for l.get() {
-                if st.code == 0 && !unicode.IsSpace(l.rune) { // skip spaces after '='
+                /*
+                if st.code == 0 && l.rune != '\n' && !unicode.IsSpace(l.rune) { // skip spaces after '='
                         st.node.pos, st.code = l.pos-1, 1
+                } */
+                if st.code == 0 { // skip spaces after '='
+                        if !unicode.IsSpace(l.rune) {
+                                st.node.pos, st.code = l.pos-1, 1
+                        } else if l.rune != '\n' /* IsSpace */ {
+                                st.node.pos = l.pos
+                                continue
+                        }
                 }
 
                 switch {
