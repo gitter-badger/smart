@@ -9,17 +9,18 @@ import (
         "path/filepath"
         "runtime"
         "strings"
+        . "github.com/duzy/smart/build"
 )
 
 func init() {
         ndk := &_androidndk{ root:"", toolchainByAbi:make(map[string]string, 5) }
-        registerToolset("android-ndk", ndk)
+        RegisterToolset("android-ndk", ndk)
 
         if c, e := exec.LookPath("ndk-build"); e == nil {
                 ndk.root = filepath.Dir(c)
         } else {
                 if ndk.root = os.Getenv("ANDROIDNDK"); ndk.root == "" {
-                        message("cant locate Android NDK: %v", e)
+                        Message("cant locate Android NDK: %v", e)
                 }
         }
 
@@ -29,16 +30,16 @@ func init() {
 
         toolchainsDir := filepath.Join(ndk.root, "toolchains")
 
-        names, err := readDirNames(toolchainsDir)
+        names, err := ReadDirNames(toolchainsDir)
         if err != nil {
-                message("no toolchains in Android NDK `%v' (%v)", ndk.root, err)
+                Message("no toolchains in Android NDK `%v' (%v)", ndk.root, err)
                 return
         }
 
         for _, name := range names {
                 d := filepath.Join(toolchainsDir, name)
                 if !ndk.addToolchain(d) {
-                        //message("bad toolchain `%v'", d)
+                        //Message("bad toolchain `%v'", d)
                 }
         }
 }
@@ -47,27 +48,27 @@ type _androidndk struct {
         _gcc
         root string
         toolchainByAbi map[string]string
-        modules map[string]*module
+        modules map[string]*Module
 }
 
 func (ndk *_androidndk) addToolchain(d string) bool {
         toolchain := filepath.Base(d)
         if toolchain == "" {
-                message("error: toolchain: %v", d)
+                Message("error: toolchain: %v", d)
                 return false
         }
 
         fn := filepath.Join(d, "config.mk")
-        ctx, err := newContextFromFile(fn, nil)
+        ctx, err := NewContextFromFile(fn, nil)
         if err != nil {
-                //message("error: toolchain: %v", err)
+                //Message("error: toolchain: %v", err)
                 return false
         }
 
-        if s := strings.TrimSpace(ctx.call("TOOLCHAIN_ABIS")); s != "" {
+        if s := strings.TrimSpace(ctx.Call("TOOLCHAIN_ABIS")); s != "" {
                 abis := strings.Split(s, " ")
                 for _, abi := range abis {
-                        //message("%v: %v, %v", fn, toolchain, abi)
+                        //Message("%v: %v, %v", fn, toolchain, abi)
                         ndk.toolchainByAbi[abi] = toolchain
                 }
                 return true
@@ -98,19 +99,18 @@ func (ndk *_androidndk) toolchainDir(abi string) string {
         return ""
 }
 
-func (ndk *_androidndk) configModule(ctx *context, args []string, vars map[string]string) bool {
-        if !ndk._gcc.configModule(ctx, args, vars) {
+func (ndk *_androidndk) ConfigModule(ctx *Context, m *Module, args []string, vars map[string]string) bool {
+        if !ndk._gcc.ConfigModule(ctx, m, args, vars) {
                 return false
         }
 
-        var m = ctx.module
-        if _, ok := ndk.modules[ctx.module.name]; ok {
+        if _, ok := ndk.modules[m.Name]; ok {
                 //errorf(0, "module `%v' already defined in $ANDROIDNDK/sources", m.name)
         }
 
         var ld *gccCommand
-        if c, ok := m.action.command.(*gccCommand); !ok {
-                errorf(0, "not a gcc command")
+        if c, ok := m.Action.Command.(*gccCommand); !ok {
+                Errorf(0, "not a gcc command")
         } else {
                 ld = c
         }
@@ -120,12 +120,12 @@ func (ndk *_androidndk) configModule(ctx *context, args []string, vars map[strin
         if s, ok := vars["PLATFORM"]; ok { platform = s } else { platform = "android-9" }
 
         bin := filepath.Join(ndk.toolchainDir(abi), "bin")
-        switch filepath.Base(ld.path) {
-        case "ld": ld.path = filepath.Join(bin, "arm-linux-androideabi-ld")
-        case "ar": ld.path = filepath.Join(bin, "arm-linux-androideabi-ar")
+        switch filepath.Base(ld.GetPath()) {
+        case "ld": ld.SetPath(filepath.Join(bin, "arm-linux-androideabi-ld"))
+        case "ar": ld.SetPath(filepath.Join(bin, "arm-linux-androideabi-ar"))
         }
 
-        ld.ia32 = isIA32Command(ld.path)
+        ld.SetIA32(IsIA32Command(ld.GetPath()))
 
         arch := "arch-"
         switch {
@@ -136,66 +136,69 @@ func (ndk *_androidndk) configModule(ctx *context, args []string, vars map[strin
         includes := filepath.Join(ndk.root, "platforms", platform, arch, "usr/include")
         libdirs := filepath.Join(ndk.root, "platforms", platform, arch, "usr/lib")
 
+        /*
         var v *define
         loc := ctx.l.location()
-        v = ctx.set("this.abi", abi);           v.loc = *loc
-        v = ctx.set("this.platform", platform); v.loc = *loc
-        v = ctx.set("this.includes", includes); v.loc = *loc
-        v = ctx.set("this.libdirs", libdirs);   v.loc = *loc
+        v = ctx.set("me.abi", abi);           v.loc = *loc
+        v = ctx.set("me.platform", platform); v.loc = *loc
+        v = ctx.set("me.includes", includes); v.loc = *loc
+        v = ctx.set("me.libdirs", libdirs);   v.loc = *loc */
+        ctx.Set("me.abi", abi)
+        ctx.Set("me.platform", platform)
+        ctx.Set("me.includes", includes)
+        ctx.Set("me.libdirs", libdirs)
         return true
 }
 
-func (ndk *_androidndk) createActions(ctx *context, args []string) bool {
-        if !ndk._gcc.createActions(ctx, args) {
+func (ndk *_androidndk) CreateActions(ctx *Context, m *Module, args []string) bool {
+        if !ndk._gcc.CreateActions(ctx, m, args) {
                 return false
         }
 
-        var m = ctx.module
-
-        platform := strings.TrimSpace(ctx.call("this.platform"))
+        platform := strings.TrimSpace(ctx.Call("me.platform"))
         if platform == "" {
-                errorf(0, "unkown platform for `%v'", m.name)
+                Errorf(0, "unkown platform for `%v'", m.Name)
         }
 
-        bin := filepath.Join(ndk.toolchainDir(ctx.call("this.abi")), "bin")
+        bin := filepath.Join(ndk.toolchainDir(ctx.Call("me.abi")), "bin")
         binAs := filepath.Join(bin, "arm-linux-androideabi-as")
         binGcc := filepath.Join(bin, "arm-linux-androideabi-gcc")
         binGxx := filepath.Join(bin, "arm-linux-androideabi-g++")
 
-        var setCommands func(a *action)
-        setCommands = func(a *action) {
-                for _, pre := range a.prequisites {
-                        if pre.command == nil { continue }
-                        if c, ok := pre.command.(*gccCommand); !ok {
-                                message("%v: wrong command `%v'", ctx.l.location(), pre.command)
+        var setCommands func(a *Action)
+        setCommands = func(a *Action) {
+                for _, pre := range a.Prequisites {
+                        if pre.Command == nil { continue }
+                        if c, ok := pre.Command.(*gccCommand); !ok {
+                                Message("%v: wrong command `%v'", ctx.CurrentLocation(), pre.Command)
                                 continue
                         } else {
-                                switch filepath.Base(c.path) {
-                                case "as":  c.path = binAs
-                                case "gcc": c.path = binGcc
-                                case "g++": c.path = binGxx
-                                default: errorf(0, "unknown command %v", c.path)
+                                switch filepath.Base(c.GetPath()) {
+                                case "as":  c.SetPath(binAs)
+                                case "gcc": c.SetPath(binGcc)
+                                case "g++": c.SetPath(binGxx)
+                                default: Errorf(0, "unknown command %v", c.GetPath())
                                 }
 
-                                c.ia32 = isIA32Command(c.path)
+                                c.SetIA32(IsIA32Command(c.GetPath()))
                         }
                         setCommands(pre)
                 }
         }
-        setCommands(m.action)
+        setCommands(m.Action)
         return true
 }
 
 func (ndk *_androidndk) loadModule(fn, ndksrc, subdir string) (ok bool) {
-        ctx, err := newContextFromFile(fn, map[string]string{
+        ctx, err := NewContextFromFile(fn, map[string]string{
                 "my-dir": filepath.Join(ndksrc, subdir),
         })
 
         if err != nil {
-                errorf(0, "failed to load module resident in $ANDROIDNDK/sources/%v", subdir)
+                Errorf(0, "failed to load module resident in $ANDROIDNDK/sources/%v", subdir)
         }
 
-        message("ndk: %v, %v", subdir, ctx.call("LOCAL_PATH"))
+        Message("ndk: %v, %v", subdir, ctx.Call("LOCAL_PATH"))
         return false
 }
 
@@ -203,7 +206,7 @@ func (ndk *_androidndk) loadModules() (ok bool) {
         return true
 
         ndksrc := filepath.Join(ndk.root, "sources")
-        err := traverse(ndksrc, func(fn string, fi os.FileInfo) bool {
+        err := Traverse(ndksrc, func(fn string, fi os.FileInfo) bool {
                 if !fi.IsDir() && fi.Name() == "Android.mk" {
                         if ok = ndk.loadModule(fn, ndksrc, filepath.Dir(fn[len(ndksrc)+1:])); !ok {
                                 //return false
@@ -217,17 +220,21 @@ func (ndk *_androidndk) loadModules() (ok bool) {
         return ok
 }
 
-func (ndk *_androidndk) useModule(ctx *context, m *module) bool {
-        if !(m.toolset == nil && m.kind == "") {
+func (ndk *_androidndk) UseModule(ctx *Context, m, o *Module) bool {
+        if !(m.Toolset == nil && m.Kind == "") {
+                //errorf(0, "no toolset for `%v'", ctx.module.name)
+                return false
+        }
+        if !(o.Toolset == nil && o.Kind == "") {
                 //errorf(0, "no toolset for `%v'", ctx.module.name)
                 return false
         }
 
         if ndk.modules == nil && !ndk.loadModules() {
-                errorf(0, "failed to load modules resident in $ANDROIDNDK/sources")
+                Errorf(0, "failed to load modules resident in $ANDROIDNDK/sources")
         }
 
-        message("use: %v by %v", m.name, ctx.module.name)
+        Message("use: %v by %v", m.Name, o.Name)
 
         return false
 }

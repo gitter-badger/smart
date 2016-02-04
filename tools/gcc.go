@@ -8,13 +8,14 @@ import (
         "os"
         "strings"
         "path/filepath"
+        . "github.com/duzy/smart/build"
 )
 
 func init() {
-        registerToolset("gcc", &_gcc{})
+        RegisterToolset("gcc", &_gcc{})
 }
 
-var gccSourcePatterns = []*filerule{
+var gccSourcePatterns = []*FileMatchRule{
         { "asm", ^os.ModeType, `\.(s|S)$` },
         { "c", ^os.ModeType, `\.(c)$` },
         { "c++", ^os.ModeType, `\.(cpp|cxx|cc|CC|C)$` },
@@ -24,17 +25,14 @@ var gccSourcePatterns = []*filerule{
 type _gcc struct {
 }
 
-func (gcc *_gcc) configModule(ctx *context, args []string, vars map[string]string) bool {
-        if ctx.module != nil {
-                return true
-        }
+func (gcc *_gcc) ConfigModule(ctx *Context, m *Module, args []string, vars map[string]string) bool {
         return false
 }
 
-func (gcc *_gcc) createActions(ctx *context, args []string) bool {
+func (gcc *_gcc) CreateActions(ctx *Context, m *Module, args []string) bool {
         var cmd *gccCommand
-        var targetName = ctx.module.name
-        switch ctx.module.kind {
+        var targetName = m.Name
+        switch m.Kind {
         case "exe":
                 cmd = gccNewCommand("ld")
         case "shared":
@@ -45,10 +43,11 @@ func (gcc *_gcc) createActions(ctx *context, args []string) bool {
                 if !strings.HasSuffix(targetName, ".a")  { targetName = targetName + ".a" }
                 cmd = gccNewCommand("ar", "crs")
         default:
-                errorf(0, fmt.Sprintf("unknown type `%v'", ctx.module.kind))
+                Errorf(0, fmt.Sprintf("unknown type `%v'", m.Kind))
         }
-        cmd.mkdir = filepath.Join("out", ctx.module.name)
-        ctx.module.action = newAction(filepath.Join("out", ctx.module.name, targetName), cmd)
+        cmd.SetMkdir(filepath.Join("out", m.Name))
+
+        m.Action = NewAction(filepath.Join("out", m.Name, targetName), cmd)
 
         // Add proper prefixes to includes, libdirs, libs.
         splitFieldsWithPrefix := func(ss, prefix string) (l []string) {
@@ -67,29 +66,29 @@ func (gcc *_gcc) createActions(ctx *context, args []string) bool {
                 }
                 return
         }
-        includes := splitFieldsWithPrefix(ctx.call("this.includes"), "-I")
-        libdirs := splitFieldsWithPrefix(ctx.call("this.libdirs"), "-L")
-        libs := splitFieldsWithPrefix(ctx.call("this.libs"), "-l")
+        includes := splitFieldsWithPrefix(ctx.Call("me.includes"), "-I")
+        libdirs := splitFieldsWithPrefix(ctx.Call("me.libdirs"), "-L")
+        libs := splitFieldsWithPrefix(ctx.Call("me.libs"), "-l")
 
         // Import includes and libs from using modules.
-        var useMod func(mod *module)
-        useMod = func(mod *module) {
-                for _, u := range mod.using {
-                        if v := strings.TrimSpace(ctx.callWith(u, "this.export.includes")); v != "" {
+        var useMod func(mod *Module)
+        useMod = func(mod *Module) {
+                for _, u := range mod.Using {
+                        if v := strings.TrimSpace(ctx.CallWith(u, "me.export.includes")); v != "" {
                                 includes = append(includes, splitFieldsWithPrefix(v, "-I")...)
                         }
-                        if v := strings.TrimSpace(ctx.callWith(u, "this.export.libdirs")); v != "" {
+                        if v := strings.TrimSpace(ctx.CallWith(u, "me.export.libdirs")); v != "" {
                                 libdirs = append(libdirs, splitFieldsWithPrefix(v, "-L")...)
                         }
-                        if v := strings.TrimSpace(ctx.callWith(u, "this.export.libs")); v != "" {
+                        if v := strings.TrimSpace(ctx.CallWith(u, "me.export.libs")); v != "" {
                                 libs = append(libs, splitFieldsWithPrefix(v, "-l")...)
                         }                        
                         useMod(u)
                 }
         }
-        useMod(ctx.module)
+        useMod(m)
 
-        //fmt.Printf("libs: (%v) %v %v\n", ctx.module.name, libdirs, libs)
+        //fmt.Printf("libs: (%v) %v %v\n", m.Name, libdirs, libs)
 
         cmdAs  := gccNewCommand("as",  "-c")
         cmdGcc := gccNewCommand("gcc", "-c")
@@ -99,67 +98,66 @@ func (gcc *_gcc) createActions(ctx *context, args []string) bool {
                 c.args = append(c.args, includes...)
         }
 
-        if ctx.module.kind != "static" {
+        if m.Kind != "static" {
                 cmd.libdirs, cmd.libs = libdirs, libs
         }
 
-        sources := ctx.module.getSources(ctx)
-        if len(sources) == 0 { errorf(0, "no sources for `%v'", ctx.module.name) }
-        //fmt.Printf("sources: %v: %v\n", ctx.module.name, sources)
-        actions := createSourceTransformActions(sources, func(src string) (name string, c command) {
-                var fr *filerule
+        sources := m.GetSources(ctx)
+        if len(sources) == 0 { Errorf(0, "no sources for `%v'", m.Name) }
+        //fmt.Printf("sources: %v: %v\n", m.Name, sources)
+        actions := CreateSourceTransformActions(sources, func(src string) (name string, c Command) {
+                var fr *FileMatchRule
                 if fi, err := os.Stat(src); err != nil {
-                        fr = matchFileName(src, gccSourcePatterns)
+                        fr = MatchFileName(src, gccSourcePatterns)
                 } else {
-                        fr = matchFileInfo(fi, gccSourcePatterns)
+                        fr = MatchFileInfo(fi, gccSourcePatterns)
                 }
 
                 if fr == nil {
-                        errorf(0, "unknown source `%v'", src)
+                        Errorf(0, "unknown source `%v'", src)
                 }
                 
-                switch fr.name {
+                switch fr.Name {
                 case "asm": c = cmdAs
                 case "c":   c = cmdGcc
-                        if cmd.path == "ld" { cmd.path = "gcc" }
+                        if cmd.GetPath() == "ld" { cmd.SetPath("gcc") }
                 case "c++": c = cmdGxx
-                        if cmd.path != "g++" && cmd.path != "ar" { cmd.path = "g++" }
+                        if s := cmd.GetPath(); s != "g++" && s != "ar" { cmd.SetPath("g++") }
                 default:
-                        errorf(0, "unknown language for source `%v'", src)
+                        Errorf(0, "unknown language for source `%v'", src)
                 }
 
                 name = src + ".o"
                 return
         })
-        ctx.module.action.prequisites = append(ctx.module.action.prequisites, actions...)
+        m.Action.Prequisites = append(m.Action.Prequisites, actions...)
 
-        //fmt.Printf("module: %v, %v, %v\n", ctx.module.name, ctx.module.action.targets, len(ctx.module.action.prequisites))
-        return ctx.module.action != nil
+        //fmt.Printf("module: %v, %v, %v\n", m.Name, m.Action.targets, len(m.Action.prequisites))
+        return m.Action != nil
 }
 
-func (gcc *_gcc) useModule(ctx *context, m *module) bool {
-        //fmt.Printf("TODO: use: %v by %v\n", m.name, ctx.module.name)
+func (gcc *_gcc) UseModule(ctx *Context, m, o *Module) bool {
+        //fmt.Printf("TODO: use: %v by %v\n", m.Name, m.Name)
         return false
 }
 
 type gccCommand struct {
-        excmd
+        *Excmd
         args []string
         libdirs, libs []string
 }
 
 func gccNewCommand(name string, args ...string) *gccCommand {
         return &gccCommand{
-                excmd{ path: name, },
-                args, []string{}, []string{},
+                NewExcmd(name), args, []string{}, []string{},
         }
 }
 
-func (c *gccCommand) execute(targets []string, prequisites []string) bool {
+func (c *gccCommand) Execute(targets []string, prequisites []string) bool {
         var args []string
         var target = targets[0]
 
-        isar := c.path == "ar" || strings.HasSuffix(c.path, "-ar")
+        isar := c.GetPath() == "ar" || strings.HasSuffix(c.GetPath(), "-ar")
 
         if isar {
                 args = append(c.args, target)
@@ -173,5 +171,5 @@ func (c *gccCommand) execute(targets []string, prequisites []string) bool {
                 args = append(args, append(c.libdirs, c.libs...)...)
         }
 
-        return c.run(target, args...)
+        return c.Run(target, args...)
 }

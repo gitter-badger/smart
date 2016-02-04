@@ -9,9 +9,12 @@ import (
         "testing"
         //"fmt"
         "os"
+        . "github.com/duzy/smart/build"
+        . "github.com/duzy/smart/test"
 )
 
 func testToolsetAndroidSDK(t *testing.T) {
+        modules, moduleOrderList, moduleBuildList := GetModules(), GetModuleOrderList(), GetModuleBuildList()
         if l := len(modules); l != 0 { t.Errorf("expecting len(modules) for 0, but %v", l); return }
         if l := len(moduleOrderList); l != 0 { t.Errorf("expecting len(moduleOrderList) for 0, but %v", l); return }
         if l := len(moduleBuildList); l != 0 { t.Errorf("expecting len(moduleBuildList) for 0, but %v", l); return }
@@ -21,7 +24,7 @@ func testToolsetAndroidSDK(t *testing.T) {
                 os.RemoveAll("out")
         }()
 
-        Build(computeTestRunParams())
+        Build(ComputeTestRunParams())
 
         if fi, e := os.Stat("out"); fi == nil || e != nil || !fi.IsDir() { t.Errorf("failed: %v", e); return }
         if fi, e := os.Stat("out/foo_androidsdk_jar"); fi == nil || e != nil || !fi.IsDir() { t.Errorf("failed: %v", e); return }
@@ -60,9 +63,9 @@ func testToolsetAndroidSDK(t *testing.T) {
         if fi, e := os.Stat("out/foo_androidsdk_apk/signed.apk"); fi == nil || e != nil { t.Errorf("failed: %v", e); return }
         if fi, e := os.Stat("out/foo_androidsdk_apk/foo_androidsdk_apk.apk"); fi == nil || e != nil { t.Errorf("failed: %v", e); return }
 
-        l1 := runcmd("jar", "tf", "out/foo_androidsdk_jar/foo_androidsdk_jar.jar")
-        l2 := runcmd("jar", "tf", "out/foo_androidsdk_use_jar/foo_androidsdk_use_jar.apk")
-        l3 := runcmd("jar", "tf", "out/foo_androidsdk_apk/foo_androidsdk_apk.apk")
+        l1 := Runcmd("jar", "tf", "out/foo_androidsdk_jar/foo_androidsdk_jar.jar")
+        l2 := Runcmd("jar", "tf", "out/foo_androidsdk_use_jar/foo_androidsdk_use_jar.apk")
+        l3 := Runcmd("jar", "tf", "out/foo_androidsdk_apk/foo_androidsdk_apk.apk")
 
         if s := "org/smart/test/foo/Foo.class\n"; !strings.Contains(l1, s)      { t.Errorf("missing %v----------\n%v", s, l1); return }
         if s := "org/smart/test/foo/R.class\n"; !strings.Contains(l1, s)        { t.Errorf("missing %v----------\n%v", s, l1); return }
@@ -87,6 +90,7 @@ func testToolsetAndroidSDK(t *testing.T) {
 }
 
 func testToolsetAndroidSDKJNI(t *testing.T) {
+        modules, moduleOrderList, moduleBuildList := GetModules(), GetModuleOrderList(), GetModuleBuildList()
         if l := len(modules); l != 0 { t.Errorf("expecting len(modules) for 0, but %v", l); return }
         if l := len(moduleOrderList); l != 0 { t.Errorf("expecting len(moduleOrderList) for 0, but %v", l); return }
         if l := len(moduleBuildList); l != 0 { t.Errorf("expecting len(moduleBuildList) for 0, but %v", l); return }
@@ -98,7 +102,7 @@ func testToolsetAndroidSDKJNI(t *testing.T) {
                 os.RemoveAll("libs")
         }()
 
-        Build(computeTestRunParams())
+        Build(ComputeTestRunParams())
 
         if fi, e := os.Stat("out"); fi == nil || e != nil || !fi.IsDir() { t.Errorf("failed: %v", e); return }
         if fi, e := os.Stat("out/local/armeabi"); fi == nil || e != nil || !fi.IsDir() { t.Errorf("failed: %v", e); return }
@@ -138,13 +142,13 @@ func testToolsetAndroidSDKJNI(t *testing.T) {
         if fi, e := os.Stat("out/foo_apk/signed.apk"); fi == nil || e != nil { t.Errorf("failed: %v", e); return }
         if fi, e := os.Stat("out/foo_apk/foo_apk.apk"); fi == nil || e != nil { t.Errorf("failed: %v", e); return }
 
-        l := runcmd("jar", "tf", "out/foo_apk/foo_apk.apk")
+        l := Runcmd("jar", "tf", "out/foo_apk/foo_apk.apk")
 
         if s := "lib/armeabi/libfoo.so\n"; !strings.Contains(l, s) { t.Errorf("missing %v----------\n%v", s, l); return }
         if s := "lib/armeabi-v7a/libfoo.so\n"; !strings.Contains(l, s) { t.Errorf("missing %v----------\n%v", s, l); return }
 }
 
 func TestToolsetAndroidSDK(t *testing.T) {
-        //runToolsetTestCase(t, "android-sdk", testToolsetAndroidSDK)
-        //runToolsetTestCase(t, "android", testToolsetAndroidSDKJNI)
+        RunToolsetTestCase(t, "android-sdk", testToolsetAndroidSDK)
+        RunToolsetTestCase(t, "android", testToolsetAndroidSDKJNI)
 }

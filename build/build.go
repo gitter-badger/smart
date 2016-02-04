@@ -19,7 +19,7 @@ import (
 var (
         toolsets = map[string]*toolsetStub{}
 
-        generalMetaFiles = []*filerule{
+        generalMetaFiles = []*FileMatchRule{
                 { "backup", os.ModeDir |^ os.ModeType, `[^~]*~$` },
                 //{ "git", os.ModeDir |^ os.ModeType, `\.git(ignore)?` },
                 { "git", os.ModeDir, `^\.git$` },
@@ -32,15 +32,15 @@ var (
 
 // toolset represents a toolchain like gcc and related utilities.
 type toolset interface {
-        // configModule setup the current module being processed by parser.
+        // ConfigModule setup the current module being processed by parser.
         // `args' and `vars' is passed in on the `$(module)' invocation.
-        configModule(p *context, args []string, vars map[string]string) bool
+        ConfigModule(p *Context, m *Module, args []string, vars map[string]string) bool
 
-        // createActions builds the action graph the current module
-        createActions(p *context, args []string) bool
+        // CreateActions builds the action graph the current module
+        CreateActions(p *Context, m *Module, args []string) bool
 
-        // useModule
-        useModule(p *context, m *module) bool
+        // UseModule
+        UseModule(p *Context, m, o *Module) bool
 }
 
 type toolsetStub struct {
@@ -48,7 +48,7 @@ type toolsetStub struct {
         toolset toolset
 }
 
-func registerToolset(name string, ts toolset) {
+func RegisterToolset(name string, ts toolset) {
         if _, has := toolsets[name]; has {
                 panic("toolset already registered: "+name)
         }
@@ -56,7 +56,7 @@ func registerToolset(name string, ts toolset) {
         toolsets[name] = &toolsetStub{ name:name, toolset:ts };
 }
 
-func isIA32Command(s string) bool {
+func IsIA32Command(s string) bool {
         buf := new(bytes.Buffer)
         cmd := exec.Command("file", "-b", s)
         cmd.Stdout = buf
@@ -69,11 +69,11 @@ func isIA32Command(s string) bool {
 }
 
 // A command executed by an action while updating a target.
-type command interface {
-        execute(targets []string, prequisites []string) bool
+type Command interface {
+        Execute(targets []string, prequisites []string) bool
 }
 
-type excmd struct {
+type Excmd struct {
         path string
         dir string
         mkdir string
@@ -85,7 +85,30 @@ type excmd struct {
         stdin io.Reader
 }
 
-func (c *excmd) run(targetHint string, args ...string) bool {
+func NewExcmd(s string) (c *Excmd) {
+        c.path = s
+        return
+}
+
+func (c *Excmd) GetPath() string { return c.path }
+func (c *Excmd) SetPath(s string) { c.path = s }
+func (c *Excmd) GetIA32() bool { return c.ia32 }
+func (c *Excmd) SetIA32(v bool) { c.ia32 = v }
+func (c *Excmd) SetMkdir(s string) { c.mkdir = s }
+func (c *Excmd) GetMkdir() string { return c.mkdir }
+func (c *Excmd) SetDir(s string) { c.dir = s }
+func (c *Excmd) GetDir() string { return c.dir }
+func (c *Excmd) SetStderr(s *bytes.Buffer/*io.Writer*/) { c.stderr = s }
+func (c *Excmd) GetStderr() *bytes.Buffer/*io.Writer*/ { return c.stderr }
+func (c *Excmd) SetStdout(s *bytes.Buffer/*io.Writer*/) { c.stdout = s }
+func (c *Excmd) GetStdout() *bytes.Buffer/*io.Writer*/ { return c.stdout }
+func (c *Excmd) SetStdin(s io.Reader) { c.stdin = s }
+func (c *Excmd) GetStdin() io.Reader { return c.stdin }
+func (c *Excmd) Run(targetHint string, args ...string) bool {
+        return c.run(targetHint, args...)
+}
+
+func (c *Excmd) run(targetHint string, args ...string) bool {
         if strings.HasPrefix(c.path, "~/") {
                 c.path = os.Getenv("HOME") + c.path[1:]
         }
@@ -168,11 +191,11 @@ func (c *excmd) run(targetHint string, args ...string) bool {
 
 // intercommand represents a intermdiate action command
 type intercommand interface {
-        command
-        targets(prequisites []*action) (names []string, needsUpdate bool)
+        Command
+        targets(prequisites []*Action) (names []string, needsUpdate bool)
 }
 
-func computeInterTargets(d, sre string, prequisites []*action) (targets []string, outdates int, outdateMap map[int]int) {
+func ComputeInterTargets(d, sre string, prequisites []*Action) (targets []string, outdates int, outdateMap map[int]int) {
         re := regexp.MustCompile(sre)
         outdateMap = map[int]int{}
         traverse(d, func(fn string, fi os.FileInfo) bool {
@@ -181,12 +204,12 @@ func computeInterTargets(d, sre string, prequisites []*action) (targets []string
                 outdateMap[i] = 0
                 targets = append(targets, fn)
                 for _, p := range prequisites {
-                        if pc, ok := p.command.(intercommand); ok {
-                                if _, needsUpdate := pc.targets(p.prequisites); needsUpdate {
+                        if pc, ok := p.Command.(intercommand); ok {
+                                if _, needsUpdate := pc.targets(p.Prequisites); needsUpdate {
                                         outdateMap[i]++
                                 }
                         } else {
-                                for _, t := range p.targets {
+                                for _, t := range p.Targets {
                                         if pfi, _ := os.Stat(t); pfi == nil {
                                                 errorf(0, "`%v' not found", t)
                                         } else if fi.ModTime().Before(pfi.ModTime()) {
@@ -201,27 +224,27 @@ func computeInterTargets(d, sre string, prequisites []*action) (targets []string
         return
 }
 
-// action performs a command for updating targets
-type action struct {
-        targets []string
-        prequisites []*action
-        command command
+// Action performs a command for updating targets
+type Action struct {
+        Targets []string
+        Prequisites []*Action
+        Command Command
 }
 
-func (a *action) update() (updated bool, updatedTargets []string) {
+func (a *Action) update() (updated bool, updatedTargets []string) {
         var targets []string
         var targetsNeedUpdate bool
         var isIntercommand bool
-        if a.command != nil {
-                if c, ok := a.command.(intercommand); ok {
-                        targets, targetsNeedUpdate = c.targets(a.prequisites)
+        if a.Command != nil {
+                if c, ok := a.Command.(intercommand); ok {
+                        targets, targetsNeedUpdate = c.targets(a.Prequisites)
                         isIntercommand = true
                 }
         }
 
         if !isIntercommand {
                 //fmt.Printf("targets: %v\n", a.targets)
-                targets = append(targets, a.targets...)
+                targets = append(targets, a.Targets...)
         }
 
         var missingTargets, outdatedTargets []int
@@ -241,17 +264,17 @@ func (a *action) update() (updated bool, updatedTargets []string) {
 
         updatedPreNum := 0
         prequisites := []string{}
-        for _, p := range a.prequisites {
+        for _, p := range a.Prequisites {
                 if u, pres := p.update(); u {
                         prequisites = append(prequisites, pres...)
                         updatedPreNum++
-                } else if pc, ok := p.command.(intercommand); ok {
-                        pres, nu := pc.targets(p.prequisites)
+                } else if pc, ok := p.Command.(intercommand); ok {
+                        pres, nu := pc.targets(p.Prequisites)
                         if nu { errorf(0, "requiring updating %v for %v", pres, targets) }
                         prequisites = append(prequisites, pres...)
                 } else {
-                        prequisites = append(prequisites, p.targets...)
-                        for _, pt := range p.targets {
+                        prequisites = append(prequisites, p.Targets...)
+                        for _, pt := range p.Targets {
                                 if fi, err := os.Stat(pt); err != nil {
                                         errorf(0, "`%v' not found", pt)
                                 } else {
@@ -265,7 +288,7 @@ func (a *action) update() (updated bool, updatedTargets []string) {
                 }
         }
 
-        if a.command == nil {
+        if a.Command == nil {
                 for n, i := range fis {
                         if i == nil {
                                 errorf(0, "`%s' not found", targets[n])
@@ -301,16 +324,16 @@ func (a *action) update() (updated bool, updatedTargets []string) {
         return
 }
 
-func (a *action) force(targets []string, tarfis []os.FileInfo, prequisites []string) (updated bool, updatedTargets []string) {
-        updated = a.command.execute(targets, prequisites)
+func (a *Action) force(targets []string, tarfis []os.FileInfo, prequisites []string) (updated bool, updatedTargets []string) {
+        updated = a.Command.Execute(targets, prequisites)
 
         if updated {
                 var targetsNeedUpdate bool
-                if c, ok := a.command.(intercommand); ok {
-                        updatedTargets, targetsNeedUpdate = c.targets(a.prequisites)
+                if c, ok := a.Command.(intercommand); ok {
+                        updatedTargets, targetsNeedUpdate = c.targets(a.Prequisites)
                         updated = !targetsNeedUpdate
                 } else {
-                        for _, t := range a.targets {
+                        for _, t := range a.Targets {
                                 if fi, e := os.Stat(t); e != nil || fi == nil {
                                         errorf(0, "`%s' not built", t)
                                 } else {
@@ -322,21 +345,25 @@ func (a *action) force(targets []string, tarfis []os.FileInfo, prequisites []str
         return
 }
 
-func (a *action) clean() {
-        errorf(0, "TODO: clean `%v'\n", a.targets)
+func (a *Action) clean() {
+        errorf(0, "TODO: clean `%v'\n", a.Targets)
 }
 
-func newAction(target string, c command, pre ...*action) *action {
-        a := &action{
-                command: c,
-                targets: []string{ target },
-                prequisites: pre,
+func newAction(target string, c Command, pre ...*Action) *Action {
+        a := &Action{
+                Command: c,
+                Targets: []string{ target },
+                Prequisites: pre,
         }
         return a
 }
 
-func createSourceTransformActions(sources []string, namecommand func(src string) (string, command)) []*action {
-        var inters []*action
+func NewAction(target string, c Command, pre ...*Action) *Action {
+        return newAction(target, c, pre...)
+}
+
+func CreateSourceTransformActions(sources []string, namecommand func(src string) (string, Command)) []*Action {
+        var inters []*Action
         if namecommand == nil {
                 errorf(-1, "can't draw source rules (%v)", namecommand)
         }
@@ -360,70 +387,83 @@ func createSourceTransformActions(sources []string, namecommand func(src string)
 }
 
 // module is defined by a $(module) invocation in .smart script.
-type module struct {
+type Module struct {
         location *location // where does it defined
-        dir string
-        name string
-        toolset toolset
-        kind string
-        action *action // action for building this module
+        Dir string
+        Name string
+        Toolset toolset
+        Kind string
+        Action *Action // action for building this module
+        Using, UsedBy []*Module
+        Built, Updated bool // marked as 'true' if module is built or updated
         defines map[string]*define
-        using, usedBy []*module
-        built, updated bool // marked as 'true' if module is built or updated
 }
 
-func (m *module) getSources(ctx *context) (sources []string) {
+func (m *Module) GetSources(ctx *Context) (sources []string) {
         sources = split(ctx.callWith(m, "sources"))
         for i := range sources {
                 if sources[i][0] == '/' { continue }
-                sources[i] = filepath.Join(m.dir, sources[i])
+                sources[i] = filepath.Join(m.Dir, sources[i])
         }
         return
 }
 
-func (m *module) update() {
+func (m *Module) update() {
         //fmt.Printf("update: module: %v\n", m.name)
 
-        if m.action == nil {
-                fmt.Printf("%v: no action for module \"%v\"\n", m.location, m.name)
+        if m.Action == nil {
+                fmt.Printf("%v: no action for module \"%v\"\n", m.location, m.Name)
                 return
         }
 
-        if updated, _ := m.action.update(); !updated {
-                fmt.Printf("smart: noting done for `%v'\n", m.name)
+        if updated, _ := m.Action.update(); !updated {
+                fmt.Printf("smart: noting done for `%v'\n", m.Name)
         }
 }
 
 type pendedBuild struct {
-        m *module
-        p *context
+        m *Module
+        p *Context
         args []string
 }
 
-var modules = map[string]*module{}
-var moduleOrderList []*module
+var modules = map[string]*Module{}
+var moduleOrderList []*Module
 var moduleBuildList []pendedBuild
 
-type filerule struct {
-        name string
-        mode os.FileMode
-        r string //*regexp.Regexp
+func GetModules() map[string]*Module { return modules }
+func GetModuleOrderList() []*Module { return moduleOrderList }
+func GetModuleBuildList() []pendedBuild { return moduleBuildList }
+func ResetModules() {
+        modules = map[string]*Module{}
+        moduleOrderList = []*Module{}
+        moduleBuildList = []pendedBuild{}
 }
 
-func (r *filerule) match(fi os.FileInfo) bool {
-        re := regexp.MustCompile(r.r)
-        if fi.Mode() & r.mode != 0 && re.MatchString(fi.Name()) {
+type FileMatchRule struct {
+        Name string
+        Mode os.FileMode
+        Rule string // *regexp.Regexp
+}
+
+func (r *FileMatchRule) match(fi os.FileInfo) bool {
+        re := regexp.MustCompile(r.Rule)
+        if fi.Mode() & r.Mode != 0 && re.MatchString(fi.Name()) {
                 return true
         }
         return false
 }
 
-func (r *filerule) matchName(fn string) bool {
-        re := regexp.MustCompile(r.r)
+func (r *FileMatchRule) matchName(fn string) bool {
+        re := regexp.MustCompile(r.Rule)
         if re.MatchString(fn) {
                 return true
         }
         return false
+}
+
+func ReadDirNames(dirname string) ([]string, error) {
+        return readDirNames(dirname)
 }
 
 // readDirNames reads the directory named by dirname and returns
@@ -443,6 +483,22 @@ func readDirNames(dirname string) ([]string, error) {
 
 	sort.Strings(names)
 	return names, nil
+}
+
+func FindFiles(d string, sre string) ([]string, error) {
+        return findFiles(d, sre)
+}
+
+func FindFile(d string, sre string) (string) {
+        return findFile(d, sre)
+}
+
+func Traverse(d string, fun traverseFunc) (error) {
+        return traverse(d, fun)
+}
+
+func CopyFile(s, d string) (err error) {
+        return copyFile(s, d)
 }
 
 type traverseFunc func(dname string, fi os.FileInfo) bool
@@ -521,16 +577,23 @@ func copyFile(s, d string) (err error) {
         return
 }
 
-// matchFileInfo finds a matched filerule with FileInfo.
-func matchFileInfo(fi os.FileInfo, rules []*filerule) *filerule {
+func MatchFileInfo(fi os.FileInfo, rules []*FileMatchRule) *FileMatchRule {
+        return matchFileInfo(fi, rules)
+}
+func MatchFileName(fn string, rules []*FileMatchRule) *FileMatchRule {
+        return matchFileName(fn, rules)
+}
+
+// matchFileInfo finds a matched FileMatchRule with FileInfo.
+func matchFileInfo(fi os.FileInfo, rules []*FileMatchRule) *FileMatchRule {
         for _, g := range rules {
                 if g.match(fi) { return g }
         }
         return nil
 }
 
-// matchFileName finds a matched filerule with file-name.
-func matchFileName(fn string, rules []*filerule) *filerule {
+// matchFileName finds a matched FileMatchRule with file-name.
+func matchFileName(fn string, rules []*FileMatchRule) *FileMatchRule {
         for _, g := range rules {
                 if g.matchName(fn) { return g }
         }
@@ -554,7 +617,7 @@ func Build(vars map[string]string, cmds []string) {
         if d = *flagC; d == "" { d = "." }
 
         s := []byte{} // TODO: needs init script
-        ctx, err := newContext("init", s, vars)
+        ctx, err := NewContext("init", s, vars)
         if err != nil {
                 fmt.Printf("smart: %v\n", err)
                 return
@@ -576,33 +639,33 @@ func Build(vars map[string]string, cmds []string) {
         }
 
         // Build the modules
-        var buildDeps func(p *context, mod *module) int
-        var buildMod func(p *context, mod *module) bool
-        buildMod = func(p *context, mod *module) bool {
-                if buildDeps(p, mod) != len(mod.using) {
-                        fmt.Printf("%v: failed building deps of `%v' (by `%v')\n", mod.location, mod.name, mod.name)
+        var buildDeps func(p *Context, mod *Module) int
+        var buildMod func(p *Context, mod *Module) bool
+        buildMod = func(p *Context, mod *Module) bool {
+                if buildDeps(p, mod) != len(mod.Using) {
+                        fmt.Printf("%v: failed building deps of `%v' (by `%v')\n", mod.location, mod.Name, mod.Name)
                         return false
                 }
-                if mod.toolset == nil {
+                if mod.Toolset == nil {
                         //fmt.Printf("%v: no toolset for `%v'(by `%v')\n", mod.location, mod.name, mod.name)
-                        fmt.Printf("%v: no toolset for `%v'\n", mod.location, mod.name)
+                        fmt.Printf("%v: no toolset for `%v'\n", mod.location, mod.Name)
                         return false
                 }
-                if !mod.built {
+                if !mod.Built {
                         if *flagVV {
-                                fmt.Printf("smart: build `%v' (%v)\n", mod.name, mod.dir)
+                                fmt.Printf("smart: build `%v' (%v)\n", mod.Name, mod.Dir)
                         }
                         p.module = mod
-                        if mod.toolset.createActions(p, []string{}) {
-                                mod.built = true
+                        if mod.Toolset.CreateActions(p, mod, []string{}) {
+                                mod.Built = true
                         } else {
-                                fmt.Printf("%v: module `%v' not built\n", mod.location, mod.name)
+                                fmt.Printf("%v: module `%v' not built\n", mod.location, mod.Name)
                         }
                 }
-                return mod.built
+                return mod.Built
         }
-        buildDeps = func(p *context, mod *module) (num int) {
-                for _, u := range mod.using { if buildMod(p, u) { num++ } }
+        buildDeps = func(p *Context, mod *Module) (num int) {
+                for _, u := range mod.Using { if buildMod(p, u) { num++ } }
                 return
         }
 
@@ -610,21 +673,21 @@ func Build(vars map[string]string, cmds []string) {
         for 0 < len(moduleBuildList) {
                 i, moduleBuildList = &moduleBuildList[0], moduleBuildList[1:]
                 if !buildMod(i.p, i.m) {
-                        errorf(0, "module `%v' not built", i.m.name)
+                        errorf(0, "module `%v' not built", i.m.Name)
                 }
         }
 
-        var updateMod, updateDeps func(mod *module)
-        updateMod = func(mod *module) {
+        var updateMod, updateDeps func(mod *Module)
+        updateMod = func(mod *Module) {
                 updateDeps(mod)
-                if !mod.updated {
-                        fmt.Printf("smart: update `%v'...\n", mod.name)
+                if !mod.Updated {
+                        fmt.Printf("smart: update `%v'...\n", mod.Name)
                         mod.update()
-                        mod.updated = true
+                        mod.Updated = true
                 }
         }
-        updateDeps = func(mod *module) {
-                for _, u := range mod.using { updateMod(u) }
+        updateDeps = func(mod *Module) {
+                for _, u := range mod.Using { updateMod(u) }
         }
 
         for _, m := range moduleOrderList { updateMod(m) }

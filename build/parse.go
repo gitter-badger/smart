@@ -604,14 +604,14 @@ func (l *lex) parse() bool {
         return l.pos == end
 }
 
-// context hold a parse context and the current module being processed.
-type context struct {
+// Context hold a parse context and the current module being processed.
+type Context struct {
         stack []*lex
 
         l *lex
 
         // module is the current module being processed
-        module *module
+        module *Module
 
         // variables holds the context
         defines map[string]*define
@@ -620,13 +620,21 @@ type context struct {
         //line bytes.Buffer
 }
 
-func (ctx *context) setModule(m *module) (prev *module) {
+func (ctx *Context) CurrentScope() string {
+        return ctx.l.scope
+}
+
+func (ctx *Context) CurrentLocation() *location {
+        return ctx.l.location()
+}
+
+func (ctx *Context) setModule(m *Module) (prev *Module) {
         prev = ctx.module
         ctx.module = m
         return
 }
 
-func (ctx *context) expand(str string) string {
+func (ctx *Context) expand(str string) string {
         var buf bytes.Buffer
         var exp func(s []byte) (out string, l int)
         var getRune = func(s []byte) (r rune, l int) {
@@ -721,7 +729,19 @@ func (ctx *context) expand(str string) string {
         return buf.String()
 }
 
-func (ctx *context) call(name string, args ...string) string {
+func (ctx *Context) CallWith(m *Module, name string, args ...string) string {
+        return ctx.callWith(m, name, args...)
+}
+
+func (ctx *Context) Call(name string, args ...string) string {
+        return ctx.call(name, args...)
+}
+
+func (ctx *Context) Set(name string, a ...interface{}) {
+        ctx.set(name, a...)
+}
+
+func (ctx *Context) call(name string, args ...string) string {
         vars := ctx.defines
 
         switch {
@@ -739,7 +759,7 @@ func (ctx *context) call(name string, args ...string) string {
                 return ""
         case name == "me":
                 if ctx.module != nil {
-                        return ctx.module.name
+                        return ctx.module.Name
                 }
                 return ""
         case strings.HasPrefix(name, "me.") && ctx.module != nil:
@@ -764,7 +784,7 @@ func (ctx *context) call(name string, args ...string) string {
         return ""
 }
 
-func (ctx *context) callWith(m *module, name string, args ...string) (s string) {
+func (ctx *Context) callWith(m *Module, name string, args ...string) (s string) {
         o := ctx.module
         ctx.module = m
         s = ctx.call("me."+name, args...)
@@ -772,7 +792,7 @@ func (ctx *context) callWith(m *module, name string, args ...string) (s string) 
         return
 }
 
-func (ctx *context) get(name string) *define {
+func (ctx *Context) get(name string) *define {
         vars := ctx.defines
         if strings.HasPrefix(name, "me.") && ctx.module != nil {
                 vars = ctx.module.defines
@@ -785,7 +805,7 @@ func (ctx *context) get(name string) *define {
         return v
 }
 
-func (ctx *context) set(name string, a ...interface{}) (v *define) {
+func (ctx *Context) set(name string, a ...interface{}) (v *define) {
         loc := ctx.l.location()
 
         if name == "me" {
@@ -817,7 +837,7 @@ func (ctx *context) set(name string, a ...interface{}) (v *define) {
         return
 }
 
-func (ctx *context) expandNode(n *node) string {
+func (ctx *Context) expandNode(n *node) string {
         nc := len(n.children)
 
         switch n.kind {
@@ -860,7 +880,7 @@ func (ctx *context) expandNode(n *node) string {
         return ""
 }
 
-func (ctx *context) processNode(n *node) (err error) {
+func (ctx *Context) processNode(n *node) (err error) {
         switch n.kind {
         case nodeDefineQuestioned:
                 if name := ctx.expandNode(n.children[0]); ctx.call(name) == "" {
@@ -908,7 +928,7 @@ func (ctx *context) processNode(n *node) (err error) {
         return
 }
 
-func (ctx *context) _parse() (err error) {
+func (ctx *Context) _parse() (err error) {
         if !ctx.l.parse() {
                 err = errors.New("syntax error")
                 return
@@ -923,7 +943,7 @@ func (ctx *context) _parse() (err error) {
         return
 }
 
-func (ctx *context) append(scope string, s []byte) (err error) {
+func (ctx *Context) append(scope string, s []byte) (err error) {
         l := &lex{ parseBuffer:&parseBuffer{ scope:scope, s: s }, pos: 0, }
         ctx.stack = append(ctx.stack, l)
 
@@ -945,7 +965,7 @@ func (ctx *context) append(scope string, s []byte) (err error) {
         return
 }
 
-func (ctx *context) include(fn string) (err error) {
+func (ctx *Context) include(fn string) (err error) {
         var (
                 f *os.File
                 s []byte
@@ -966,8 +986,8 @@ func (ctx *context) include(fn string) (err error) {
         return
 }
 
-func newContext(scope string, s []byte, vars map[string]string) (ctx *context, err error) {
-        ctx = &context{
+func NewContext(scope string, s []byte, vars map[string]string) (ctx *Context, err error) {
+        ctx = &Context{
                 l: &lex{ parseBuffer:&parseBuffer{ scope:scope, s: s }, pos: 0, },
                 defines: make(map[string]*define, len(vars) + 32),
         }
@@ -979,9 +999,9 @@ func newContext(scope string, s []byte, vars map[string]string) (ctx *context, e
         return
 }
 
-func newContextFromFile(fn string, vars map[string]string) (ctx *context, err error) {
+func NewContextFromFile(fn string, vars map[string]string) (ctx *Context, err error) {
         s := []byte{} // TODO: needs init script
-        if ctx, err = newContext(fn, s, vars); err == nil && ctx != nil {
+        if ctx, err = NewContext(fn, s, vars); err == nil && ctx != nil {
                 err = ctx.include(fn)
         }
         return

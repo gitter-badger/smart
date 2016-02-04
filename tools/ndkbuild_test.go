@@ -6,9 +6,12 @@ package smart
 import (
         "testing"
         "os"
+        . "github.com/duzy/smart/build"
+        . "github.com/duzy/smart/test"
 )
 
 func testToolsetNdkBuild(t *testing.T) {
+        //modules, moduleOrderList, moduleBuildList := GetModules(), GetModuleOrderList(), GetModuleBuildList()
         if e := os.RemoveAll("libs"); e != nil { t.Errorf("failed remove `libs' directory") }
         if e := os.RemoveAll("out"); e != nil { t.Errorf("failed remove `out' directory") }
         defer func() {
@@ -16,7 +19,7 @@ func testToolsetNdkBuild(t *testing.T) {
                 os.RemoveAll("out")
         }()
 
-        Build(computeTestRunParams())
+        Build(ComputeTestRunParams())
 
         if fi, e := os.Stat("out"); fi == nil || e != nil || !fi.IsDir() { t.Errorf("failed: %v", e); return }
         if fi, e := os.Stat("out/local/armeabi"); fi == nil || e != nil || !fi.IsDir() { t.Errorf("failed: %v", e); return }
@@ -61,5 +64,5 @@ func testToolsetNdkBuild(t *testing.T) {
 }
 
 func TestToolsetNdkBuild(t *testing.T) {
-        //runToolsetTestCase(t, "ndkbuild", testToolsetNdkBuild)
+        RunToolsetTestCase(t, "ndkbuild", testToolsetNdkBuild)
 }

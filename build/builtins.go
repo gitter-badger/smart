@@ -9,7 +9,7 @@ import (
         "strings"
 )
 
-type builtin func(ctx *context, args []string) string
+type builtin func(ctx *Context, args []string) string
 
 var (
         builtins = map[string]builtin {
@@ -30,7 +30,7 @@ var (
         }
 )
 
-func builtinDir(ctx *context, args []string) string {
+func builtinDir(ctx *Context, args []string) string {
         var ds []string
         for _, a := range args {
                 ds = append(ds, filepath.Dir(a))
@@ -38,35 +38,35 @@ func builtinDir(ctx *context, args []string) string {
         return strings.Join(ds, " ")
 }
 
-func builtinInfo(ctx *context, args []string) (s string) {
+func builtinInfo(ctx *Context, args []string) (s string) {
         if builtinInfoFunc != nil {
                 builtinInfoFunc(args...)
         }
         return
 }
 
-func builtinUpper(ctx *context, args []string) string {
+func builtinUpper(ctx *Context, args []string) string {
         for i, s := range args {
                 args[i] = strings.ToUpper(s)
         }
         return strings.Join(args, " ")
 }
 
-func builtinLower(ctx *context, args []string) string {
+func builtinLower(ctx *Context, args []string) string {
         for i, s := range args {
                 args[i] = strings.ToLower(s)
         }
         return strings.Join(args, " ")
 }
 
-func builtinTitle(ctx *context, args []string) string {
+func builtinTitle(ctx *Context, args []string) string {
         for i, s := range args {
                 args[i] = strings.ToTitle(s)
         }
         return strings.Join(args, " ")
 }
 
-func builtinModule(ctx *context, args []string) string {
+func builtinModule(ctx *Context, args []string) string {
         var name, toolsetName, kind string
         if 0 < len(args) { name = strings.TrimSpace(args[0]) }
         if 1 < len(args) { toolsetName = strings.TrimSpace(args[1]) }
@@ -86,31 +86,31 @@ func builtinModule(ctx *context, args []string) string {
                 toolset = ts.toolset
         }
 
-        var m *module
+        var m *Module
         var has bool
         if m, has = modules[name]; !has {
-                m = &module{
-                        name: name,
-                        toolset: toolset,
-                        kind: kind,
-                        dir: filepath.Dir(ctx.l.scope),
+                m = &Module{
+                        Name: name,
+                        Toolset: toolset,
+                        Kind: kind,
+                        Dir: filepath.Dir(ctx.l.scope),
                         location: ctx.l.location(),
                         defines: make(map[string]*define, 32),
                 }
-                modules[m.name] = m
+                modules[m.Name] = m
                 moduleOrderList = append(moduleOrderList, m)
-        } else if (m.toolset != nil && toolsetName != "") && (m.kind != "" || kind != "") {
+        } else if (m.Toolset != nil && toolsetName != "") && (m.Kind != "" || kind != "") {
                 //ctx.lineno -= 1; ctx.colno = ctx.prevColno + 1
-                fmt.Printf("%v: previous module declaration `%v'\n", &(m.location), m.name)
-                errorf(0, fmt.Sprintf("module already been defined as \"%v, $v\"", m.toolset, m.kind))
+                fmt.Printf("%v: previous module declaration `%v'\n", &(m.location), m.Name)
+                errorf(0, fmt.Sprintf("module already been defined as \"%v, $v\"", m.Toolset, m.Kind))
         }
 
-        if m.toolset == nil && m.kind == "" {
-                m.toolset = toolset
-                m.kind = kind
+        if m.Toolset == nil && m.Kind == "" {
+                m.Toolset = toolset
+                m.Kind = kind
         }
 
-        m.dir = filepath.Dir(ctx.l.scope)
+        m.Dir = filepath.Dir(ctx.l.scope)
         ctx.setModule(m)
 
         // parsed arguments in forms like "PLATFORM=android-9"
@@ -120,45 +120,45 @@ func builtinModule(ctx *context, args []string) string {
 
         fmt.Printf("vars: %v\n", vars)
 
-        toolset.configModule(ctx, rest, vars)
+        toolset.ConfigModule(ctx, m, rest, vars)
         return ""
 }
 
-func builtinBuild(ctx *context, args []string) string {
+func builtinBuild(ctx *Context, args []string) string {
         panic("use $(commit) instead")
 }
 
-func builtinCommit(ctx *context, args []string) string {
-        var m *module
+func builtinCommit(ctx *Context, args []string) string {
+        var m *Module
         if m = ctx.module; m == nil { errorf(0, "no module defined") }
 
-        verbose("pending `%v' (%v)", m.name, m.dir)
+        verbose("pending `%v' (%v)", m.Name, m.Dir)
 
         moduleBuildList = append(moduleBuildList, pendedBuild{m, ctx, args})
         return ""
 }
 
-func builtinUse(ctx *context, args []string) string {
+func builtinUse(ctx *Context, args []string) string {
         if ctx.module == nil { errorf(0, "no module defined") }
-        if ctx.module.toolset == nil { errorf(0, "no toolset for `%v'", ctx.module.name) }
+        if ctx.module.Toolset == nil { errorf(0, "no toolset for `%v'", ctx.module.Name) }
 
         for _, a := range args {
                 a = strings.TrimSpace(a)
                 if m, ok := modules[a]; ok {
-                        ctx.module.using = append(ctx.module.using, m)
-                        m.usedBy = append(m.usedBy, ctx.module)
-                        ctx.module.toolset.useModule(ctx, m)
+                        ctx.module.Using = append(ctx.module.Using, m)
+                        m.UsedBy = append(m.UsedBy, ctx.module)
+                        ctx.module.Toolset.UseModule(ctx, ctx.module, m)
                 } else {
-                        m = &module{
-                                name: a,
-                                dir: filepath.Dir(ctx.l.scope),
+                        m = &Module{
+                                Name: a,
+                                Dir: filepath.Dir(ctx.l.scope),
+                                UsedBy: []*Module{ ctx.module },
                                 location: ctx.l.location(),
                                 defines: make(map[string]*define, 32),
-                                usedBy: []*module{ ctx.module },
                         }
-                        ctx.module.using = append(ctx.module.using, m)
+                        ctx.module.Using = append(ctx.module.Using, m)
                         modules[a] = m
-                        ctx.module.toolset.useModule(ctx, m)
+                        ctx.module.Toolset.UseModule(ctx, ctx.module, m)
                 }
         }
         return ""

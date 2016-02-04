@@ -14,6 +14,7 @@ import (
         "io/ioutil"
         "io"
         "os/exec"
+        . "github.com/duzy/smart/build"
 )
 
 var androidsdk = "/android-sdk-linux_x86"
@@ -23,7 +24,7 @@ var androidsdkSourceCompatibility = "1.7" // gradle: sourceCompatibility = 1.7
 var androidsdkTargetCompatibility = "1.7" // gradle: targetCompatibility = 1.7
 
 func init() {
-        registerToolset("android-sdk", &_androidsdk{})
+        RegisterToolset("android-sdk", &_androidsdk{})
 
         if c, e := exec.LookPath("android"); e == nil {
                 androidsdk = filepath.Dir(filepath.Dir(c))
@@ -52,11 +53,11 @@ func androidsdkGetTool(name string) string {
 type _androidsdk struct {
 }
 
-func (sdk *_androidsdk) getResourceFiles(ds ...string) (as []*action) {
+func (sdk *_androidsdk) getResourceFiles(ds ...string) (as []*Action) {
         for _, d := range ds {
-                traverse(d, func(fn string, fi os.FileInfo) bool {
+                Traverse(d, func(fn string, fi os.FileInfo) bool {
                         if !strings.HasSuffix(fn, "~") && !fi.IsDir() {
-                                as = append(as, newAction(fn, nil))
+                                as = append(as, NewAction(fn, nil))
                         }
                         return true
                 })
@@ -64,14 +65,9 @@ func (sdk *_androidsdk) getResourceFiles(ds ...string) (as []*action) {
         return
 }
 
-func (sdk *_androidsdk) configModule(ctx *context, args []string, vars map[string]string) bool {
-        var m *module
-        if m = ctx.module; m == nil {
-                errorf(0, "no module")
-        }
-
-        d := filepath.Dir(ctx.l.scope)
-        sources, err := findFiles(filepath.Join(d, "src"), `\.java$`)
+func (sdk *_androidsdk) ConfigModule(ctx *Context, m *Module, args []string, vars map[string]string) bool {
+        d := filepath.Dir(ctx.CurrentScope())
+        sources, err := FindFiles(filepath.Join(d, "src"), `\.java$`)
         for i := range sources {
                 if strings.HasPrefix(sources[i], d) {
                         sources[i] = sources[i][len(d)+1:]
@@ -81,32 +77,32 @@ func (sdk *_androidsdk) configModule(ctx *context, args []string, vars map[strin
         //fmt.Printf("sources: (%v) %v\n", d, sources)
 
         if err != nil {
-                errorf(0, fmt.Sprintf("can't find Java sources in `%v'", d))
+                Errorf(0, fmt.Sprintf("can't find Java sources in `%v'", d))
         }
 
         var platform string
         if s, ok := vars["PLATFORM"]; ok { platform = s } else { platform = androidsdkDefaultPlatform }
 
+        /*
         var v *define
         loc := ctx.l.location()
-        v = ctx.set("this.platform", platform);                  v.loc = *loc
-        v = ctx.set("this.sources", strings.Join(sources, " ")); v.loc = *loc
+        v = ctx.set("me.platform", platform);                  v.loc = *loc
+        v = ctx.set("me.sources", strings.Join(sources, " ")); v.loc = *loc */
+        ctx.Set("me.platform", platform)
+        ctx.Set("me.sources", strings.Join(sources, " "))
         return true
 }
 
-func (sdk *_androidsdk) createActions(ctx *context, args []string) bool {
-        var m *module
-        if m = ctx.module; m == nil { errorf(0, "no module") }
-
-        platform := strings.TrimSpace(ctx.call("this.platform"))
-        if platform == "" { errorf(0, "unkown platform for `%v'", m.name) }
+func (sdk *_androidsdk) CreateActions(ctx *Context, m *Module, args []string) bool {
+        platform := strings.TrimSpace(ctx.Call("me.platform"))
+        if platform == "" { Errorf(0, "unkown platform for `%v'", m.Name) }
 
         //fmt.Printf("platform: %v\n", platform)
 
-        gen := &androidGen{ platform:platform, out:filepath.Join("out", m.name), d:filepath.Dir(ctx.l.scope) }
+        gen := &androidGen{ platform:platform, out:filepath.Join("out", m.Name), d:filepath.Dir(ctx.CurrentScope()) }
 
-        var a *action
-        var prequisites []*action
+        var a *Action
+        var prequisites []*Action
         var staticLibs []string
         var hasRes, hasAssets, hasSrc bool
         if fi, err := os.Stat(filepath.Join(gen.d, "src")); err == nil && fi.IsDir() { hasSrc = true }
@@ -116,35 +112,35 @@ func (sdk *_androidsdk) createActions(ctx *context, args []string) bool {
         if hasAssets { gen.assets = filepath.Join(gen.d, "assets") }
         if hasRes || hasAssets {
                 c := &androidGenR{ androidGen:gen }
-                a = newAction("R.java", c, sdk.getResourceFiles(gen.res, gen.assets)...)
+                a = NewAction("R.java", c, sdk.getResourceFiles(gen.res, gen.assets)...)
         }
         if hasSrc {
-                var ps []*action
+                var ps []*Action
                 if a != nil { ps = append(ps, a) }
-                if sources := ctx.module.getSources(ctx); 0 < len(sources) {
+                if sources := m.GetSources(ctx); 0 < len(sources) {
                         var classpath []string
-                        for _, u := range m.using {
-                                if u.kind != "jar" { errorf(0, "can't use module of type `%v'", u.kind) }
-                                if v := strings.TrimSpace(ctx.call("this.export.jar")); v != "" {
+                        for _, u := range m.Using {
+                                if u.Kind != "jar" { Errorf(0, "can't use module of type `%v'", u.Kind) }
+                                if v := strings.TrimSpace(ctx.Call("me.export.jar")); v != "" {
                                         classpath = append(classpath, v)
                                 }
                                 /*
-                                if v := strings.TrimSpace(ctx.call("this.export.libs.static")); v != "" {
+                                if v := strings.TrimSpace(ctx.call("me.export.libs.static")); v != "" {
                                         classpath = append(classpath, v)
                                 } */
                         }
 
-                        staticLibs = append(staticLibs, strings.Split(strings.TrimSpace(ctx.call("this.libs.static")), " ")...)
-                        classpath = append(classpath, strings.Split(strings.TrimSpace(ctx.call("this.classpath")), " ")...)
+                        staticLibs = append(staticLibs, strings.Split(strings.TrimSpace(ctx.Call("me.libs.static")), " ")...)
+                        classpath = append(classpath, strings.Split(strings.TrimSpace(ctx.Call("me.classpath")), " ")...)
                         classpath = append(classpath, staticLibs...)
 
-                        for _, src := range sources { ps = append(ps, newAction(src, nil)) }
+                        for _, src := range sources { ps = append(ps, NewAction(src, nil)) }
                         c := &androidGenClasses{
                                 androidGen:gen,
                                 sourcepath:filepath.Join(gen.d, "src"),
                                 classpath:classpath,
                         }
-                        a = newAction("*.class", c, ps...)
+                        a = NewAction("*.class", c, ps...)
                 }
         }
 
@@ -152,21 +148,21 @@ func (sdk *_androidsdk) createActions(ctx *context, args []string) bool {
                 prequisites = append(prequisites, a)
         }
 
-        switch m.kind {
+        switch m.Kind {
         case "apk":
-                c := &androidGenApk{androidGenTar{ androidGen:gen, target:filepath.Join(gen.out, m.name+".apk"), staticlibs:staticLibs, }}
-                m.action = newAction(m.name+".apk", c, prequisites...)
+                c := &androidGenApk{androidGenTar{ androidGen:gen, target:filepath.Join(gen.out, m.Name+".apk"), staticlibs:staticLibs, }}
+                m.Action = NewAction(m.Name+".apk", c, prequisites...)
         case "jar":
-                c := &androidGenJar{androidGenTar{ androidGen:gen, target:filepath.Join(gen.out, m.name+".jar"), staticlibs:staticLibs, }}
-                ctx.set("this.export.jar", c.target)
-                m.action = newAction(m.name+".jar", c, prequisites...)
+                c := &androidGenJar{androidGenTar{ androidGen:gen, target:filepath.Join(gen.out, m.Name+".jar"), staticlibs:staticLibs, }}
+                ctx.Set("me.export.jar", c.target)
+                m.Action = NewAction(m.Name+".jar", c, prequisites...)
         default:
-                errorf(0, "unknown module type `%v'", m.kind)
+                Errorf(0, "unknown module type `%v'", m.Kind)
         }
         return true
 }
 
-func (sdk *_androidsdk) useModule(ctx *context, m *module) bool {
+func (sdk *_androidsdk) UseModule(ctx *Context, m, o *Module) bool {
         return false
 }
 
@@ -178,20 +174,20 @@ type androidGenR struct{
         r string // "r" holds the R.java file path
         outdates int
 }
-func (ic *androidGenR) targets(prequisites []*action) (targets []string, needsUpdate bool) {
+func (ic *androidGenR) targets(prequisites []*Action) (targets []string, needsUpdate bool) {
         if ic.r != "" {
                 targets = []string{ ic.r }
                 needsUpdate = 0 < ic.outdates
                 return
         }
 
-        targets, outdates, _ := computeInterTargets(filepath.Join(ic.out, "res"), `R\.java$`, prequisites)
+        targets, outdates, _ := ComputeInterTargets(filepath.Join(ic.out, "res"), `R\.java$`, prequisites)
         if 0 < len(targets) { ic.r = targets[0] }
 
         needsUpdate = ic.r == "" || 0 < outdates
         return
 }
-func (ic *androidGenR) execute(targets []string, prequisites []string) bool {
+func (ic *androidGenR) Execute(targets []string, prequisites []string) bool {
         ic.r = ""
 
         outRes := filepath.Join(ic.out, "res")
@@ -208,23 +204,24 @@ func (ic *androidGenR) execute(targets []string, prequisites []string) bool {
         if ic.assets != "" { args = append(args, "-A", ic.assets) }
         // TODO: -P -G
 
-        c := &excmd{ path: androidsdkGetBuildTool("aapt"), mkdir: outRes }
-        c.ia32 = isIA32Command(c.path)
-        if *flagV {
-                if ic.res != "" { verbose("resources `%v'", ic.res) }
-                if ic.assets != "" { verbose("assets `%v'", ic.assets) }
+        c := NewExcmd(androidsdkGetBuildTool("aapt"))
+        c.SetIA32(IsIA32Command(c.GetPath()))
+        c.SetMkdir(outRes)
+        if GetFlagV() {
+                if ic.res != "" { Verbose("resources `%v'", ic.res) }
+                if ic.assets != "" { Verbose("assets `%v'", ic.assets) }
         }
         //args = append(args, "--min-sdk-version", "7")
         //args = append(args, "--target-sdk-version", "7")
-        if !c.run("resources", args...) {
-                errorf(0, "resources: %v", outRes)
+        if !c.Run("resources", args...) {
+                Errorf(0, "resources: %v", outRes)
         }
 
-        if ic.r = findFile(outRes, `R\.java$`); ic.r != "" {
+        if ic.r = FindFile(outRes, `R\.java$`); ic.r != "" {
                 return true
         }
 
-        errorf(0, "resources: R.java not found")
+        Errorf(0, "resources: R.java not found")
         return false
 }
 
@@ -234,13 +231,13 @@ type androidGenClasses struct{
         classpath []string // holds the *.class file
         outdates int
 }
-func (ic *androidGenClasses) targets(prequisites []*action) (targets []string, needsUpdate bool) {
-        targets, outdates, _ := computeInterTargets(filepath.Join(ic.out, "classes"), `\.class$`, prequisites)
+func (ic *androidGenClasses) targets(prequisites []*Action) (targets []string, needsUpdate bool) {
+        targets, outdates, _ := ComputeInterTargets(filepath.Join(ic.out, "classes"), `\.class$`, prequisites)
         needsUpdate = len(targets) == 0 || 0 < outdates
         //fmt.Printf("classes: %v\n", targets);
         return
 }
-func (ic *androidGenClasses) execute(targets []string, prequisites []string) bool {
+func (ic *androidGenClasses) Execute(targets []string, prequisites []string) bool {
         classpath := filepath.Join(androidsdk, "platforms", ic.platform, "android.jar")
         if 0 < len(ic.classpath) {
                 classpath += ":" + strings.Join(ic.classpath, ":")
@@ -258,9 +255,10 @@ func (ic *androidGenClasses) execute(targets []string, prequisites []string) boo
         args = append(args, "-source", androidsdkSourceCompatibility)
         args = append(args, "-target", androidsdkTargetCompatibility)
         args = append(args, prequisites...)
-        c := &excmd{ path:"javac", mkdir:outClasses }
-        if !c.run("classes", args...) {
-                errorf(0, "classes: %v", outClasses)
+        c := NewExcmd("javac")
+        c.SetMkdir(outClasses)
+        if !c.Run("classes", args...) {
+                Errorf(0, "classes: %v", outClasses)
                 return false
         }
 
@@ -275,17 +273,19 @@ func androidsdkCreateDummyPackage(name string) bool {
                 return false
         }
 
-        c := &excmd{ path:"jar", dir:filepath.Dir(name) }
-        if !c.run("DummyPackage", "cf", filepath.Base(name), "dummy") {
+        c := NewExcmd("jar")
+        c.SetDir(filepath.Dir(name))
+        if !c.Run("DummyPackage", "cf", filepath.Base(name), "dummy") {
                 return false
         }
 
         if e := os.Remove(filepath.Join(filepath.Dir(name), "dummy")); e != nil {
-                errorf(0, "remove: %v (%v)\n", "dummy", e)
+                Errorf(0, "remove: %v (%v)\n", "dummy", e)
         }
 
-        c = &excmd{ path:"zip", dir:filepath.Dir(name) }
-        if !c.run("DummyPackage", "-qd", filepath.Base(name), "dummy") {
+        c = NewExcmd("zip")
+        c.SetDir(filepath.Dir(name))
+        if !c.Run("DummyPackage", "-qd", filepath.Base(name), "dummy") {
                 return false
         }
 
@@ -300,13 +300,13 @@ type androidGenTar struct {
 type androidGenApk struct { androidGenTar }
 type androidGenJar struct { androidGenTar }
 
-func (ic *androidGenTar) targets(prequisites []*action) (targets []string, needsUpdate bool) {
+func (ic *androidGenTar) targets(prequisites []*Action) (targets []string, needsUpdate bool) {
         if ic.target == "" {
-                errorf(0, "unknown APK name")
+                Errorf(0, "unknown APK name")
         }
         afi, _ := os.Stat(ic.target)
         newerCount := 0
-        traverse(filepath.Join(ic.out, "classes"), func(fn string, fi os.FileInfo) bool {
+        Traverse(filepath.Join(ic.out, "classes"), func(fn string, fi os.FileInfo) bool {
                 if afi == nil { return false }
                 if strings.HasSuffix(fn, ".class") && !fi.IsDir() {
                         if afi.ModTime().Before(fi.ModTime()) {
@@ -328,14 +328,14 @@ func (ic *androidGenTar) createPackage(packFilename string, files ...string) {
 
         f, err = os.Create(packFilename)
         if err != nil {
-                errorf(0, "can't find keystore for sigining APK")
+                Errorf(0, "can't find keystore for sigining APK")
         }
 
         zw := zip.NewWriter(f)
 
         defer func() {
                 if err := zw.Close(); err != nil {
-                        errorf(0, "%v (%s)", err, f.Name())
+                        Errorf(0, "%v (%s)", err, f.Name())
                 }
 
                 f.Close()
@@ -361,7 +361,7 @@ func (ic *androidGenTar) createPackage(packFilename string, files ...string) {
                 if err != nil { return err }
                 if fi.IsDir() { return nil }
 
-                message("package: %v(%v)", f.Name(), h.Name)
+                Message("package: %v(%v)", f.Name(), h.Name)
 
                 l, err := os.Open(path)
                 if err != nil { return err }
@@ -372,7 +372,7 @@ func (ic *androidGenTar) createPackage(packFilename string, files ...string) {
         })
 
         if err != nil {
-                errorf(0, "libs: %v", err)
+                Errorf(0, "libs: %v", err)
         }
 }
 
@@ -384,14 +384,14 @@ func (ic *androidGenTar) packageAddFiles(packFilename string, files ...string) {
 
         f, err = os.OpenFile(packFilename, os.O_RDWR, 0)
         if err != nil {
-                errorf(0, "can't find keystore for sigining APK")
+                Errorf(0, "can't find keystore for sigining APK")
         }
 
         zw := zip.NewWriter(f)
 
         defer func() {
                 if err := zw.Close(); err != nil {
-                        errorf(0, "%v (%s)", err, f.Name())
+                        Errorf(0, "%v (%s)", err, f.Name())
                 }
 
                 f.Close()
@@ -399,25 +399,25 @@ func (ic *androidGenTar) packageAddFiles(packFilename string, files ...string) {
         
         for _, s := range files {
                 fi, err := os.Stat(s)
-                if err != nil { errorf(0, "%v", err) }
+                if err != nil { Errorf(0, "%v", err) }
 
                 h, err := zip.FileInfoHeader(fi)
-                if err != nil { errorf(0, "package: add: %v", err) }
+                if err != nil { Errorf(0, "package: add: %v", err) }
 
                 // h.Name ???
                 h.Method = zip.Deflate
 
-                message("package: %v(%v)", f.Name(), h.Name)
+                Message("package: %v(%v)", f.Name(), h.Name)
 
                 z, err := zw.CreateHeader(h)
-                if err != nil { errorf(0, "package: add: %v", err) }
+                if err != nil { Errorf(0, "package: add: %v", err) }
 
                 l, err := os.Open(s)
-                if err != nil { errorf(0, "package: add: %v", err) }
+                if err != nil { Errorf(0, "package: add: %v", err) }
                 defer l.Close()
 
                 _, err = io.Copy(z, l)
-                if err != nil { errorf(0, "package: add: %v", err) }
+                if err != nil { Errorf(0, "package: add: %v", err) }
         }
 }
 
@@ -470,31 +470,32 @@ func androidsdkGetKeystore() (keystore, keypass, storepass string) {
 
 func androidsdkExtractClasses(outclasses, lib string, cs []string) (classes []string) {
         f, err := os.Open(lib)
-        if err != nil { errorf(0, "open: %v (%v)", lib, err) }
+        if err != nil { Errorf(0, "open: %v (%v)", lib, err) }
         defer f.Close()
 
         wd, err := os.Getwd()
         if err != nil {
-                errorf(0, "getwd: %v", err)
+                Errorf(0, "getwd: %v", err)
                 return
         }
 
         if e := os.Chdir(outclasses); e != nil {
-                errorf(0, "chdir: %v", e)
+                Errorf(0, "chdir: %v", e)
                 return
         }
 
         defer func() {
-                if e := os.Chdir(wd); e != nil { errorf(0, "chdir: %v", e) }
+                if e := os.Chdir(wd); e != nil { Errorf(0, "chdir: %v", e) }
         }()
 
-        c := &excmd{ path:"jar", stdin:f, }
+        c := NewExcmd("jar")
+        c.SetStdin(f)
         args := append([]string{ "-x" }, cs...)
-        if !c.run("classes", args...) { errorf(0, "static %v\n", lib) }
+        if !c.Run("classes", args...) { Errorf(0, "static %v\n", lib) }
 
         for _, s := range cs {
                 if fi, er := os.Stat(s); er != nil || fi == nil {
-                        errorf(0, "class `%v' not extracted (%v)", s, lib); return
+                        Errorf(0, "class `%v' not extracted (%v)", s, lib); return
                 }
                 classes = append(classes, s)
         }
@@ -506,12 +507,12 @@ func androidsdkExtractStaticLibsClasses(outclasses string, libs []string) (class
         for _, lib := range libs {
                 if lib = strings.TrimSpace(lib); lib == "" { continue }
 
-                c := &excmd{ path:"jar" }
+                c := NewExcmd("jar")
                 args := []string{ "-tf", lib }
-                if !c.run("classes", args...) { errorf(0, "static %v\n", lib) }
+                if !c.Run("classes", args...) { Errorf(0, "static %v\n", lib) }
 
                 var cs []string
-                for _, s := range strings.Split(c.stdout.String(), "\n") {
+                for _, s := range strings.Split(c.GetStdout().String(), "\n") {
                         if strings.HasSuffix(s, ".class") { cs = append(cs, s) }
                 }
 
@@ -523,10 +524,10 @@ func androidsdkExtractStaticLibsClasses(outclasses string, libs []string) (class
         return
 }
 
-func (ic *androidGenApk) execute(targets []string, prequisites []string) bool {
+func (ic *androidGenApk) Execute(targets []string, prequisites []string) bool {
         outclasses := filepath.Join(ic.out, "classes")
 
-        // extract classes from static libraries (this.libs.static)
+        // extract classes from static libraries (me.libs.static)
 
         embclasses := androidsdkExtractStaticLibsClasses(outclasses, ic.staticlibs)
         //fmt.Printf("staticlibs: %v\n", embclasses)
@@ -547,12 +548,13 @@ func (ic *androidGenApk) execute(targets []string, prequisites []string) bool {
                 }
                 countClasses ++
         }
-        if countClasses == 0 { errorf(0, "no classes for `%v'", targets) }
+        if countClasses == 0 { Errorf(0, "no classes for `%v'", targets) }
 
         args = append(args, embclasses...) // add classes from static libraries
 
-        c := &excmd{ path: androidsdkGetBuildTool("dx"), dir:outclasses }
-        if !c.run("classes", args...) { errorf(0, "dex: %v\n", "classes.dex") }
+        c := NewExcmd(androidsdkGetBuildTool("dx"))
+        c.SetDir(outclasses)
+        if !c.Run("classes", args...) { Errorf(0, "dex: %v\n", "classes.dex") }
 
         // Create new package unsigned.apk
         unsignedApk := filepath.Join(ic.out, "unsigned.apk")
@@ -560,8 +562,8 @@ func (ic *androidGenApk) execute(targets []string, prequisites []string) bool {
 
         // package resources into unsigned.apk
 
-        c = &excmd{ path:androidsdkGetBuildTool("aapt") }
-        c.ia32 = isIA32Command(c.path)
+        c = NewExcmd(androidsdkGetBuildTool("aapt"))
+        c.SetIA32(IsIA32Command(c.GetPath()))
 
         args = []string{ "package", "-u", "-F", unsignedApk,
                 "-M", filepath.Join(ic.d, "AndroidManifest.xml"),
@@ -571,24 +573,24 @@ func (ic *androidGenApk) execute(targets []string, prequisites []string) bool {
         if ic.assets != "" { args = append(args, "-A", ic.assets) }
         //args = append(args, "--min-sdk-version", "7")
         //args = append(args, "--target-sdk-version", "7")
-        if *flagV { verbose("resources -> %v", targets) }
-        if !c.run("resources", args...) {
-                errorf(0, "package: %v(%v)", unsignedApk, "assets,res,...")
+        if GetFlagV() { Verbose("resources -> %v", targets) }
+        if !c.Run("resources", args...) {
+                Errorf(0, "package: %v(%v)", unsignedApk, "assets,res,...")
         }
 
         //ic.packageAddFiles(unsignedApk, filepath.Join(ic.out, "classes.dex"))
         args = []string{ "add", "-k", unsignedApk, filepath.Join(ic.out, "classes.dex") }
-        if !c.run("classes", args...) {
-                errorf(0, "package: %v(%v)", unsignedApk, "classes")
+        if !c.Run("classes", args...) {
+                Errorf(0, "package: %v(%v)", unsignedApk, "classes")
         }
 
         keystore, keypass, storepass := androidsdkGetKeystore()
-        if keystore == ""       { errorf(0, "keystore is empty") }
-        if keypass == ""        { errorf(0, "keypass is empty") }
-        if storepass == ""      { errorf(0, "storepass is empty") }
+        if keystore == ""       { Errorf(0, "keystore is empty") }
+        if keypass == ""        { Errorf(0, "keypass is empty") }
+        if storepass == ""      { Errorf(0, "storepass is empty") }
 
-        if *flagV { verbose("signing -> %v (%v)", targets, keystore) }
-        if e := copyFile(filepath.Join(ic.out, "unsigned.apk"), filepath.Join(ic.out, "signed.apk")); e != nil {
+        if GetFlagV() { Verbose("signing -> %v (%v)", targets, keystore) }
+        if e := CopyFile(filepath.Join(ic.out, "unsigned.apk"), filepath.Join(ic.out, "signed.apk")); e != nil {
                 return false
         }
 
@@ -601,30 +603,30 @@ func (ic *androidGenApk) execute(targets []string, prequisites []string) bool {
                 filepath.Join(ic.out, "signed.apk"), "cert",
         }
 
-        c = &excmd{ path:"jarsigner" }
-        if !c.run("signing", args...) { os.Remove(filepath.Join(ic.out, "signed.apk")); return false }
+        c = NewExcmd("jarsigner")
+        if !c.Run("signing", args...) { os.Remove(filepath.Join(ic.out, "signed.apk")); return false }
 
         // zipalign signed.apk into aligned.apk then rename aligned.apk into final target
 
-        if *flagV { verbose("aligning -> %v", targets) }
+        if GetFlagV() { Verbose("aligning -> %v", targets) }
 
-        c = &excmd{ path: androidsdkGetBuildTool("zipalign") }
-        c.ia32 = isIA32Command(c.path)
+        c = NewExcmd(androidsdkGetBuildTool("zipalign"))
+        c.SetIA32(IsIA32Command(c.GetPath()))
 
         args = []string{ "4", filepath.Join(ic.out, "signed.apk"), filepath.Join(ic.out, "aligned.apk"), }
-        if !c.run("aligning", args...) { os.Remove(filepath.Join(ic.out, "aligned.apk")); return false }
+        if !c.Run("aligning", args...) { os.Remove(filepath.Join(ic.out, "aligned.apk")); return false }
 
-        if e := os.Rename(filepath.Join(ic.out, "aligned.apk"), ic.target); e != nil { errorf(0, "rename: %v", ic.target) }
+        if e := os.Rename(filepath.Join(ic.out, "aligned.apk"), ic.target); e != nil { Errorf(0, "rename: %v", ic.target) }
         return true
 }
 
-func (ic *androidGenJar) execute(targets []string, prequisites []string) bool {
+func (ic *androidGenJar) Execute(targets []string, prequisites []string) bool {
         // package native libs
         libname := filepath.Join(ic.out, "library.jar")
         ic.createPackage(libname) // androidsdkCreateDummyPackage
 
-        c := &excmd{ path: androidsdkGetBuildTool("aapt") }
-        c.ia32 = isIA32Command(c.path)
+        c := NewExcmd(androidsdkGetBuildTool("aapt"))
+        c.SetIA32(IsIA32Command(c.GetPath()))
 
         args := []string{ "package", "-u",
                 "-M", filepath.Join(ic.d, "AndroidManifest.xml"),
@@ -634,11 +636,11 @@ func (ic *androidGenJar) execute(targets []string, prequisites []string) bool {
         if ic.assets != "" { args = append(args, "-A", ic.assets) }
         //args = append(args, "--min-sdk-version", "7")
         //args = append(args, "--target-sdk-version", "7")
-        if !c.run("resources", args...) {
-                errorf(0, "package: %v(%v)", libname, "assets,res,...")
+        if !c.Run("resources", args...) {
+                Errorf(0, "package: %v(%v)", libname, "assets,res,...")
         }
 
-        if *flagV { verbose("classes -> %v", targets) }
+        if GetFlagV() { Verbose("classes -> %v", targets) }
 
         manifest := ""
         args = []string{}
@@ -648,13 +650,13 @@ func (ic *androidGenJar) execute(targets []string, prequisites []string) bool {
                 args = append(args, "-uf")
         }
         args = append(args, libname, "-C", filepath.Join(ic.out, "classes"), ".")
-        c = &excmd{ path:"jar" }
-        if !c.run("classes", args...) {
-                errorf(0, "package: %v(%v)", libname, "classes")
+        c = NewExcmd("jar")
+        if !c.Run("classes", args...) {
+                Errorf(0, "package: %v(%v)", libname, "classes")
         }
 
         if e := os.Rename(libname, ic.target); e != nil {
-                errorf(0, "rename: %v", ic.target)
+                Errorf(0, "rename: %v", ic.target)
         }
 
         return true

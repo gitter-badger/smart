@@ -1,14 +1,14 @@
 # -*- makefile -*-
 #$(module foo, gcc, exe)
 
-this = no effect, but a warning
-this.sources = foo.c
-this.includes = \
+me = no effect, but a warning
+me.sources = foo.c
+me.includes = \
   .\
 
-$(info sources $(this.sources))
-$(info includes $(this.includes))
-$(info includes $(this.includes))
+$(info sources $(me.sources))
+$(info includes $(me.includes))
+$(info includes $(me.includes))
 
 aaa := a\
  b\

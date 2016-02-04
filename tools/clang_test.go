@@ -6,6 +6,7 @@ package smart
 import (
         //"os"
         "testing"
+        //. "github.com/duzy/smart/build"
 )
 
 func TestToolsetClang(t *testing.T) {

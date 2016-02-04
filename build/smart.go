@@ -25,6 +25,20 @@ var (
         flagVV = flag.Bool("V", false, "print command verbosely")
 )
 
+func GetFlagG() bool    { return *flagG }
+func GetFlagO() string  { return *flagO }
+func GetFlagC() string  { return *flagC }
+func GetFlagT() string  { return *flagT }
+func GetFlagV() bool    { return *flagV }
+func GetFlagVV() bool   { return *flagVV }
+
+func SetFlagG(v bool)    { *flagG = v }
+func SetFlagO(v string)  { *flagO = v }
+func SetFlagC(v string)  { *flagC = v }
+func SetFlagT(v string)  { *flagT = v }
+func SetFlagV(v bool)    { *flagV = v }
+func SetFlagVV(v bool)   { *flagVV = v }
+
 type smarterror struct {
         number int
         message string
@@ -32,6 +46,18 @@ type smarterror struct {
 
 func (e *smarterror) String() string {
         return fmt.Sprintf("%v (%v)", e.message, e.number)
+}
+
+func Errorf(num int, f string, a ...interface{}) {
+        errorf(num, f, a...)
+}
+
+func Message(s string, a ...interface{}) {
+        message(s, a...)
+}
+
+func Verbose(s string, a ...interface{}) {
+        verbose(s, a...)
 }
 
 // errorf throw a panic message
