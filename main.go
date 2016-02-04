@@ -4,7 +4,7 @@
 package main
 
 import (
-        "./smart"
+        "github.com/duzy/smart/build"
 )
 
 func main() {

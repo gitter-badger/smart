@@ -367,9 +367,18 @@ type module struct {
         toolset toolset
         kind string
         action *action // action for building this module
-        variables map[string]*variable
+        defines map[string]*define
         using, usedBy []*module
         built, updated bool // marked as 'true' if module is built or updated
+}
+
+func (m *module) getSources(ctx *context) (sources []string) {
+        sources = split(ctx.callWith(m, "sources"))
+        for i := range sources {
+                if sources[i][0] == '/' { continue }
+                sources[i] = filepath.Join(m.dir, sources[i])
+        }
+        return
 }
 
 func (m *module) update() {
@@ -544,12 +553,21 @@ func Build(vars map[string]string, cmds []string) {
         var d string
         if d = *flagC; d == "" { d = "." }
 
+        s := []byte{} // TODO: needs init script
+        ctx, err := newContext("init", s, vars)
+        if err != nil {
+                fmt.Printf("smart: %v\n", err)
+                return
+        }
+
         // Find and process modules.
-        err := traverse(d, func(fn string, fi os.FileInfo) bool {
+        err = traverse(d, func(fn string, fi os.FileInfo) bool {
                 fr := matchFileInfo(fi, generalMetaFiles)
                 if *flagG && fr != nil { return false }
                 if fi.Name() == ".smart" {
-                        if _, err := parseFile(fn, nil); err != nil { errorf(0, "parse: `%v', %v\n", fn, err) }
+                        if err := ctx.include(fn); err != nil {
+                                errorf(0, "include: `%v', %v\n", fn, err)
+                        }
                 }
                 return true
         })

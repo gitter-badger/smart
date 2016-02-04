@@ -11,13 +11,24 @@ import (
 
 type builtin func(ctx *context, args []string) string
 
-var builtins = map[string]builtin {
-        "build":        builtinBuild,
-        "dir":          builtinDir,
-        "info":         builtinInfo,
-        "module":       builtinModule,
-        "use":          builtinUse,
-}
+var (
+        builtins = map[string]builtin {
+                "module":       builtinModule,
+                "commit":       builtinCommit,
+                "build":        builtinBuild,
+                "dir":          builtinDir,
+                "info":         builtinInfo,
+                "use":          builtinUse,
+
+                "upper":        builtinUpper,
+                "lower":        builtinLower,
+                "title":        builtinTitle,
+        }
+
+        builtinInfoFunc = func(args ...string) {
+                fmt.Printf("%v\n", strings.Join(args, " "))
+        }
+)
 
 func builtinDir(ctx *context, args []string) string {
         var ds []string
@@ -27,9 +38,32 @@ func builtinDir(ctx *context, args []string) string {
         return strings.Join(ds, " ")
 }
 
-func builtinInfo(ctx *context, args []string) string {
-        fmt.Printf("%v\n", strings.Join(args, " "))
-        return ""
+func builtinInfo(ctx *context, args []string) (s string) {
+        if builtinInfoFunc != nil {
+                builtinInfoFunc(args...)
+        }
+        return
+}
+
+func builtinUpper(ctx *context, args []string) string {
+        for i, s := range args {
+                args[i] = strings.ToUpper(s)
+        }
+        return strings.Join(args, " ")
+}
+
+func builtinLower(ctx *context, args []string) string {
+        for i, s := range args {
+                args[i] = strings.ToLower(s)
+        }
+        return strings.Join(args, " ")
+}
+
+func builtinTitle(ctx *context, args []string) string {
+        for i, s := range args {
+                args[i] = strings.ToTitle(s)
+        }
+        return strings.Join(args, " ")
 }
 
 func builtinModule(ctx *context, args []string) string {
@@ -61,7 +95,7 @@ func builtinModule(ctx *context, args []string) string {
                         kind: kind,
                         dir: filepath.Dir(ctx.l.scope),
                         location: ctx.l.location(),
-                        variables: make(map[string]*variable, 128),
+                        defines: make(map[string]*define, 32),
                 }
                 modules[m.name] = m
                 moduleOrderList = append(moduleOrderList, m)
@@ -91,6 +125,10 @@ func builtinModule(ctx *context, args []string) string {
 }
 
 func builtinBuild(ctx *context, args []string) string {
+        panic("use $(commit) instead")
+}
+
+func builtinCommit(ctx *context, args []string) string {
         var m *module
         if m = ctx.module; m == nil { errorf(0, "no module defined") }
 
@@ -115,7 +153,7 @@ func builtinUse(ctx *context, args []string) string {
                                 name: a,
                                 dir: filepath.Dir(ctx.l.scope),
                                 location: ctx.l.location(),
-                                variables: make(map[string]*variable, 128),
+                                defines: make(map[string]*define, 32),
                                 usedBy: []*module{ ctx.module },
                         }
                         ctx.module.using = append(ctx.module.using, m)

@@ -75,16 +75,15 @@ func (gcc *_gcc) createActions(ctx *context, args []string) bool {
         var useMod func(mod *module)
         useMod = func(mod *module) {
                 for _, u := range mod.using {
-                        if v, ok := u.variables["this.export.includes"]; ok {
-                                includes = append(includes, splitFieldsWithPrefix(v.value, "-I")...)
+                        if v := strings.TrimSpace(ctx.callWith(u, "this.export.includes")); v != "" {
+                                includes = append(includes, splitFieldsWithPrefix(v, "-I")...)
                         }
-                        if v, ok := u.variables["this.export.libdirs"]; ok {
-                                libdirs = append(libdirs, splitFieldsWithPrefix(v.value, "-L")...)
+                        if v := strings.TrimSpace(ctx.callWith(u, "this.export.libdirs")); v != "" {
+                                libdirs = append(libdirs, splitFieldsWithPrefix(v, "-L")...)
                         }
-                        if v, ok := u.variables["this.export.libs"]; ok {
-                                //fmt.Printf("libs: (%v) %v\n", u.name, v.value)
-                                libs = append(libs, splitFieldsWithPrefix(v.value, "-l")...)
-                        }
+                        if v := strings.TrimSpace(ctx.callWith(u, "this.export.libs")); v != "" {
+                                libs = append(libs, splitFieldsWithPrefix(v, "-l")...)
+                        }                        
                         useMod(u)
                 }
         }
@@ -104,7 +103,7 @@ func (gcc *_gcc) createActions(ctx *context, args []string) bool {
                 cmd.libdirs, cmd.libs = libdirs, libs
         }
 
-        sources := ctx.getModuleSources()
+        sources := ctx.module.getSources(ctx)
         if len(sources) == 0 { errorf(0, "no sources for `%v'", ctx.module.name) }
         //fmt.Printf("sources: %v: %v\n", ctx.module.name, sources)
         actions := createSourceTransformActions(sources, func(src string) (name string, c command) {

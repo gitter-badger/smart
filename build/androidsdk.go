@@ -87,9 +87,9 @@ func (sdk *_androidsdk) configModule(ctx *context, args []string, vars map[strin
         var platform string
         if s, ok := vars["PLATFORM"]; ok { platform = s } else { platform = androidsdkDefaultPlatform }
 
-        var v *variable
+        var v *define
         loc := ctx.l.location()
-        v = ctx.set("this.platform", platform); v.loc = *loc
+        v = ctx.set("this.platform", platform);                  v.loc = *loc
         v = ctx.set("this.sources", strings.Join(sources, " ")); v.loc = *loc
         return true
 }
@@ -121,18 +121,17 @@ func (sdk *_androidsdk) createActions(ctx *context, args []string) bool {
         if hasSrc {
                 var ps []*action
                 if a != nil { ps = append(ps, a) }
-                if sources := ctx.getModuleSources(); 0 < len(sources) {
+                if sources := ctx.module.getSources(ctx); 0 < len(sources) {
                         var classpath []string
                         for _, u := range m.using {
                                 if u.kind != "jar" { errorf(0, "can't use module of type `%v'", u.kind) }
-                                if v, ok := u.variables["this.export.jar"]; ok {
-                                        //fmt.Printf("use: `%v' by `%v', %v\n", u.name, m.name, v.value)
-                                        classpath = append(classpath, strings.TrimSpace(v.value))
+                                if v := strings.TrimSpace(ctx.call("this.export.jar")); v != "" {
+                                        classpath = append(classpath, v)
                                 }
                                 /*
-                                if v, ok := u.variables["this.export.libs.static"]; ok {
-                                        staticLibs = append(staticLibs, strings.TrimSpace(v.value))
-                                }*/
+                                if v := strings.TrimSpace(ctx.call("this.export.libs.static")); v != "" {
+                                        classpath = append(classpath, v)
+                                } */
                         }
 
                         staticLibs = append(staticLibs, strings.Split(strings.TrimSpace(ctx.call("this.libs.static")), " ")...)

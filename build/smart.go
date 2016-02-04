@@ -60,6 +60,19 @@ func message(s string, a ...interface{}) {
         fmt.Printf(s, a...)
 }
 
+// split split a string by space or tab
+func split(str string) (items []string) {
+        /*
+        a := strings.Split(str, " ")
+        for _, s := range a {
+                if strings.TrimSpace(s) != "" {
+                        items = append(items, s)
+                }
+        } */
+        items = strings.Fields(str)
+        return
+}
+
 // splitVarArgs split arguments in the form of "NAME=value" with the others.
 func splitVarArgs(args []string) (vars map[string]string, rest []string) {
         vars = make(map[string]string, 10)

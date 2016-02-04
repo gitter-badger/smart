@@ -239,7 +239,7 @@ func (n *_ndkbuildCmd) dumpAll(abi string, scripts []string) (res *_ndkbuildDump
         c := &excmd{ path:"ndk-build" }
         if c.run("" /*fmt.Sprintf("%s (%s)", filepath.Base(tf), abi)*/, vars...) {
                 //fmt.Printf("%v", c.stdout.String())
-                ctx, e := parse("DummyDump", c.stdout.Bytes(), nil)
+                ctx, e := newContext("DummyDump", c.stdout.Bytes(), nil)
                 if e != nil { errorf(0, "DummyDump: %v", e) }
                 res.ndkRoot = ctx.call("NDK_ROOT")
                 res.targetOut = ctx.call("TARGET_OUT")
@@ -287,7 +287,7 @@ func (n *_ndkbuildCmd) dumpSingle(abi string) (res *_ndkbuildDump) {
 
         if c.run("", vars...) {
                 //fmt.Printf( "%v", c.stdout.String() )
-                ctx, e := parse("DummyDump", c.stdout.Bytes(), nil)
+                ctx, e := newContext("DummyDump", c.stdout.Bytes(), nil)
                 if e != nil { errorf(0, "DummyDump: %v", e) }
                 //res.appName = ctx.call("NDK_APP_NAME")
                 //res.module = ctx.call("LOCAL_MODULE")

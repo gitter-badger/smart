@@ -58,7 +58,7 @@ func (ndk *_androidndk) addToolchain(d string) bool {
         }
 
         fn := filepath.Join(d, "config.mk")
-        ctx, err := parseFile(fn, nil)
+        ctx, err := newContextFromFile(fn, nil)
         if err != nil {
                 //message("error: toolchain: %v", err)
                 return false
@@ -136,12 +136,12 @@ func (ndk *_androidndk) configModule(ctx *context, args []string, vars map[strin
         includes := filepath.Join(ndk.root, "platforms", platform, arch, "usr/include")
         libdirs := filepath.Join(ndk.root, "platforms", platform, arch, "usr/lib")
 
-        var v *variable
+        var v *define
         loc := ctx.l.location()
-        v = ctx.set("this.abi", abi); v.loc = *loc
+        v = ctx.set("this.abi", abi);           v.loc = *loc
         v = ctx.set("this.platform", platform); v.loc = *loc
         v = ctx.set("this.includes", includes); v.loc = *loc
-        v = ctx.set("this.libdirs", libdirs); v.loc = *loc
+        v = ctx.set("this.libdirs", libdirs);   v.loc = *loc
         return true
 }
 
@@ -187,7 +187,7 @@ func (ndk *_androidndk) createActions(ctx *context, args []string) bool {
 }
 
 func (ndk *_androidndk) loadModule(fn, ndksrc, subdir string) (ok bool) {
-        ctx, err := parseFile(fn, map[string]string{
+        ctx, err := newContextFromFile(fn, map[string]string{
                 "my-dir": filepath.Join(ndksrc, subdir),
         })
 
