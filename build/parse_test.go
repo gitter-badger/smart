@@ -49,8 +49,8 @@ foobac=# comment 6	`)
         checkNode := func(n int, k nodeType, s string) (okay bool) {
                 okay = true
                 if len(l.nodes) < n+1 { t.Errorf("expecting at least %v nodes but got %v", n+1, len(l.nodes)); okay = false }
-                if c = l.nodes[n]; c.kind != k { t.Errorf("expecting node %v as %v but got %v(%v)", n, k, c.kind, l.str(c)); okay = false }
-                if l.str(c) != s { t.Errorf("expecting node %v as %v(%v) but got %v(%v)", n, k, s, c.kind, l.str(c)); okay = false }
+                if c = l.nodes[n]; c.kind != k { t.Errorf("expecting node %v as %v but got %v(%v)", n, k, c.kind, c.str()); okay = false }
+                if c.str() != s { t.Errorf("expecting node %v as %v(%v) but got %v(%v)", n, k, s, c.kind, c.str()); okay = false }
                 return
         }
 
@@ -143,17 +143,17 @@ empty5 =
         )
         checkNode := func(c *node, k nodeType, cc int, s string, cs ...string) {
                 if c.kind != k { t.Errorf("%v: expecting kind %v but got %v", i, k, c.kind) }
-                if ss := l.str(c); ss != s { t.Errorf("%v: expecting %v but got %v", i, s, ss) }
+                if ss := c.str(); ss != s { t.Errorf("%v: expecting %v but got %v", i, s, ss) }
                 if len(c.children) != cc { t.Errorf("%v: expecting %v children but got %v", i, cc, len(c.children)) }
 
                 var cn int
                 for cn = 0; cn < len(c.children) && cn < len(cs); cn++ {
                         nd := c.children[cn]
                         if nd.end < nd.pos {
-                                t.Errorf("%v: child %v has bad range [%v, %v) (%v)", i, cn, nd.pos, nd.end, l.str(c))
+                                t.Errorf("%v: child %v has bad range [%v, %v) (%v)", i, cn, nd.pos, nd.end, c.str())
                         }
-                        if s := l.str(nd); s != cs[cn] {
-                                t.Errorf("%v: expecting child %v '%v', but '%v', in '%v'", i, cn, cs[cn], s, l.str(nd))
+                        if s := nd.str(); s != cs[cn] {
+                                t.Errorf("%v: expecting child %v '%v', but '%v', in '%v'", i, cn, cs[cn], s, nd.str())
                         }
                 }
                 if cn != len(cs) { t.Errorf("%v: expecting at least %v children, but got %v", i, len(cs), cn) }
@@ -310,17 +310,17 @@ aaa |$(foo)|$(bar)| aaa
         )
         checkNode := func(c *node, k nodeType, cc int, s string, cs ...string) {
                 if c.kind != k { t.Errorf("%v: expecting kind %v but got %v", i, k, c.kind) }
-                if ss := l.str(c); ss != s { t.Errorf("%v: expecting %v but got %v", i, s, ss) }
+                if ss := c.str(); ss != s { t.Errorf("%v: expecting %v but got %v", i, s, ss) }
                 if len(c.children) != cc { t.Errorf("%v: expecting %v children but got %v", i, cc, len(c.children)) }
 
                 var cn int
                 for cn = 0; cn < len(c.children) && cn < len(cs); cn++ {
                         nd := c.children[cn]
                         if nd.end < nd.pos {
-                                t.Errorf("%v: child %v has bad range [%v, %v) (%v)", i, cn, nd.pos, nd.end, l.str(c))
+                                t.Errorf("%v: child %v has bad range [%v, %v) (%v)", i, cn, nd.pos, nd.end, c.str())
                         }
-                        if s := l.str(nd); s != cs[cn] {
-                                t.Errorf("%v: expecting child %v '%v', but '%v', in '%v'", i, cn, cs[cn], s, l.str(nd))
+                        if s := nd.str(); s != cs[cn] {
+                                t.Errorf("%v: expecting child %v '%v', but '%v', in '%v'", i, cn, cs[cn], s, nd.str())
                         }
                 }
                 if cn != len(cs) { t.Errorf("%v: expecting at least %v children, but got %v", i, len(cs), cn) }
@@ -418,17 +418,17 @@ c = xxx \#\
         )
         checkNode := func(c *node, k nodeType, cc int, s string, cs ...string) {
                 if c.kind != k { t.Errorf("%v: expecting kind %v but got %v", i, k, c.kind) }
-                if ss := l.str(c); ss != s { t.Errorf("%v: expecting %v but got %v", i, s, ss) }
+                if ss := c.str(); ss != s { t.Errorf("%v: expecting %v but got %v", i, s, ss) }
                 if len(c.children) != cc { t.Errorf("%v: expecting %v children but got %v", i, cc, len(c.children)) }
 
                 var cn int
                 for cn = 0; cn < len(c.children) && cn < len(cs); cn++ {
                         nd := c.children[cn]
                         if nd.end < nd.pos {
-                                t.Errorf("%v: child %v has bad range [%v, %v) (%v)", i, cn, nd.pos, nd.end, l.str(c))
+                                t.Errorf("%v: child %v has bad range [%v, %v) (%v)", i, cn, nd.pos, nd.end, c.str())
                         }
-                        if s := l.str(nd); s != cs[cn] {
-                                t.Errorf("%v: expecting child %v '%v', but '%v', in '%v'", i, cn, cs[cn], s, l.str(nd))
+                        if s := nd.str(); s != cs[cn] {
+                                t.Errorf("%v: expecting child %v '%v', but '%v', in '%v'", i, cn, cs[cn], s, nd.str())
                         }
                 }
                 if cn != len(cs) { t.Errorf("%v: expecting at least %v children, but got %v", i, len(cs), cn) }
@@ -497,17 +497,17 @@ blah : blah.c
         )
         checkNode := func(c *node, k nodeType, cc int, s string, cs ...string) {
                 if c.kind != k { t.Errorf("%v: expecting kind %v but got %v", i, k, c.kind) }
-                if ss := l.str(c); ss != s { t.Errorf("%v: expecting %v but got %v", i, s, ss) }
+                if ss := c.str(); ss != s { t.Errorf("%v: expecting %v but got %v", i, s, ss) }
                 if len(c.children) != cc { t.Errorf("%v: expecting %v children but got %v", i, cc, len(c.children)) }
 
                 var cn int
                 for cn = 0; cn < len(c.children) && cn < len(cs); cn++ {
                         nd := c.children[cn]
                         if nd.end < nd.pos {
-                                t.Errorf("%v: child %v has bad range [%v, %v) (%v)", i, cn, nd.pos, nd.end, l.str(c))
+                                t.Errorf("%v: child %v has bad range [%v, %v) (%v)", i, cn, nd.pos, nd.end, c.str())
                         }
-                        if s := l.str(nd); s != cs[cn] {
-                                t.Errorf("%v: expecting child %v '%v', but '%v', in '%v'", i, cn, cs[cn], s, l.str(nd))
+                        if s := nd.str(); s != cs[cn] {
+                                t.Errorf("%v: expecting child %v '%v', but '%v', in '%v'", i, cn, cs[cn], s, nd.str())
                         }
                 }
                 if cn != len(cs) { t.Errorf("%v: expecting at least %v children, but got %v", i, len(cs), cn) }
