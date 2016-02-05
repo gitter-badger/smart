@@ -6,4 +6,4 @@ me.sources := foo.c
 #me.export.libs := foo_shared
 me.export.libs := out/foo_shared/foo_shared.so
 
-$(build)
+$(commit)

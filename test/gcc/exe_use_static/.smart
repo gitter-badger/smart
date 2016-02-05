@@ -6,4 +6,4 @@ me.includes = .
 
 $(use foo_static)
 
-$(build)
+$(commit)

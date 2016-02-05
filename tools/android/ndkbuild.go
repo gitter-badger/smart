@@ -241,7 +241,7 @@ func (n *_ndkbuildCmd) dumpAll(abi string, scripts []string) (res *_ndkbuildDump
         if c.Run("" /*fmt.Sprintf("%s (%s)", filepath.Base(tf), abi)*/, vars...) {
                 //fmt.Printf("%v", c.GetStdout().String())
                 ctx, e := NewContext("DummyDump", c.GetStdout().Bytes(), nil)
-                if e != nil { Errorf(0, "DummyDump: %v", e) }
+                if e != nil { Fatal("DummyDump: %v", e) }
                 res.ndkRoot = ctx.Call("NDK_ROOT")
                 res.targetOut = ctx.Call("TARGET_OUT")
                 res.targetObjs = ctx.Call("TARGET_OBJS")
@@ -289,7 +289,7 @@ func (n *_ndkbuildCmd) dumpSingle(abi string) (res *_ndkbuildDump) {
         if c.Run("", vars...) {
                 //fmt.Printf( "%v", c.GetStdout().String() )
                 ctx, e := NewContext("DummyDump", c.GetStdout().Bytes(), nil)
-                if e != nil { Errorf(0, "DummyDump: %v", e) }
+                if e != nil { Fatal("DummyDump: %v", e) }
                 //res.appName = ctx.Call("NDK_APP_NAME")
                 //res.module = ctx.Call("LOCAL_MODULE")
                 //res.moduleClass = ctx.Call("LOCAL_MODULE_CLASS")
@@ -309,7 +309,7 @@ func (n *_ndkbuildCmd) dumpSingle(abi string) (res *_ndkbuildDump) {
 func (n *_ndkbuildCmd) createDummyDumpFile() string {
         tf, e := ioutil.TempFile("/tmp", "smart-dummy-dump-")
         if e != nil {
-                Errorf(0, "TempFile: %v", e)
+                Fatal("TempFile: %v", e)
         }
 
         defer tf.Close()
@@ -355,7 +355,7 @@ dummy-dump:
 func (n *_ndkbuildCmd) createSmartDumpFile(scripts []string) string {
         tf, e := ioutil.TempFile("/tmp", "smart-dummy-dump-")
         if e != nil {
-                Errorf(0, "TempFile: %v", e)
+                Fatal("TempFile: %v", e)
         }
 
         defer tf.Close()

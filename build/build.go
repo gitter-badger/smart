@@ -56,6 +56,21 @@ func RegisterToolset(name string, ts toolset) {
         toolsets[name] = &toolsetStub{ name:name, toolset:ts };
 }
 
+type BasicToolset struct {        
+}
+
+func (tt *BasicToolset) ConfigModule(ctx *Context, m *Module, args []string, vars map[string]string) bool {
+        return false
+}
+
+func (tt *BasicToolset) CreateActions(ctx *Context, m *Module, args []string) bool {
+        return false
+}
+
+func (tt *BasicToolset) UseModule(ctx *Context, m, o *Module) bool {
+        return false
+}
+
 func IsIA32Command(s string) bool {
         buf := new(bytes.Buffer)
         cmd := exec.Command("file", "-b", s)
@@ -85,9 +100,8 @@ type Excmd struct {
         stdin io.Reader
 }
 
-func NewExcmd(s string) (c *Excmd) {
-        c.path = s
-        return
+func NewExcmd(s string) *Excmd {
+        return &Excmd{ path:s }
 }
 
 func (c *Excmd) GetPath() string { return c.path }
@@ -388,7 +402,7 @@ func CreateSourceTransformActions(sources []string, namecommand func(src string)
 
 // module is defined by a $(module) invocation in .smart script.
 type Module struct {
-        location *location // where does it defined
+        Parent *Module // upper module
         Dir string
         Name string
         Toolset toolset
@@ -397,10 +411,11 @@ type Module struct {
         Using, UsedBy []*Module
         Built, Updated bool // marked as 'true' if module is built or updated
         defines map[string]*define
+        location location // where does it defined
 }
 
 func (m *Module) GetSources(ctx *Context) (sources []string) {
-        sources = split(ctx.callWith(m, "sources"))
+        sources = split(ctx.callWith(m.location, m, "sources"))
         for i := range sources {
                 if sources[i][0] == '/' { continue }
                 sources[i] = filepath.Join(m.Dir, sources[i])
@@ -605,7 +620,7 @@ func Build(vars map[string]string, cmds []string) {
         defer func() {
                 if e := recover(); e != nil {
                         if se, ok := e.(*smarterror); ok {
-                                fmt.Printf("smart:%v: %v\n", se.number, se)
+                                fmt.Printf("smart: %v\n", se.message)
                                 os.Exit(-1)
                         } else {
                                 panic(e)
@@ -653,12 +668,11 @@ func Build(vars map[string]string, cmds []string) {
                 }
                 if !mod.Built {
                         if *flagVV {
-                                fmt.Printf("smart: build `%v' (%v)\n", mod.Name, mod.Dir)
+                                fmt.Printf("smart: config `%v' (%v)\n", mod.Name, mod.Dir)
                         }
-                        p.module = mod
                         if mod.Toolset.CreateActions(p, mod, []string{}) {
                                 mod.Built = true
-                        } else {
+                        } else if *flagV {
                                 fmt.Printf("%v: module `%v' not built\n", mod.location, mod.Name)
                         }
                 }
@@ -681,7 +695,9 @@ func Build(vars map[string]string, cmds []string) {
         updateMod = func(mod *Module) {
                 updateDeps(mod)
                 if !mod.Updated {
-                        fmt.Printf("smart: update `%v'...\n", mod.Name)
+                        if *flagV {
+                                fmt.Printf("smart: update `%v'...\n", mod.Name)
+                        }
                         mod.update()
                         mod.Updated = true
                 }

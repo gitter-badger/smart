@@ -16,15 +16,16 @@ import (
 )
 
 var (
-        //flag_a = flag.Bool("a", false, "automode")
+        flagA = flag.Bool("a", false, "auto mode")
         flagG = flag.Bool("g", true, "ignore names like \".git\", \".svn\", etc.")
         flagO = flag.String("o", "", "output directory")
-        flagV = flag.Bool("v", false, "prompt command")
         flagC = flag.String("C", "", "change directory")
         flagT = flag.String("T", "", "traverse")
+        flagV = flag.Bool("v", false, "prompt command")
         flagVV = flag.Bool("V", false, "print command verbosely")
 )
 
+func GetFlagA() bool    { return *flagA }
 func GetFlagG() bool    { return *flagG }
 func GetFlagO() string  { return *flagO }
 func GetFlagC() string  { return *flagC }
@@ -32,24 +33,24 @@ func GetFlagT() string  { return *flagT }
 func GetFlagV() bool    { return *flagV }
 func GetFlagVV() bool   { return *flagVV }
 
-func SetFlagG(v bool)    { *flagG = v }
-func SetFlagO(v string)  { *flagO = v }
-func SetFlagC(v string)  { *flagC = v }
-func SetFlagT(v string)  { *flagT = v }
-func SetFlagV(v bool)    { *flagV = v }
-func SetFlagVV(v bool)   { *flagVV = v }
+func SetFlagA(v bool)   { *flagA = v }
+func SetFlagG(v bool)   { *flagG = v }
+func SetFlagO(v string) { *flagO = v }
+func SetFlagC(v string) { *flagC = v }
+func SetFlagT(v string) { *flagT = v }
+func SetFlagV(v bool)   { *flagV = v }
+func SetFlagVV(v bool)  { *flagVV = v }
 
 type smarterror struct {
-        number int
         message string
 }
 
 func (e *smarterror) String() string {
-        return fmt.Sprintf("%v (%v)", e.message, e.number)
+        return e.message
 }
 
-func Errorf(num int, f string, a ...interface{}) {
-        errorf(num, f, a...)
+func Fatal(f string, a ...interface{}) {
+        errorf(0, f, a...)
 }
 
 func Message(s string, a ...interface{}) {
@@ -62,10 +63,7 @@ func Verbose(s string, a ...interface{}) {
 
 // errorf throw a panic message
 func errorf(num int, f string, a ...interface{}) {
-        panic(&smarterror{
-                number: num,
-                message: fmt.Sprintf(f, a...),
-        })
+        panic(&smarterror{ fmt.Sprintf(f, a...) })
 }
 
 // verbose prints a message if `V' flag is enabled

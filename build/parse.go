@@ -16,18 +16,9 @@ import (
         "strings"
 )
 
-type location struct {
-        buf *parseBuffer
-        offset, lineno, colno int
-}
-
-func (l *location) String() string {
-        return fmt.Sprintf("%v:%v:%v", l.buf.scope, l.lineno, l.colno)
-}
-
 type define struct {
         name string
-        node []interface{} // string, *node
+        node []interface{} // *node, *flatstr
         readonly bool
         loc location
 }
@@ -118,19 +109,52 @@ func (k nodeType) String() string {
         return nodeTypeNames[int(k)]
 }
 
+type location struct {
+        offset, end int // (node.pos, node.end)
+}
+
+// flatstr is a expanded string with a location
+type flatstr struct {
+        s string
+        l location
+}
+
 type node struct {
+        l *lex
         kind nodeType
         children []*node
-        pos, end, lineno, colno int
+        pos, end int
 }
 
 func (n *node) len() int {
         return n.end - n.pos
 }
 
+func (n *node) str() string {
+        return string(n.l.s[n.pos:n.end])
+}
+
+func (n *node) loc() location {
+        return location{n.pos, n.end}
+}
+
 type parseBuffer struct {
         scope string // file or named scope
         s []byte // the content of the file
+}
+
+func (p *parseBuffer) caculateLocationLineColumn(loc location) (lineno, colno int) {
+        for i, end := 0, len(p.s); i < loc.offset && i < end; {
+                r, l := utf8.DecodeRune(p.s[i:])
+                switch {
+                case r == '\n':
+                        lineno, colno = lineno + 1, 0
+                case 0 < l:
+                        colno += l
+                }
+                i += l
+        }
+        return
 }
 
 type lexStack struct {
@@ -143,8 +167,6 @@ type lex struct {
         *parseBuffer
         pos int // the current read position
 
-        lineno, colno, prevColno int
-
         rune rune // the rune last time returned by getRune
         runeLen int // the size in bytes of the rune last returned by getRune
         
@@ -154,12 +176,13 @@ type lex struct {
         nodes []*node // parsed top level nodes
 }
 
-func (l *lex) location() *location {
-        return &location{ l.parseBuffer, l.pos, l.lineno, l.colno }
+func (l *lex) location() location {
+        return location{ l.pos, l.pos }
 }
 
-func (l *lex) str(n *node) string {
-        return string(l.s[n.pos:n.end])
+func (l *lex) getLineColumn() (lineno, colno int) {
+        lineno, colno = l.caculateLocationLineColumn(l.location())
+        return 
 }
 
 func (l *lex) peek() (r rune) {
@@ -186,12 +209,14 @@ func (l *lex) get() bool {
                 return false //errorf(-2, "zero reading (at %v)", l.pos)
         case l.rune == utf8.RuneError:
                 errorf(-2, "invalid UTF8 encoding")
+
+                /*
         case l.rune == '\n':
                 l.lineno, l.prevColno, l.colno = l.lineno+1, l.colno, 0
         case l.runeLen > 1:
                 l.colno += 2
         default:
-                l.colno ++
+                l.colno ++ */
         }
         return true
 }
@@ -206,18 +231,19 @@ func (l *lex) unget() {
                 errorf(0, "get to the front of beginning of the bytes")
                 //case l.lineno == 1 && l.colno <= 1: return
         }
+        /*
         if l.rune == '\n' {
                 l.lineno, l.colno, l.prevColno = l.lineno-1, l.prevColno, 0
         } else {
                 l.colno--
-        }
+        } */
         // assert(utf8.RuneLen(l.rune) == l.runeLen)
         l.pos, l.rune, l.runeLen = l.pos-l.runeLen, 0, 0
         return
 }
 
 func (l *lex) new(t nodeType) *node {
-        return &node{ kind:t, pos:l.pos, end:l.pos, lineno:l.lineno, colno:l.colno }
+        return &node{ l:l, kind:t, pos:l.pos, end:l.pos }
 }
 
 func (l *lex) push(t nodeType, ns func(), c int) *lexStack {
@@ -526,7 +552,7 @@ state_loop:
                                 st.node.children[i].end-- // exclude the '\n' or '#'
                         }
 
-                        fmt.Printf("RuleTextLine: '%v'\n", l.str(st.node.children[i]))
+                        fmt.Printf("RuleTextLine: '%v'\n", st.node.children[i].str())
 
                         st = l.pop() // pop out the node
 
@@ -603,7 +629,7 @@ state_loop:
 }
 
 func (l *lex) parse() bool {
-        l.step, l.lineno, l.colno, l.pos = l.stateGlobal, 1, 0, 0
+        l.step, l.pos = l.stateGlobal, 0
         end := len(l.s); for l.pos < end { l.step() }
 
         for 0 < len(l.stack) {
@@ -615,35 +641,29 @@ func (l *lex) parse() bool {
 
 // Context hold a parse context and the current module being processed.
 type Context struct {
-        stack []*lex
+        lexingStack []*lex
+        moduleStack []*Module
 
-        l *lex
-
-        // module is the current module being processed
-        module *Module
+        l *lex // the current lexer
+        m *Module // the current module being processed
 
         // variables holds the context
         defines map[string]*define
-
-        // line accumulates the current line of text
-        //line bytes.Buffer
 }
 
 func (ctx *Context) CurrentScope() string {
         return ctx.l.scope
 }
 
-func (ctx *Context) CurrentLocation() *location {
+func (ctx *Context) CurrentLocation() location {
         return ctx.l.location()
 }
 
-func (ctx *Context) setModule(m *Module) (prev *Module) {
-        prev = ctx.module
-        ctx.module = m
-        return
+func (ctx *Context) CurrentModule() *Module {
+        return ctx.m
 }
 
-func (ctx *Context) expand(str string) string {
+func (ctx *Context) expand(loc location, str string) string {
         var buf bytes.Buffer
         var exp func(s []byte) (out string, l int)
         var getRune = func(s []byte) (r rune, l int) {
@@ -669,7 +689,7 @@ func (ctx *Context) expand(str string) string {
                 var t bytes.Buffer
                 if rr == 0 {
                         t.WriteRune(r)
-                        out = ctx.call(t.String(), args...)
+                        out = ctx.call(loc, t.String(), args...)
                         return
                 }
 
@@ -710,7 +730,7 @@ func (ctx *Context) expand(str string) string {
                                         }
                                         t.Reset()
                                 }
-                                out, l = ctx.call(name, args...), l + rs
+                                out, l = ctx.call(loc, name, args...), l + rs
                                 return // do not "break"
                         }
 
@@ -739,40 +759,54 @@ func (ctx *Context) expand(str string) string {
 }
 
 func (ctx *Context) CallWith(m *Module, name string, args ...string) string {
-        return ctx.callWith(m, name, args...)
+        return ctx.callWith(ctx.l.location(), m, name, args...)
 }
 
 func (ctx *Context) Call(name string, args ...string) string {
-        return ctx.call(name, args...)
+        return ctx.call(ctx.l.location(), name, args...)
 }
 
 func (ctx *Context) Set(name string, a ...interface{}) {
         ctx.set(name, a...)
 }
 
-func (ctx *Context) call(name string, args ...string) string {
+func (ctx *Context) call(loc location, name string, args ...string) string {
         vars := ctx.defines
 
         switch {
         default:
                 if f, ok := builtins[name]; ok {
-                        // All arguments should be expended.
-                        for i := range args { args[i] = ctx.expand(args[i]) }
-                        return f(ctx, args)
+                        /*
+                        defer func() {
+                                // Process smarterror to dump error message with location.
+                                if e := recover(); e != nil {
+                                        fmt.Printf("called: %v (%v)\n", name, e)
+                                        if se, ok := e.(*smarterror); ok {
+                                                lineno, colno := ctx.l.getLineColumn()
+                                                fmt.Printf("scope:%v:%v: %v\n", lineno, colno, se.message)
+                                                os.Exit(-2)
+                                        } else {
+                                                panic(e)
+                                        }
+                                }
+                        }() */
+                        // Expand all arguments.
+                        for i := range args { args[i] = ctx.expand(loc, args[i]) }
+                        return f(ctx, loc, args)
                 }
         case name == "$": return "$";
         case name == "call":
                 if 0 < len(args) {
-                        return ctx.call(args[0], args[1:]...)
+                        return ctx.call(loc, args[0], args[1:]...)
                 }
                 return ""
         case name == "me":
-                if ctx.module != nil {
-                        return ctx.module.Name
+                if ctx.m != nil {
+                        return ctx.m.Name
                 }
                 return ""
-        case strings.HasPrefix(name, "me.") && ctx.module != nil:
-                vars = ctx.module.defines
+        case strings.HasPrefix(name, "me.") && ctx.m != nil:
+                vars = ctx.m.defines
         }
 
         if vars != nil {
@@ -783,7 +817,9 @@ func (ctx *Context) call(name string, args ...string) string {
                                 if 0 < n { f = fn[0:] }
                                 switch t := i.(type) {
                                 case string: fmt.Fprintf(b, f, t)
+                                case *flatstr: fmt.Fprintf(b, f, t.s)
                                 case *node: fmt.Fprintf(b, f, ctx.expandNode(t.children[1]))
+                                default: errorf(0, "unknown supported '%v'", t)
                                 }
                         }
                         return b.String()
@@ -793,18 +829,18 @@ func (ctx *Context) call(name string, args ...string) string {
         return ""
 }
 
-func (ctx *Context) callWith(m *Module, name string, args ...string) (s string) {
-        o := ctx.module
-        ctx.module = m
-        s = ctx.call("me."+name, args...)
-        ctx.module = o
+func (ctx *Context) callWith(loc location, m *Module, name string, args ...string) (s string) {
+        o := ctx.m
+        ctx.m = m
+        s = ctx.call(loc, "me."+name, args...)
+        ctx.m = o
         return
 }
 
 func (ctx *Context) get(name string) *define {
         vars := ctx.defines
-        if strings.HasPrefix(name, "me.") && ctx.module != nil {
-                vars = ctx.module.defines
+        if strings.HasPrefix(name, "me.") && ctx.m != nil {
+                vars = ctx.m.defines
         }
         if vars == nil {
                 //fmt.Printf("%v:warning: no \"me\" module\n", &loc)
@@ -817,14 +853,20 @@ func (ctx *Context) get(name string) *define {
 func (ctx *Context) set(name string, a ...interface{}) (v *define) {
         loc := ctx.l.location()
 
+        //fmt.Printf("set: %v, %v\n", name, a)
+
         if name == "me" {
-                fmt.Printf("%v:warning: ignore attempts on \"me\"\n", loc)
+                errorf(0, "%v: `me' is readonly", loc)
                 return
         }
 
         vars := ctx.defines
-        if strings.HasPrefix(name, "me.") && ctx.module != nil {
-                vars = ctx.module.defines
+        if strings.HasPrefix(name, "me.") {
+                if ctx.m == nil {
+                        fmt.Printf("%v:warning: no module defined for '%v'\n", loc, name)
+                        return
+                }
+                vars = ctx.m.defines
         }
         if vars == nil {
                 fmt.Printf("%v:warning: no \"me\" module\n", &loc)
@@ -842,7 +884,7 @@ func (ctx *Context) set(name string, a ...interface{}) (v *define) {
                 return
         }
         
-        v.name, v.node, v.loc = name, a, *ctx.l.location()
+        v.name, v.node, v.loc = name, a, ctx.l.location()
         return
 }
 
@@ -862,28 +904,28 @@ func (ctx *Context) expandNode(n *node) string {
                 for _, an := range n.children[1:] {
                         args = append(args, ctx.expandNode(an))
                 }
-                return ctx.call(name, args...)
+                return ctx.call(n.loc(), name, args...)
 
         case nodeCallArg:       fallthrough
         case nodeCallName:      fallthrough
         case nodeDeferredText:  fallthrough
         case nodeImmediateText:
-                if nc == 0 { return ctx.l.str(n) }
-                b, pos := new(bytes.Buffer), n.pos
+                if nc == 0 { return n.str() }
+                b, l, pos := new(bytes.Buffer), n.l, n.pos
                 for _, c := range n.children {
                         if pos < c.pos {
-                                b.Write(ctx.l.s[pos:c.pos])
+                                b.Write(l.s[pos:c.pos])
                         }
                         b.WriteString(ctx.expandNode(c))
                         pos = c.end
                 }
                 if pos < n.end {
-                        b.Write(ctx.l.s[pos:n.end])
+                        b.Write(l.s[pos:n.end])
                 }
                 return b.String()
 
         default:
-                panic(fmt.Sprintf("TODO: %v: %v (%v)\n", n.kind, ctx.l.str(n), nc))
+                panic(fmt.Sprintf("TODO: %v: %v (%v)\n", n.kind, n.str(), nc))
         }
 
         return ""
@@ -892,7 +934,7 @@ func (ctx *Context) expandNode(n *node) string {
 func (ctx *Context) processNode(n *node) (err error) {
         switch n.kind {
         case nodeDefineQuestioned:
-                if name := ctx.expandNode(n.children[0]); ctx.call(name) == "" {
+                if name := ctx.expandNode(n.children[0]); ctx.call(n.loc(), name) == "" {
                         ctx.set(name, n)
                 }
 
@@ -916,8 +958,9 @@ func (ctx *Context) processNode(n *node) (err error) {
                         if deferred {
                                 d.node = append(d.node, n)
                         } else {
-                                v := ctx.expandNode(n.children[1])
-                                d.node = append(d.node, v)
+                                vc := n.children[1]
+                                v := ctx.expandNode(vc)
+                                d.node = append(d.node, &flatstr{ v, vc.loc() })
                         }
                 } else {
                         ctx.set(name, n)
@@ -929,8 +972,16 @@ func (ctx *Context) processNode(n *node) (err error) {
 
         case nodeCall:
                 if s := ctx.expandNode(n); s != "" {
-                        errorf(0, "illigal: %v (%v)", s, ctx.l.str(n))
+                        errorf(0, "illigal: %v (%v)", s, n.str())
                 }
+
+        case nodeImmediateText:
+                if s := ctx.expandNode(n); s != "" {
+                        errorf(0, "error: '%v'", s)
+                }
+
+        default:
+                panic(n.kind.String()+" not implemented")
 
         case nodeComment:
         }
@@ -949,24 +1000,29 @@ func (ctx *Context) _parse() (err error) {
                         break
                 }
         }
+
+        //fmt.Printf("_parse: %v, %v, %v\n", len(ctx.lexingStack), len(ctx.l.nodes), len(ctx.defines))
+
         return
 }
 
 func (ctx *Context) append(scope string, s []byte) (err error) {
-        l := &lex{ parseBuffer:&parseBuffer{ scope:scope, s: s }, pos: 0, }
-        ctx.stack = append(ctx.stack, l)
-
+        ctx.lexingStack = append(ctx.lexingStack, ctx.l)
         defer func() {
-                ctx.stack = ctx.stack[len(ctx.stack)-1:]
+                ctx.lexingStack = ctx.lexingStack[0:len(ctx.lexingStack)-1]
 
                 if e := recover(); e != nil {
                         if se, ok := e.(*smarterror); ok {
-                                message("%v: %v", ctx.l.location(), se)
+                                lineno, colno := ctx.l.getLineColumn()
+                                fmt.Printf("%v:%v:%v: %v\n", scope, lineno, colno, se)
                         } else {
                                 panic(e)
                         }
                 }
         }()
+
+        ctx.l = &lex{ parseBuffer:&parseBuffer{ scope:scope, s: s }, pos: 0 }
+        ctx.m = nil
 
         if err = ctx._parse(); err != nil {
                 // ...
@@ -987,6 +1043,8 @@ func (ctx *Context) include(fn string) (err error) {
 
         defer f.Close()
 
+        //fmt.Printf("include: %v\n", fn)
+
         s, err = ioutil.ReadAll(f)
         if err == nil {
                 err = ctx.append(fn, s)
@@ -997,14 +1055,15 @@ func (ctx *Context) include(fn string) (err error) {
 
 func NewContext(scope string, s []byte, vars map[string]string) (ctx *Context, err error) {
         ctx = &Context{
-                l: &lex{ parseBuffer:&parseBuffer{ scope:scope, s: s }, pos: 0, },
+                l: &lex{ parseBuffer:&parseBuffer{ scope:scope, s: s }, pos: 0 },
                 defines: make(map[string]*define, len(vars) + 32),
         }
+
         for k, v := range vars {
                 ctx.set(k, v)
         }
 
-        err = ctx.append(scope, s)
+        err = ctx._parse()
         return
 }
 

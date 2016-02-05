@@ -12,7 +12,7 @@ import (
 )
 
 func init() {
-        RegisterToolset("gcc", &_gcc{})
+        RegisterToolset("gcc", &toolset{})
 }
 
 var gccSourcePatterns = []*FileMatchRule{
@@ -22,14 +22,11 @@ var gccSourcePatterns = []*FileMatchRule{
         { "header", ^os.ModeType, `\.(h)$` },
 }
 
-type _gcc struct {
+type toolset struct {
+        BasicToolset
 }
 
-func (gcc *_gcc) ConfigModule(ctx *Context, m *Module, args []string, vars map[string]string) bool {
-        return false
-}
-
-func (gcc *_gcc) CreateActions(ctx *Context, m *Module, args []string) bool {
+func (gcc *toolset) CreateActions(ctx *Context, m *Module, args []string) bool {
         var cmd *gccCommand
         var targetName = m.Name
         switch m.Kind {
@@ -43,7 +40,7 @@ func (gcc *_gcc) CreateActions(ctx *Context, m *Module, args []string) bool {
                 if !strings.HasSuffix(targetName, ".a")  { targetName = targetName + ".a" }
                 cmd = gccNewCommand("ar", "crs")
         default:
-                Errorf(0, fmt.Sprintf("unknown type `%v'", m.Kind))
+                Fatal(fmt.Sprintf("unknown type `%v'", m.Kind))
         }
         cmd.SetMkdir(filepath.Join("out", m.Name))
 
@@ -66,21 +63,21 @@ func (gcc *_gcc) CreateActions(ctx *Context, m *Module, args []string) bool {
                 }
                 return
         }
-        includes := splitFieldsWithPrefix(ctx.Call("me.includes"), "-I")
-        libdirs := splitFieldsWithPrefix(ctx.Call("me.libdirs"), "-L")
-        libs := splitFieldsWithPrefix(ctx.Call("me.libs"), "-l")
+        includes := splitFieldsWithPrefix(ctx.Call("includes"), "-I")
+        libdirs := splitFieldsWithPrefix(ctx.Call("libdirs"), "-L")
+        libs := splitFieldsWithPrefix(ctx.Call("libs"), "-l")
 
         // Import includes and libs from using modules.
         var useMod func(mod *Module)
         useMod = func(mod *Module) {
                 for _, u := range mod.Using {
-                        if v := strings.TrimSpace(ctx.CallWith(u, "me.export.includes")); v != "" {
+                        if v := strings.TrimSpace(ctx.CallWith(u, "export.includes")); v != "" {
                                 includes = append(includes, splitFieldsWithPrefix(v, "-I")...)
                         }
-                        if v := strings.TrimSpace(ctx.CallWith(u, "me.export.libdirs")); v != "" {
+                        if v := strings.TrimSpace(ctx.CallWith(u, "export.libdirs")); v != "" {
                                 libdirs = append(libdirs, splitFieldsWithPrefix(v, "-L")...)
                         }
-                        if v := strings.TrimSpace(ctx.CallWith(u, "me.export.libs")); v != "" {
+                        if v := strings.TrimSpace(ctx.CallWith(u, "export.libs")); v != "" {
                                 libs = append(libs, splitFieldsWithPrefix(v, "-l")...)
                         }                        
                         useMod(u)
@@ -103,8 +100,8 @@ func (gcc *_gcc) CreateActions(ctx *Context, m *Module, args []string) bool {
         }
 
         sources := m.GetSources(ctx)
-        if len(sources) == 0 { Errorf(0, "no sources for `%v'", m.Name) }
-        //fmt.Printf("sources: %v: %v\n", m.Name, sources)
+        if len(sources) == 0 { Fatal("no sources for `%v'", m.Name) }
+
         actions := CreateSourceTransformActions(sources, func(src string) (name string, c Command) {
                 var fr *FileMatchRule
                 if fi, err := os.Stat(src); err != nil {
@@ -114,7 +111,7 @@ func (gcc *_gcc) CreateActions(ctx *Context, m *Module, args []string) bool {
                 }
 
                 if fr == nil {
-                        Errorf(0, "unknown source `%v'", src)
+                        Fatal("unknown source `%v'", src)
                 }
                 
                 switch fr.Name {
@@ -124,7 +121,7 @@ func (gcc *_gcc) CreateActions(ctx *Context, m *Module, args []string) bool {
                 case "c++": c = cmdGxx
                         if s := cmd.GetPath(); s != "g++" && s != "ar" { cmd.SetPath("g++") }
                 default:
-                        Errorf(0, "unknown language for source `%v'", src)
+                        Fatal("unknown language for source `%v'", src)
                 }
 
                 name = src + ".o"
@@ -134,11 +131,6 @@ func (gcc *_gcc) CreateActions(ctx *Context, m *Module, args []string) bool {
 
         //fmt.Printf("module: %v, %v, %v\n", m.Name, m.Action.targets, len(m.Action.prequisites))
         return m.Action != nil
-}
-
-func (gcc *_gcc) UseModule(ctx *Context, m, o *Module) bool {
-        //fmt.Printf("TODO: use: %v by %v\n", m.Name, m.Name)
-        return false
 }
 
 type gccCommand struct {

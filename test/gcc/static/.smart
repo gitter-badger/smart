@@ -5,4 +5,4 @@ me.sources := foo.c
 me.export.libdirs := out/foo_static
 me.export.libs := foo_static
 
-$(build)
+$(commit)
