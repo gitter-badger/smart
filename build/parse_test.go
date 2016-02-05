@@ -549,11 +549,11 @@ i2 = $a$($i)-$($i$i)
 
         if l1, l2 := len(p.defines), 5;                 l1 != l2 { t.Errorf("expects '%v' defines but got '%v'", l2, l1) }
 
-        if s, ex := p.call("a"), "a";                   s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
-        if s, ex := p.call("i"), "i";                   s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
-        if s, ex := p.call("ii"), "x x a i x x";        s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
-        if s, ex := p.call("i1"), "ai-x x a i x x";     s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
-        if s, ex := p.call("i2"), "ai-x x a i x x";     s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
+        if s, ex := p.Call("a"), "a";                   s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
+        if s, ex := p.Call("i"), "i";                   s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
+        if s, ex := p.Call("ii"), "x x a i x x";        s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
+        if s, ex := p.Call("i1"), "ai-x x a i x x";     s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
+        if s, ex := p.Call("i2"), "ai-x x a i x x";     s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
 
         //////////////////////////////////////////////////
         p, err = newTestContext("TestParse#2", `
@@ -575,18 +575,18 @@ dddd := xxx-$(sh$ared)-$(stat$ic)-$(a$$a)-xxx
                 if _, ok := p.defines[s]; !ok { t.Errorf("missing '%v'", s) }
         }
 
-        if s, ex := p.call("a"), "a";                   s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
-        if s, ex := p.call("i"), "i";                   s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
-        if s, ex := p.call("ii"), "i a i a   a i";      s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
-        if s, ex := p.call("shared"), "shared";         s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
-        if s, ex := p.call("static"), "static";         s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
-        if s, ex := p.call("a"), "a";                   s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
-        if s, ex := p.call("a$a"), "foo";               s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
-        if s, ex := p.call("a$$a"), "";                 s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
-        if s, ex := p.call("aaaa"), "xxx-foo-xxx";      s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
-        if s, ex := p.call("bbbb"), "xxx-foo-xxx";      s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
-        if s, ex := p.call("cccc"), "xxx-shared-static-foo-xxx";       s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
-        if s, ex := p.call("dddd"), "xxx-shared-static-foo-xxx";       s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
+        if s, ex := p.Call("a"), "a";                   s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
+        if s, ex := p.Call("i"), "i";                   s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
+        if s, ex := p.Call("ii"), "i a i a   a i";      s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
+        if s, ex := p.Call("shared"), "shared";         s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
+        if s, ex := p.Call("static"), "static";         s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
+        if s, ex := p.Call("a"), "a";                   s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
+        if s, ex := p.Call("a$a"), "foo";               s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
+        if s, ex := p.Call("a$$a"), "";                 s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
+        if s, ex := p.Call("aaaa"), "xxx-foo-xxx";      s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
+        if s, ex := p.Call("bbbb"), "xxx-foo-xxx";      s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
+        if s, ex := p.Call("cccc"), "xxx-shared-static-foo-xxx";       s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
+        if s, ex := p.Call("dddd"), "xxx-shared-static-foo-xxx";       s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
         if s, ex := info.String(), "2:shared static\n1:shared static\n"; s != ex {
                 t.Errorf("expects '%v' but got '%v'", ex, s)
         }
@@ -599,8 +599,8 @@ bar = bar
 foobar := 
 foobaz := foo-baz
 `);     if err != nil { t.Errorf("parse error:", err) }
-        if s := ctx.call("foo"); s != "" { t.Errorf("foo: '%s'", s) }
-        if s := ctx.call("bar"); s != "bar" { t.Errorf("bar: '%s'", s) }
-        if s := ctx.call("foobar"); s != "" { t.Errorf("foobar: '%s'", s) }
-        if s := ctx.call("foobaz"); s != "foo-baz" { t.Errorf("foobaz: '%s'", s) }
+        if s := ctx.Call("foo"); s != "" { t.Errorf("foo: '%s'", s) }
+        if s := ctx.Call("bar"); s != "bar" { t.Errorf("bar: '%s'", s) }
+        if s := ctx.Call("foobar"); s != "" { t.Errorf("foobar: '%s'", s) }
+        if s := ctx.Call("foobaz"); s != "foo-baz" { t.Errorf("foobaz: '%s'", s) }
 }
