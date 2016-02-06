@@ -92,9 +92,9 @@ func (sdk *toolset) ConfigModule(ctx *Context, m *Module, args []string, vars ma
         return true
 }
 
-func (sdk *toolset) CreateActions(ctx *Context, m *Module, args []string) bool {
-        platform := strings.TrimSpace(ctx.Call("me.platform"))
-        if platform == "" { Fatal("unknown platform for `%v'", m.Name) }
+func (sdk *toolset) CreateActions(ctx *Context, m *Module) bool {
+        platform := strings.TrimSpace(ctx.CallWith(m, "platform"))
+        if platform == "" { Fatal("unknown platform for `%v' (%v)", m.Name, ctx.CallWith(m, "platform")) }
 
         //fmt.Printf("platform: %v\n", platform)
 
@@ -120,7 +120,7 @@ func (sdk *toolset) CreateActions(ctx *Context, m *Module, args []string) bool {
                         var classpath []string
                         for _, u := range m.Using {
                                 if u.Kind != "jar" { Fatal("can't use module of type `%v'", u.Kind) }
-                                if v := strings.TrimSpace(ctx.Call("me.export.jar")); v != "" {
+                                if v := strings.TrimSpace(ctx.CallWith(m, "export.jar")); v != "" {
                                         classpath = append(classpath, v)
                                 }
                                 /*
@@ -129,8 +129,8 @@ func (sdk *toolset) CreateActions(ctx *Context, m *Module, args []string) bool {
                                 } */
                         }
 
-                        staticLibs = append(staticLibs, strings.Split(strings.TrimSpace(ctx.Call("me.libs.static")), " ")...)
-                        classpath = append(classpath, strings.Split(strings.TrimSpace(ctx.Call("me.classpath")), " ")...)
+                        staticLibs = append(staticLibs, strings.Split(strings.TrimSpace(ctx.CallWith(m, "libs.static")), " ")...)
+                        classpath = append(classpath, strings.Split(strings.TrimSpace(ctx.CallWith(m, "classpath")), " ")...)
                         classpath = append(classpath, staticLibs...)
 
                         for _, src := range sources { ps = append(ps, NewAction(src, nil)) }

@@ -72,19 +72,19 @@ func builtinModule(ctx *Context, loc location, args []string) (s string) {
         if 1 < len(args) { toolsetName = strings.TrimSpace(args[1]) }
         if 2 < len(args) { kind = strings.TrimSpace(args[2]) }
         if name == "" {
-                errorf(0, "module name is required")
+                errorf("module name is required")
                 return
         }
         if name == "me" {
-                errorf(0, "module name 'me' is reserved")
+                errorf("module name 'me' is reserved")
                 return
         }
 
         var toolset toolset
         if ts, ok := toolsets[toolsetName]; !ok {
                 //ctx.lineno -= 1; ctx.colno = ctx.prevColno + 1
-                errorf(0, "toolset `%v' unknown", toolsetName)
-                if ts == nil { errorf(0, "builtin fatal error") }
+                errorf("toolset `%v' unknown", toolsetName)
+                if ts == nil { errorf("builtin fatal error") }
                 // TODO: send arguments to toolset
         } else {
                 toolset = ts.toolset
@@ -94,10 +94,10 @@ func builtinModule(ctx *Context, loc location, args []string) (s string) {
         var has bool
         if m, has = modules[name]; !has {
                 m = &Module{
+                        l: ctx.l,
                         Name: name,
                         Toolset: toolset,
                         Kind: kind,
-                        Dir: filepath.Dir(ctx.l.scope),
                         location: loc, defines: make(map[string]*define, 32),
                 }
                 modules[m.Name] = m
@@ -105,7 +105,7 @@ func builtinModule(ctx *Context, loc location, args []string) (s string) {
         } else if (m.Toolset != nil && toolsetName != "") && (m.Kind != "" || kind != "") {
                 //ctx.lineno -= 1; ctx.colno = ctx.prevColno + 1
                 fmt.Printf("%v: previous module declaration `%v'\n", &(m.location), m.Name)
-                errorf(0, fmt.Sprintf("module already been defined as \"%v, $v\"", m.Toolset, m.Kind))
+                errorf(fmt.Sprintf("module already been defined as \"%v, $v\"", m.Toolset, m.Kind))
         }
 
         if m.Toolset == nil && m.Kind == "" {
@@ -113,7 +113,7 @@ func builtinModule(ctx *Context, loc location, args []string) (s string) {
                 m.Kind = kind
         }
 
-        m.Dir = filepath.Dir(ctx.l.scope)
+        m.l = ctx.l // reset the lex (it could be created by $(use))
         if ctx.m != nil {
                 ctx.moduleStack = append(ctx.moduleStack, ctx.m)
         }
@@ -129,11 +129,11 @@ func builtinModule(ctx *Context, loc location, args []string) (s string) {
 
 func builtinCommit(ctx *Context, loc location, args []string) (s string) {
         if ctx.m == nil {
-                errorf(0, "no module defined")
+                errorf("no module defined")
                 return
         }
 
-        verbose("commit `%v' (%v)", ctx.m.Name, ctx.m.Dir)
+        verbose("commit `%v' (%v)", ctx.m.Name, ctx.m.GetDir())
 
         moduleBuildList = append(moduleBuildList, pendedBuild{ctx.m, ctx, args})
 
@@ -150,13 +150,13 @@ func builtinCommit(ctx *Context, loc location, args []string) (s string) {
 }
 
 func builtinBuild(ctx *Context, loc location, args []string) string {
-        errorf(0, "use $(commit) instead")
+        errorf("use $(commit) instead")
         return ""
 }
 
 func builtinUse(ctx *Context, loc location, args []string) string {
-        if ctx.m == nil { errorf(0, "no module defined") }
-        if ctx.m.Toolset == nil { errorf(0, "no toolset for `%v'", ctx.m.Name) }
+        if ctx.m == nil { errorf("no module defined") }
+        if ctx.m.Toolset == nil { errorf("no toolset for `%v'", ctx.m.Name) }
 
         for _, a := range args {
                 a = strings.TrimSpace(a)
@@ -167,9 +167,7 @@ func builtinUse(ctx *Context, loc location, args []string) string {
                 } else {
                         m = &Module{
                                 Name: a,
-                                Dir: filepath.Dir(ctx.l.scope),
                                 UsedBy: []*Module{ ctx.m },
-                                location: ctx.l.location(),
                                 defines: make(map[string]*define, 32),
                         }
                         ctx.m.Using = append(ctx.m.Using, m)

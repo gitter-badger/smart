@@ -61,27 +61,26 @@ func (ndk *_ndkbuild) ConfigModule(ctx *Context, m *Module, args []string, vars 
                 ctx.Set("me.script",   strings.TrimSpace(script))
                 ctx.Set("me.stl",      strings.TrimSpace(stl))
 
-                Message("ndk-build: config: name=%v, dir=%v, args=%v, vars=%v", m.Name, m.Dir, args, vars)
+                Message("ndk-build: config: name=%v, dir=%v, args=%v, vars=%v", m.Name, m.GetDir(), args, vars)
                 return script != ""
         }
         return false
 }
 
-func (ndk *_ndkbuild) CreateActions(ctx *Context, m *Module, args []string) bool {
-        //Message("ndk-build: createActions: %v", m.name)
-
+func (ndk *_ndkbuild) CreateActions(ctx *Context, m *Module) bool {
         targets, prequisites := make(map[string]int, 4), make(map[string]int, 16)
 
         cmd := &_ndkbuildCmd{
-                abis:     strings.Fields(ctx.Call("me.abi")),
-                abi:      ctx.Call("me.abi"),
-                script:   ctx.Call("me.script"),
-                platform: ctx.Call("me.platform"),
-                stl:      ctx.Call("me.stl"),
-                optim:    ctx.Call("me.optim"),
+                abis:     strings.Fields(ctx.CallWith(m, "abi")),
+                abi:      ctx.CallWith(m, "abi"),
+                script:   ctx.CallWith(m, "script"),
+                platform: ctx.CallWith(m, "platform"),
+                stl:      ctx.CallWith(m, "stl"),
+                optim:    ctx.CallWith(m, "optim"),
         }
         if !filepath.IsAbs(cmd.script) {
-                cmd.script = filepath.Join(m.Dir, ctx.Call("me.script"))
+                //cmd.script = filepath.Join(m.DirGet(), ctx.CallWith(m, "script"))
+                cmd.script, _, _ = m.GetLocation()
         }
 
         m.Action = new(Action)
@@ -90,14 +89,14 @@ func (ndk *_ndkbuild) CreateActions(ctx *Context, m *Module, args []string) bool
         prequisites[cmd.script]++
 
         var scripts []string
-        if ctx.Call("me.is_custom_script") == "yes" {
+        if ctx.CallWith(m, "is_custom_script") == "yes" {
                 scripts = append(scripts, cmd.script)
         } else {
                 pa := m.Action.Prequisites[0]
                 pa.Command = &_ndkbuildGenBuildScript{}
 
                 var e error
-                if scripts, e = FindFiles(m.Dir, `Android\.mk$`); e == nil {
+                if scripts, e = FindFiles(m.GetDir(), `Android\.mk$`); e == nil {
                         for _, s := range scripts {
                                 if filepath.Base(s) != "Android.mk" { continue }
                                 pa.Prequisites = append(pa.Prequisites, NewAction(s, nil))

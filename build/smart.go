@@ -50,7 +50,7 @@ func (e *smarterror) String() string {
 }
 
 func Fatal(f string, a ...interface{}) {
-        errorf(0, f, a...)
+        errorf(f, a...)
 }
 
 func Message(s string, a ...interface{}) {
@@ -62,7 +62,7 @@ func Verbose(s string, a ...interface{}) {
 }
 
 // errorf throw a panic message
-func errorf(num int, f string, a ...interface{}) {
+func errorf(f string, a ...interface{}) {
         panic(&smarterror{ fmt.Sprintf(f, a...) })
 }
 

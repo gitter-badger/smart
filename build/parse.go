@@ -154,6 +154,8 @@ func (p *parseBuffer) caculateLocationLineColumn(loc location) (lineno, colno in
                 }
                 i += l
         }
+        lineno++ // started from 1
+        colno++  // started from 1
         return
 }
 
@@ -200,7 +202,7 @@ func (l *lex) get() bool {
                 }
                 return false
         }
-        if len(l.s) < l.pos { errorf(-2, "over reading (at %v)", l.pos) }
+        if len(l.s) < l.pos { errorf("over reading (at %v)", l.pos) }
 
         l.rune, l.runeLen = utf8.DecodeRune(l.s[l.pos:])
         l.pos = l.pos+l.runeLen
@@ -208,7 +210,7 @@ func (l *lex) get() bool {
         case l.rune == 0:
                 return false //errorf(-2, "zero reading (at %v)", l.pos)
         case l.rune == utf8.RuneError:
-                errorf(-2, "invalid UTF8 encoding")
+                errorf("invalid UTF8 encoding")
 
                 /*
         case l.rune == '\n':
@@ -224,11 +226,11 @@ func (l *lex) get() bool {
 func (l *lex) unget() {
         switch {
         case l.rune == 0:
-                errorf(0, "wrong invocation of unget")
+                errorf("wrong invocation of unget")
         case l.pos == 0:
-                errorf(0, "get to the beginning of the bytes")
+                errorf("get to the beginning of the bytes")
         case l.pos < 0:
-                errorf(0, "get to the front of beginning of the bytes")
+                errorf("get to the front of beginning of the bytes")
                 //case l.lineno == 1 && l.colno <= 1: return
         }
         /*
@@ -668,7 +670,7 @@ func (ctx *Context) expand(loc location, str string) string {
         var exp func(s []byte) (out string, l int)
         var getRune = func(s []byte) (r rune, l int) {
                 if r, l = utf8.DecodeRune(s); r == utf8.RuneError || l <= 0 {
-                        errorf(1, "bad UTF8 encoding")
+                        errorf("bad UTF8 encoding")
                 }
                 return
         }
@@ -713,7 +715,7 @@ func (ctx *Context) expand(loc location, str string) string {
                                         s, l = s[rs+ll:], l + rs + ll
                                         continue
                                 } else {
-                                        errorf(1, string(s))
+                                        errorf(string(s))
                                 }
                         case '(': t.WriteRune(r); parentheses = append(parentheses, ')')
                         case '{': t.WriteRune(r); parentheses = append(parentheses, '}')
@@ -745,7 +747,7 @@ func (ctx *Context) expand(loc location, str string) string {
                 s = s[l:]
                 if r == '$' {
                         if ss, ll := exp(s); ll <= 0 {
-                                errorf(0, "bad variable")
+                                errorf("bad variable")
                         } else {
                                 s = s[ll:]
                                 buf.WriteString(ss)
@@ -819,7 +821,7 @@ func (ctx *Context) call(loc location, name string, args ...string) string {
                                 case string: fmt.Fprintf(b, f, t)
                                 case *flatstr: fmt.Fprintf(b, f, t.s)
                                 case *node: fmt.Fprintf(b, f, ctx.expandNode(t.children[1]))
-                                default: errorf(0, "unknown supported '%v'", t)
+                                default: errorf("unknown supported '%v'", t)
                                 }
                         }
                         return b.String()
@@ -856,14 +858,16 @@ func (ctx *Context) set(name string, a ...interface{}) (v *define) {
         //fmt.Printf("set: %v, %v\n", name, a)
 
         if name == "me" {
-                errorf(0, "%v: `me' is readonly", loc)
+                errorf("%v: `me' is readonly", loc)
                 return
         }
 
         vars := ctx.defines
         if strings.HasPrefix(name, "me.") {
                 if ctx.m == nil {
-                        fmt.Printf("%v:warning: no module defined for '%v'\n", loc, name)
+                        /* lineno, colno := ctx.l.getLineColumn()
+                        fmt.Printf("%v:%v:%v:warning: no module defined for '%v'\n",
+                                ctx.l.scope, lineno, colno, name) */
                         return
                 }
                 vars = ctx.m.defines
@@ -972,12 +976,12 @@ func (ctx *Context) processNode(n *node) (err error) {
 
         case nodeCall:
                 if s := ctx.expandNode(n); s != "" {
-                        errorf(0, "illigal: %v (%v)", s, n.str())
+                        errorf("illigal: %v (%v)", s, n.str())
                 }
 
         case nodeImmediateText:
                 if s := ctx.expandNode(n); s != "" {
-                        errorf(0, "error: '%v'", s)
+                        errorf("error: '%v'", s)
                 }
 
         default:

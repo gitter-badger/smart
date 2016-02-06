@@ -36,8 +36,8 @@ type toolset interface {
         // `args' and `vars' is passed in on the `$(module)' invocation.
         ConfigModule(p *Context, m *Module, args []string, vars map[string]string) bool
 
-        // CreateActions builds the action graph the current module
-        CreateActions(p *Context, m *Module, args []string) bool
+        // CreateActions creates the module action graph
+        CreateActions(p *Context, m *Module) bool
 
         // UseModule
         UseModule(p *Context, m, o *Module) bool
@@ -63,7 +63,7 @@ func (tt *BasicToolset) ConfigModule(ctx *Context, m *Module, args []string, var
         return false
 }
 
-func (tt *BasicToolset) CreateActions(ctx *Context, m *Module, args []string) bool {
+func (tt *BasicToolset) CreateActions(ctx *Context, m *Module) bool {
         return false
 }
 
@@ -142,7 +142,7 @@ func (c *Excmd) run(targetHint string, args ...string) bool {
                 if c.cmd != nil {
                         updated = c.cmd()
                 } else {
-                        errorf(0, "can't update `%v'", targetHint)
+                        errorf("can't update `%v'", targetHint)
                         return false
                 }
         } else {
@@ -192,7 +192,7 @@ func (c *Excmd) run(targetHint string, args ...string) bool {
                                 if !strings.HasSuffix(se, "\n") { fmt.Printf("\n") }
                         }
                         fmt.Printf("-------------------------------------\n")
-                        errorf(0, `failed executing "%v"`, c.path)
+                        errorf(`failed executing "%v"`, c.path)
                 }
 
                 if c.postcall != nil {
@@ -225,7 +225,7 @@ func ComputeInterTargets(d, sre string, prequisites []*Action) (targets []string
                         } else {
                                 for _, t := range p.Targets {
                                         if pfi, _ := os.Stat(t); pfi == nil {
-                                                errorf(0, "`%v' not found", t)
+                                                errorf("`%v' not found", t)
                                         } else if fi.ModTime().Before(pfi.ModTime()) {
                                                 outdateMap[i]++
                                         }
@@ -284,13 +284,13 @@ func (a *Action) update() (updated bool, updatedTargets []string) {
                         updatedPreNum++
                 } else if pc, ok := p.Command.(intercommand); ok {
                         pres, nu := pc.targets(p.Prequisites)
-                        if nu { errorf(0, "requiring updating %v for %v", pres, targets) }
+                        if nu { errorf("requiring updating %v for %v", pres, targets) }
                         prequisites = append(prequisites, pres...)
                 } else {
                         prequisites = append(prequisites, p.Targets...)
                         for _, pt := range p.Targets {
                                 if fi, err := os.Stat(pt); err != nil {
-                                        errorf(0, "`%v' not found", pt)
+                                        errorf("`%v' not found", pt)
                                 } else {
                                         for n, i := range fis {
                                                 if i != nil && i.ModTime().Before(fi.ModTime()) {
@@ -305,7 +305,7 @@ func (a *Action) update() (updated bool, updatedTargets []string) {
         if a.Command == nil {
                 for n, i := range fis {
                         if i == nil {
-                                errorf(0, "`%s' not found", targets[n])
+                                errorf("`%s' not found", targets[n])
                         }
                 }
                 return
@@ -349,7 +349,7 @@ func (a *Action) force(targets []string, tarfis []os.FileInfo, prequisites []str
                 } else {
                         for _, t := range a.Targets {
                                 if fi, e := os.Stat(t); e != nil || fi == nil {
-                                        errorf(0, "`%s' not built", t)
+                                        errorf("`%s' not built", t)
                                 } else {
                                         updatedTargets = append(updatedTargets, t)
                                 }
@@ -360,7 +360,7 @@ func (a *Action) force(targets []string, tarfis []os.FileInfo, prequisites []str
 }
 
 func (a *Action) clean() {
-        errorf(0, "TODO: clean `%v'\n", a.Targets)
+        errorf("TODO: clean `%v'\n", a.Targets)
 }
 
 func newAction(target string, c Command, pre ...*Action) *Action {
@@ -379,18 +379,18 @@ func NewAction(target string, c Command, pre ...*Action) *Action {
 func CreateSourceTransformActions(sources []string, namecommand func(src string) (string, Command)) []*Action {
         var inters []*Action
         if namecommand == nil {
-                errorf(-1, "can't draw source rules (%v)", namecommand)
+                errorf("can't draw source rules (%v)", namecommand)
         }
 
         for _, src := range sources {
                 aname, c := namecommand(src)
                 if aname == "" { continue }
                 if aname == src {
-                        errorf(-1, "no intermediate name for `%v'", src)
+                        errorf("no intermediate name for `%v'", src)
                 }
 
                 if c == nil {
-                        errorf(0, "no command for `%v'", src)
+                        errorf("no command for `%v'", src)
                 }
 
                 asrc := newAction(src, nil)
@@ -400,39 +400,90 @@ func CreateSourceTransformActions(sources []string, namecommand func(src string)
         return inters
 }
 
-// module is defined by a $(module) invocation in .smart script.
+// Module is defined by a $(module) invocation in .smart script.
 type Module struct {
         Parent *Module // upper module
-        Dir string
         Name string
         Toolset toolset
         Kind string
         Action *Action // action for building this module
         Using, UsedBy []*Module
-        Built, Updated bool // marked as 'true' if module is built or updated
+        Updated bool // marked as 'true' if module is updated
         defines map[string]*define
-        location location // where does it defined
+        location location // where does it defined (could be nil)
+        l *lex // the lex scope where does it defined (could be nil)
+}
+
+func (m *Module) GetDir() (s string) {
+        if m.l != nil {
+                s = filepath.Dir(m.l.scope)
+        }
+        return
+}
+func (m *Module) GetLocation() (s string, lineno, colno int) {
+        if l := m.l; l != nil {
+                lineno, colno = l.caculateLocationLineColumn(m.location)
+                s = l.scope
+        }
+        return
 }
 
 func (m *Module) GetSources(ctx *Context) (sources []string) {
         sources = split(ctx.callWith(m.location, m, "sources"))
         for i := range sources {
                 if sources[i][0] == '/' { continue }
-                sources[i] = filepath.Join(m.Dir, sources[i])
+                sources[i] = filepath.Join(m.GetDir(), sources[i])
         }
         return
 }
 
-func (m *Module) update() {
-        //fmt.Printf("update: module: %v\n", m.name)
+func (m *Module) createActionIfNil(ctx *Context) bool {
+        numUsing := len(m.Using)
+        for _, u := range m.Using {
+                if u.createActionIfNil(ctx) { numUsing-- }
+        }
+        if 0 < numUsing {
+                s, lineno, colno := m.GetLocation()
+                if *flagV || *flagVV {
+                        fmt.Printf("%v:%v:%v: not all dependencies was built (%v, %v/%v)\n", s, lineno, colno, m.Name)
+                } else {
+                        fmt.Printf("%v:%v:%v: not all dependencies was built\n", s, lineno, colno)
+                }
+                return false
+        }
 
+        if m.Action != nil {
+                return true
+        }
+
+        if m.Toolset == nil {
+                fmt.Printf("%v: no toolset for `%v'\n", m.location, m.Name)
+                return false
+        }
+
+        if *flagVV {
+                fmt.Printf("smart: config `%v' (%v)\n", m.Name, m.GetDir())
+        }
+
+        if m.Toolset.CreateActions(ctx, m) {
+                // ...
+        } else if *flagV {
+                fmt.Printf("%v: module `%v' not built\n", m.location, m.Name)
+        }
+
+        return m.Action != nil
+}
+
+func (m *Module) update() {
         if m.Action == nil {
-                fmt.Printf("%v: no action for module \"%v\"\n", m.location, m.Name)
+                s, lineno, colno := m.GetLocation()
+                fmt.Printf("%v:%v:%v:warning: no action (\"%v\")\n", s, lineno, colno, m.Name)
                 return
         }
 
         if updated, _ := m.Action.update(); !updated {
-                fmt.Printf("smart: noting done for `%v'\n", m.Name)
+                s, lineno, colno := m.GetLocation()
+                fmt.Printf("%v:%v:%v:warning: did nothing (\"%v\")\n", s, lineno, colno, m.Name)
         }
 }
 
@@ -520,7 +571,7 @@ type traverseFunc func(dname string, fi os.FileInfo) bool
 func traverse(d string, fun traverseFunc) (err error) {
         names, err := readDirNames(d)
         if err != nil {
-                //errorf(0, "readDirNames: %v, %v\n", err, d)
+                //errorf("readDirNames: %v, %v\n", err, d)
                 return
         }
 
@@ -531,7 +582,7 @@ func traverse(d string, fun traverseFunc) (err error) {
 
                 fi, err = os.Stat(dname)
                 if err != nil {
-                        //errorf(0, "stat: %v\n", dname)
+                        //errorf("stat: %v\n", dname)
                         return
                 }
 
@@ -541,7 +592,7 @@ func traverse(d string, fun traverseFunc) (err error) {
 
                 if fi.IsDir() {
                         if err = traverse(dname, fun); err != nil {
-                                //errorf(0, "traverse: %v\n", dname)
+                                //errorf("traverse: %v\n", dname)
                                 return
                         }
                         continue
@@ -644,7 +695,7 @@ func Build(vars map[string]string, cmds []string) {
                 if *flagG && fr != nil { return false }
                 if fi.Name() == ".smart" {
                         if err := ctx.include(fn); err != nil {
-                                errorf(0, "include: `%v', %v\n", fn, err)
+                                errorf("include: `%v', %v\n", fn, err)
                         }
                 }
                 return true
@@ -654,40 +705,11 @@ func Build(vars map[string]string, cmds []string) {
         }
 
         // Build the modules
-        var buildDeps func(p *Context, mod *Module) int
-        var buildMod func(p *Context, mod *Module) bool
-        buildMod = func(p *Context, mod *Module) bool {
-                if buildDeps(p, mod) != len(mod.Using) {
-                        fmt.Printf("%v: failed building deps of `%v' (by `%v')\n", mod.location, mod.Name, mod.Name)
-                        return false
-                }
-                if mod.Toolset == nil {
-                        //fmt.Printf("%v: no toolset for `%v'(by `%v')\n", mod.location, mod.name, mod.name)
-                        fmt.Printf("%v: no toolset for `%v'\n", mod.location, mod.Name)
-                        return false
-                }
-                if !mod.Built {
-                        if *flagVV {
-                                fmt.Printf("smart: config `%v' (%v)\n", mod.Name, mod.Dir)
-                        }
-                        if mod.Toolset.CreateActions(p, mod, []string{}) {
-                                mod.Built = true
-                        } else if *flagV {
-                                fmt.Printf("%v: module `%v' not built\n", mod.location, mod.Name)
-                        }
-                }
-                return mod.Built
-        }
-        buildDeps = func(p *Context, mod *Module) (num int) {
-                for _, u := range mod.Using { if buildMod(p, u) { num++ } }
-                return
-        }
-
         var i *pendedBuild
         for 0 < len(moduleBuildList) {
                 i, moduleBuildList = &moduleBuildList[0], moduleBuildList[1:]
-                if !buildMod(i.p, i.m) {
-                        errorf(0, "module `%v' not built", i.m.Name)
+                if !i.m.createActionIfNil(i.p) {
+                        errorf("module `%v' not built", i.m.Name)
                 }
         }
 

@@ -25,7 +25,7 @@ func testToolsetGcc(t *testing.T) {
         var ok bool
         if m, ok = modules["foo_gcc_exe"]; !ok { t.Errorf("expecting module foo_gcc_exe"); return }
         if m.Name != "foo_gcc_exe" { t.Errorf("expecting module foo_gcc_exe, but %v", m.Name); return }
-        if m.Dir != "exe" { t.Errorf("expecting dir `exe', but %v", m.Dir); return }
+        if m.GetDir() != "exe" { t.Errorf("expecting dir `exe', but %v", m.GetDir()); return }
         if m.Kind != "exe" { t.Errorf("expecting exe for foo_gcc_exe, but %v", m.Kind); return }
         if m.Action == nil { t.Errorf("no action for the module"); return }
         if l := len(m.Action.Targets); l != 1 { t.Errorf("expection 1 targets, but %v", l); return }
@@ -38,7 +38,7 @@ func testToolsetGcc(t *testing.T) {
 
         if m, ok = modules["foo_shared"]; !ok { t.Errorf("expecting module foo_shared"); return }
         if m.Name != "foo_shared" { t.Errorf("expecting module foo_shared, but %v", m.Name); return }
-        if m.Dir != "shared" { t.Errorf("expecting dir `shared', but %v", m.Dir); return }
+        if m.GetDir() != "shared" { t.Errorf("expecting dir `shared', but %v", m.GetDir()); return }
         if m.Kind != "shared" { t.Errorf("expecting shared for foo_shared, but %v", m.Kind); return }
         if m.Action == nil { t.Errorf("no action for the module"); return }
         if l := len(m.Action.Targets); l != 1 { t.Errorf("expection 1 targets, but %v", l); return }
@@ -50,7 +50,7 @@ func testToolsetGcc(t *testing.T) {
 
         if m, ok = modules["foo_static"]; !ok { t.Errorf("expecting module foo_static"); return }
         if m.Name != "foo_static" { t.Errorf("expecting module foo_static, but %v", m.Name); return }
-        if m.Dir != "static" { t.Errorf("expecting dir `static', but %v", m.Dir); return }
+        if m.GetDir() != "static" { t.Errorf("expecting dir `static', but %v", m.GetDir()); return }
         if m.Kind != "static" { t.Errorf("expecting static for foo_static, but %v", m.Kind); return }
         if m.Action == nil { t.Errorf("no action for the module"); return }
         if l := len(m.Action.Targets); l != 1 { t.Errorf("expection 1 targets, but %v", l); return }
@@ -62,7 +62,7 @@ func testToolsetGcc(t *testing.T) {
 
         if m, ok = modules["foo_gcc_exe_use_shared"]; !ok { t.Errorf("expecting module foo_gcc_exe_use_shared"); return }
         if m.Name != "foo_gcc_exe_use_shared" { t.Errorf("expecting module foo_gcc_exe_use_shared, but %v", m.Name); return }
-        if m.Dir != "exe_use_shared" { t.Errorf("expecting dir `exe_use_shared', but %v", m.Dir); return }
+        if m.GetDir() != "exe_use_shared" { t.Errorf("expecting dir `exe_use_shared', but %v", m.GetDir()); return }
         if m.Kind != "exe" { t.Errorf("expecting exe for foo_gcc_exe, but %v", m.Kind); return }
         if m.Action == nil { t.Errorf("no action for the module"); return }
         if l := len(m.Action.Targets); l != 1 { t.Errorf("expection 1 targets, but %v", l); return }
@@ -75,7 +75,7 @@ func testToolsetGcc(t *testing.T) {
 
         if m, ok = modules["foo_gcc_exe_use_static"]; !ok { t.Errorf("expecting module foo_gcc_exe_static"); return }
         if m.Name != "foo_gcc_exe_use_static" { t.Errorf("expecting module foo_gcc_exe_static, but %v", m.Name); return }
-        if m.Dir != "exe_use_static" { t.Errorf("expecting dir `exe_use_static', but %v", m.Dir); return }
+        if m.GetDir() != "exe_use_static" { t.Errorf("expecting dir `exe_use_static', but %v", m.GetDir()); return }
         if m.Kind != "exe" { t.Errorf("expecting exe for foo_gcc_exe_use_static, but %v", m.Kind); return }
         if m.Action == nil { t.Errorf("no action for the module"); return }
         if l := len(m.Action.Targets); l != 1 { t.Errorf("expection 1 targets, but %v", l); return }

@@ -16,9 +16,9 @@ func init() {
 }
 
 var gccSourcePatterns = []*FileMatchRule{
-        { "asm", ^os.ModeType, `\.(s|S)$` },
-        { "c", ^os.ModeType, `\.(c)$` },
-        { "c++", ^os.ModeType, `\.(cpp|cxx|cc|CC|C)$` },
+        { "asm",    ^os.ModeType, `\.(s|S)$` },
+        { "c",      ^os.ModeType, `\.(c)$` },
+        { "c++",    ^os.ModeType, `\.(cpp|cxx|cc|CC|C)$` },
         { "header", ^os.ModeType, `\.(h)$` },
 }
 
@@ -26,7 +26,7 @@ type toolset struct {
         BasicToolset
 }
 
-func (gcc *toolset) CreateActions(ctx *Context, m *Module, args []string) bool {
+func (gcc *toolset) CreateActions(ctx *Context, m *Module) bool {
         var cmd *gccCommand
         var targetName = m.Name
         switch m.Kind {
