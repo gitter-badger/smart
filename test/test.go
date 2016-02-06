@@ -39,8 +39,8 @@ func Runcmd(name string, args ...string) string {
         return buf.String()
 }
 
-func RunToolsetTestCase(t *testing.T, tn string, tf func(t *testing.T)) {
-        tc := filepath.Join("../../test", tn)
+func RunToolsetTestCase(t *testing.T, tp, tn string, tf func(t *testing.T)) {
+        tc := filepath.Join(tp, "test", tn)
 
         if fi, _ := os.Stat(tc); fi != nil && fi.IsDir() {
                 fmt.Printf("test: no test `%v' (%v)\n", tc, tn)

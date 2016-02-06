@@ -149,6 +149,6 @@ func testToolsetAndroidSDKJNI(t *testing.T) {
 }
 
 func TestToolsetAndroidSDK(t *testing.T) {
-        RunToolsetTestCase(t, "android-sdk", testToolsetAndroidSDK)
-        RunToolsetTestCase(t, "android", testToolsetAndroidSDKJNI)
+        RunToolsetTestCase(t, "../../..", "android-sdk", testToolsetAndroidSDK)
+        RunToolsetTestCase(t, "../../..", "android", testToolsetAndroidSDKJNI)
 }

@@ -22,13 +22,14 @@ var gccSourcePatterns = []*FileMatchRule{
         { "header", ^os.ModeType, `\.(h)$` },
 }
 
-type toolset struct {
-        BasicToolset
-}
+type toolset struct { BasicToolset }
 
-func (gcc *toolset) CreateActions(ctx *Context, m *Module) bool {
-        var cmd *gccCommand
-        var targetName = m.Name
+func (gcc *toolset) CreateActions(ctx *Context) bool {
+        var (
+                m = ctx.CurrentModule()
+                targetName = m.Name
+                cmd *gccCommand
+        )
         switch m.Kind {
         case "exe":
                 cmd = gccNewCommand("ld")

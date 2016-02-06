@@ -90,8 +90,10 @@ func builtinModule(ctx *Context, loc location, args []string) (s string) {
                 toolset = ts.toolset
         }
 
-        var m *Module
-        var has bool
+        var (
+                m *Module
+                has bool
+        )
         if m, has = modules[name]; !has {
                 m = &Module{
                         l: ctx.l,
@@ -103,9 +105,14 @@ func builtinModule(ctx *Context, loc location, args []string) (s string) {
                 modules[m.Name] = m
                 moduleOrderList = append(moduleOrderList, m)
         } else if (m.Toolset != nil && toolsetName != "") && (m.Kind != "" || kind != "") {
-                //ctx.lineno -= 1; ctx.colno = ctx.prevColno + 1
-                fmt.Printf("%v: previous module declaration `%v'\n", &(m.location), m.Name)
-                errorf(fmt.Sprintf("module already been defined as \"%v, $v\"", m.Toolset, m.Kind))
+                s := ctx.l.scope
+                lineno, colno := ctx.l.caculateLocationLineColumn(loc)
+                fmt.Printf("%v:%v:%v: '%v' already declared\n", s, lineno, colno, name)
+
+                s, lineno, colno = m.GetLocation()
+                fmt.Printf("%v:%v:%v:warning: previous '%v'\n", s, lineno, colno, name)
+
+                errorf(fmt.Sprintf("module already declared (%v, $v)", ctx.m.Toolset, ctx.m.Kind))
         }
 
         if m.Toolset == nil && m.Kind == "" {
@@ -123,7 +130,7 @@ func builtinModule(ctx *Context, loc location, args []string) (s string) {
         var a []string
         if 2 < len(args) { a = args[2:] }
         vars, rest := splitVarArgs(a)
-        toolset.ConfigModule(ctx, m, rest, vars)
+        toolset.ConfigModule(ctx, rest, vars)
         return
 }
 
@@ -163,7 +170,7 @@ func builtinUse(ctx *Context, loc location, args []string) string {
                 if m, ok := modules[a]; ok {
                         ctx.m.Using = append(ctx.m.Using, m)
                         m.UsedBy = append(m.UsedBy, ctx.m)
-                        ctx.m.Toolset.UseModule(ctx, ctx.m, m)
+                        ctx.m.Toolset.UseModule(ctx, m)
                 } else {
                         m = &Module{
                                 Name: a,
@@ -172,7 +179,7 @@ func builtinUse(ctx *Context, loc location, args []string) string {
                         }
                         ctx.m.Using = append(ctx.m.Using, m)
                         modules[a] = m
-                        ctx.m.Toolset.UseModule(ctx, ctx.m, m)
+                        ctx.m.Toolset.UseModule(ctx, m)
                 }
         }
         return ""

@@ -106,5 +106,5 @@ func testToolsetGcc(t *testing.T) {
 }
 
 func TestToolsetGCC(t *testing.T) {
-        RunToolsetTestCase(t, "gcc", testToolsetGcc)
+        RunToolsetTestCase(t, "../..", "gcc", testToolsetGcc)
 }

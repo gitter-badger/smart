@@ -16,7 +16,7 @@ import (
 )
 
 func init() {
-        ndk := &_ndkbuild{}
+        ndk := &toolset{}
         RegisterToolset("ndk-build", ndk)
 
         if c, e := exec.LookPath("ndk-build"); e == nil {
@@ -34,52 +34,52 @@ func init() {
         Message("ndk-build: %v", ndk.root)
 }
 
-type _ndkbuild struct {
+type toolset struct {
+        BasicToolset
         root string
 }
 
-func (ndk *_ndkbuild) ConfigModule(ctx *Context, m *Module, args []string, vars map[string]string) bool {
-        if m != nil {
-                var (
-                        abi = "armeabi" // all
-                        optim = "debug" // release|debug
-                        platform = "android-9" // minimal is "android-8"
-                        script = "out/boot.mk"
-                        stl = "system" // system|stlport_static|gnustl_static
-                )
+func (ndk *toolset) ConfigModule(ctx *Context, args []string, vars map[string]string) bool {
+        var (
+                abi = "armeabi" // all
+                optim = "debug" // release|debug
+                platform = "android-9" // minimal is "android-8"
+                script = "out/boot.mk"
+                stl = "system" // system|stlport_static|gnustl_static
+        )
 
-                // APP_BUILD_SCRIPT, APP_PLATFORM, APP_STL, APP_ABI, APP_OPTIM
-                if s, ok := vars["BUILD_SCRIPT"]; ok { script = s; ctx.Set("me.is_custom_script", "yes") }
-                if s, ok := vars["PLATFORM"];     ok { platform = s }
-                if s, ok := vars["STL"];          ok { stl = s }
-                if s, ok := vars["ABI"];          ok { abi = s }
-                if s, ok := vars["OPTIM"];        ok { optim = s }
+        // APP_BUILD_SCRIPT, APP_PLATFORM, APP_STL, APP_ABI, APP_OPTIM
+        if s, ok := vars["BUILD_SCRIPT"]; ok { script = s; ctx.Set("me.is_custom_script", "yes") }
+        if s, ok := vars["PLATFORM"];     ok { platform = s }
+        if s, ok := vars["STL"];          ok { stl = s }
+        if s, ok := vars["ABI"];          ok { abi = s }
+        if s, ok := vars["OPTIM"];        ok { optim = s }
 
-                ctx.Set("me.abi",      strings.TrimSpace(abi))
-                ctx.Set("me.optim",    strings.TrimSpace(optim))
-                ctx.Set("me.platform", strings.TrimSpace(platform))
-                ctx.Set("me.script",   strings.TrimSpace(script))
-                ctx.Set("me.stl",      strings.TrimSpace(stl))
+        ctx.Set("me.abi",      strings.TrimSpace(abi))
+        ctx.Set("me.optim",    strings.TrimSpace(optim))
+        ctx.Set("me.platform", strings.TrimSpace(platform))
+        ctx.Set("me.script",   strings.TrimSpace(script))
+        ctx.Set("me.stl",      strings.TrimSpace(stl))
 
-                Message("ndk-build: config: name=%v, dir=%v, args=%v, vars=%v", m.Name, m.GetDir(), args, vars)
-                return script != ""
-        }
-        return false
+        m := ctx.CurrentModule()
+        Message("ndk-build: config: name=%v, dir=%v, args=%v, vars=%v", m.Name, m.GetDir(), args, vars)
+        return script != ""
 }
 
-func (ndk *_ndkbuild) CreateActions(ctx *Context, m *Module) bool {
+func (ndk *toolset) CreateActions(ctx *Context) bool {
         targets, prequisites := make(map[string]int, 4), make(map[string]int, 16)
+        m := ctx.CurrentModule()
 
         cmd := &_ndkbuildCmd{
-                abis:     strings.Fields(ctx.CallWith(m, "abi")),
-                abi:      ctx.CallWith(m, "abi"),
-                script:   ctx.CallWith(m, "script"),
-                platform: ctx.CallWith(m, "platform"),
-                stl:      ctx.CallWith(m, "stl"),
-                optim:    ctx.CallWith(m, "optim"),
+                abis:     strings.Fields(ctx.Call("me.abi")),
+                abi:      ctx.Call("me.abi"),
+                script:   ctx.Call("me.script"),
+                platform: ctx.Call("me.platform"),
+                stl:      ctx.Call("me.stl"),
+                optim:    ctx.Call("me.optim"),
         }
         if !filepath.IsAbs(cmd.script) {
-                //cmd.script = filepath.Join(m.DirGet(), ctx.CallWith(m, "script"))
+                //cmd.script = filepath.Join(m.DirGet(), ctx.Call("me.script"))
                 cmd.script, _, _ = m.GetLocation()
         }
 
@@ -89,7 +89,7 @@ func (ndk *_ndkbuild) CreateActions(ctx *Context, m *Module) bool {
         prequisites[cmd.script]++
 
         var scripts []string
-        if ctx.CallWith(m, "is_custom_script") == "yes" {
+        if ctx.Call("me.is_custom_script") == "yes" {
                 scripts = append(scripts, cmd.script)
         } else {
                 pa := m.Action.Prequisites[0]
@@ -131,10 +131,6 @@ func (ndk *_ndkbuild) CreateActions(ctx *Context, m *Module) bool {
         }
 
         return true
-}
-
-func (ndk *_ndkbuild) UseModule(ctx *Context, m, o *Module) bool {
-        return false
 }
 
 type _ndkbuildGenBuildScript struct {}

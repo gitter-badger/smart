@@ -50,7 +50,7 @@ func androidsdkGetTool(name string) string {
         return filepath.Join(androidsdk, "tools", name)
 }
 
-type toolset struct {}
+type toolset struct { BasicToolset }
 
 func (sdk *toolset) getResourceFiles(ds ...string) (as []*Action) {
         for _, d := range ds {
@@ -64,7 +64,7 @@ func (sdk *toolset) getResourceFiles(ds ...string) (as []*Action) {
         return
 }
 
-func (sdk *toolset) ConfigModule(ctx *Context, m *Module, args []string, vars map[string]string) bool {
+func (sdk *toolset) ConfigModule(ctx *Context, args []string, vars map[string]string) bool {
         d := filepath.Dir(ctx.CurrentScope())
         sources, err := FindFiles(filepath.Join(d, "src"), `\.java$`)
         for i := range sources {
@@ -82,19 +82,14 @@ func (sdk *toolset) ConfigModule(ctx *Context, m *Module, args []string, vars ma
         var platform string
         if s, ok := vars["PLATFORM"]; ok { platform = s } else { platform = androidsdkDefaultPlatform }
 
-        /*
-        var v *define
-        loc := ctx.l.location()
-        v = ctx.set("me.platform", platform);                  v.loc = *loc
-        v = ctx.set("me.sources", strings.Join(sources, " ")); v.loc = *loc */
         ctx.Set("me.platform", platform)
         ctx.Set("me.sources", strings.Join(sources, " "))
         return true
 }
 
-func (sdk *toolset) CreateActions(ctx *Context, m *Module) bool {
-        platform := strings.TrimSpace(ctx.CallWith(m, "platform"))
-        if platform == "" { Fatal("unknown platform for `%v' (%v)", m.Name, ctx.CallWith(m, "platform")) }
+func (sdk *toolset) CreateActions(ctx *Context) bool {
+        m, platform := ctx.CurrentModule(), strings.TrimSpace(ctx.Call("me.platform"))
+        if platform == "" { Fatal("unknown platform for `%v' (%v)", m.Name, ctx.Call("me.platform")) }
 
         //fmt.Printf("platform: %v\n", platform)
 
@@ -120,7 +115,7 @@ func (sdk *toolset) CreateActions(ctx *Context, m *Module) bool {
                         var classpath []string
                         for _, u := range m.Using {
                                 if u.Kind != "jar" { Fatal("can't use module of type `%v'", u.Kind) }
-                                if v := strings.TrimSpace(ctx.CallWith(m, "export.jar")); v != "" {
+                                if v := strings.TrimSpace(ctx.Call("me.export.jar")); v != "" {
                                         classpath = append(classpath, v)
                                 }
                                 /*
@@ -129,8 +124,8 @@ func (sdk *toolset) CreateActions(ctx *Context, m *Module) bool {
                                 } */
                         }
 
-                        staticLibs = append(staticLibs, strings.Split(strings.TrimSpace(ctx.CallWith(m, "libs.static")), " ")...)
-                        classpath = append(classpath, strings.Split(strings.TrimSpace(ctx.CallWith(m, "classpath")), " ")...)
+                        staticLibs = append(staticLibs, strings.Split(strings.TrimSpace(ctx.Call("me.libs.static")), " ")...)
+                        classpath = append(classpath, strings.Split(strings.TrimSpace(ctx.Call("me.classpath")), " ")...)
                         classpath = append(classpath, staticLibs...)
 
                         for _, src := range sources { ps = append(ps, NewAction(src, nil)) }
@@ -159,10 +154,6 @@ func (sdk *toolset) CreateActions(ctx *Context, m *Module) bool {
                 Fatal("unknown module type `%v'", m.Kind)
         }
         return true
-}
-
-func (sdk *toolset) UseModule(ctx *Context, m, o *Module) bool {
-        return false
 }
 
 type androidGen struct{

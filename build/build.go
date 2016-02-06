@@ -34,13 +34,13 @@ var (
 type toolset interface {
         // ConfigModule setup the current module being processed by parser.
         // `args' and `vars' is passed in on the `$(module)' invocation.
-        ConfigModule(p *Context, m *Module, args []string, vars map[string]string) bool
+        ConfigModule(p *Context, args []string, vars map[string]string) bool
 
         // CreateActions creates the module action graph
-        CreateActions(p *Context, m *Module) bool
+        CreateActions(p *Context) bool
 
         // UseModule
-        UseModule(p *Context, m, o *Module) bool
+        UseModule(p *Context, o *Module) bool
 }
 
 type toolsetStub struct {
@@ -59,15 +59,15 @@ func RegisterToolset(name string, ts toolset) {
 type BasicToolset struct {        
 }
 
-func (tt *BasicToolset) ConfigModule(ctx *Context, m *Module, args []string, vars map[string]string) bool {
+func (tt *BasicToolset) ConfigModule(ctx *Context, args []string, vars map[string]string) bool {
         return false
 }
 
-func (tt *BasicToolset) CreateActions(ctx *Context, m *Module) bool {
+func (tt *BasicToolset) CreateActions(ctx *Context) bool {
         return false
 }
 
-func (tt *BasicToolset) UseModule(ctx *Context, m, o *Module) bool {
+func (tt *BasicToolset) UseModule(ctx *Context, o *Module) bool {
         return false
 }
 
@@ -465,12 +465,16 @@ func (m *Module) createActionIfNil(ctx *Context) bool {
                 fmt.Printf("smart: config `%v' (%v)\n", m.Name, m.GetDir())
         }
 
-        if m.Toolset.CreateActions(ctx, m) {
+        prev := ctx.m
+        ctx.m = m
+
+        if m.Toolset.CreateActions(ctx) {
                 // ...
         } else if *flagV {
                 fmt.Printf("%v: module `%v' not built\n", m.location, m.Name)
         }
 
+        ctx.m = prev
         return m.Action != nil
 }
 

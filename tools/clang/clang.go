@@ -9,20 +9,20 @@ import (
 )
 
 func init() {
-        RegisterToolset("clang", &_clang{})
+        RegisterToolset("clang", &toolset{})
 }
 
-type _clang struct {
+type toolset struct {
 }
 
-func (clang *_clang) ConfigModule(ctx *Context, m *Module, args []string, vars map[string]string) bool {
+func (clang *toolset) ConfigModule(ctx *Context, args []string, vars map[string]string) bool {
         return true
 }
 
-func (clang *_clang) CreateActions(ctx *Context, m *Module, args []string) bool {
+func (clang *toolset) CreateActions(ctx *Context) bool {
         return false
 }
 
-func (clang *_clang) UseModule(ctx *Context, m, o *Module) bool {
+func (clang *toolset) UseModule(ctx *Context, m, o *Module) bool {
         return false
 }

@@ -7,8 +7,12 @@ import (
         //"os"
         "testing"
         //. "github.com/duzy/smart/build"
+        . "github.com/duzy/smart/test"
 )
 
+func testToolsetClang(t *testing.T) {
+}
+
 func TestToolsetClang(t *testing.T) {
-        //runToolsetTestCase(t, "android-sdk", testToolsetAndroidSDK)
+        RunToolsetTestCase(t, "../..", "gcc", testToolsetClang)
 }

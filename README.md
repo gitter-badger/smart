@@ -17,10 +17,10 @@ me.sources := foo.c
 me.export.libdirs := out/foo
 me.export.libs := foo
 
-$(build)
+$(commit)
 ```
 
 Why
 ===
 
-Build faster the simple way! (By comparing to autogen, autoconf, automake.)
+Build faster the simple way! (By comparing to autogen, autoconf, automake and makefile.)
