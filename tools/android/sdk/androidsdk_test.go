@@ -13,16 +13,13 @@ import (
         . "github.com/duzy/smart/test"
 )
 
-func testToolsetAndroidSDK(t *testing.T) {
-        modules, moduleOrderList, moduleBuildList := GetModules(), GetModuleOrderList(), GetModuleBuildList()
-        if l := len(modules); l != 0 { t.Errorf("expecting len(modules) for 0, but %v", l); return }
-        if l := len(moduleOrderList); l != 0 { t.Errorf("expecting len(moduleOrderList) for 0, but %v", l); return }
-        if l := len(moduleBuildList); l != 0 { t.Errorf("expecting len(moduleBuildList) for 0, but %v", l); return }
+func testCleanFiles(t *testing.T) {
         if e := os.RemoveAll("out"); e != nil { t.Errorf("failed remove `out' directory") }
+        if e := os.RemoveAll("obj"); e != nil { t.Errorf("failed remove `obj' directory") }
+}
 
-        defer func() {
-                os.RemoveAll("out")
-        }()
+func testToolsetAndroidSDK(t *testing.T) {
+        testCleanFiles(t)
 
         Build(ComputeTestRunParams())
 
@@ -87,20 +84,12 @@ func testToolsetAndroidSDK(t *testing.T) {
         if s := "resources.arsc\n"; !strings.Contains(l3, s)                    { t.Errorf("missing %v----------\n%v", s, l3); return }
         if s := "classes.dex\n"; !strings.Contains(l3, s)                       { t.Errorf("missing %v----------\n%v", s, l3); return }
         if s := "AndroidManifest.xml\n"; !strings.Contains(l3, s)               { t.Errorf("missing %v----------\n%v", s, l3); return }
+
+        testCleanFiles(t)
 }
 
 func testToolsetAndroidSDKJNI(t *testing.T) {
-        modules, moduleOrderList, moduleBuildList := GetModules(), GetModuleOrderList(), GetModuleBuildList()
-        if l := len(modules); l != 0 { t.Errorf("expecting len(modules) for 0, but %v", l); return }
-        if l := len(moduleOrderList); l != 0 { t.Errorf("expecting len(moduleOrderList) for 0, but %v", l); return }
-        if l := len(moduleBuildList); l != 0 { t.Errorf("expecting len(moduleBuildList) for 0, but %v", l); return }
-        if e := os.RemoveAll("obj"); e != nil { t.Errorf("failed remove `obj' directory") }
-        if e := os.RemoveAll("out"); e != nil { t.Errorf("failed remove `out' directory") }
-
-        defer func() {
-                os.RemoveAll("out")
-                os.RemoveAll("libs")
-        }()
+        testCleanFiles(t)
 
         Build(ComputeTestRunParams())
 
@@ -146,6 +135,8 @@ func testToolsetAndroidSDKJNI(t *testing.T) {
 
         if s := "lib/armeabi/libfoo.so\n"; !strings.Contains(l, s) { t.Errorf("missing %v----------\n%v", s, l); return }
         if s := "lib/armeabi-v7a/libfoo.so\n"; !strings.Contains(l, s) { t.Errorf("missing %v----------\n%v", s, l); return }
+
+        testCleanFiles(t)
 }
 
 func TestToolsetAndroidSDK(t *testing.T) {

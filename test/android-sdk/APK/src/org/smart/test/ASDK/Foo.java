@@ -2,6 +2,7 @@ package org.smart.test.ASDK;
 
 import android.app.Activity;
 import android.os.Bundle;
+import org.smart.test.R;
 
 public class Foo extends Activity
 {

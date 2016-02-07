@@ -207,7 +207,7 @@ func (c *Excmd) run(targetHint string, args ...string) bool {
 // intercommand represents a intermdiate action command
 type intercommand interface {
         Command
-        targets(prerequisites []*Action) (names []string, needsUpdate bool)
+        Targets(prerequisites []*Action) (names []string, needsUpdate bool)
 }
 
 func ComputeInterTargets(d, sre string, prerequisites []*Action) (targets []string, outdates int, outdateMap map[int]int) {
@@ -220,7 +220,7 @@ func ComputeInterTargets(d, sre string, prerequisites []*Action) (targets []stri
                 targets = append(targets, fn)
                 for _, p := range prerequisites {
                         if pc, ok := p.Command.(intercommand); ok {
-                                if _, needsUpdate := pc.targets(p.Prerequisites); needsUpdate {
+                                if _, needsUpdate := pc.Targets(p.Prerequisites); needsUpdate {
                                         outdateMap[i]++
                                 }
                         } else {
@@ -252,7 +252,7 @@ func (a *Action) update() (updated bool, updatedTargets []string) {
         var isIntercommand bool
         if a.Command != nil {
                 if c, ok := a.Command.(intercommand); ok {
-                        targets, targetsNeedUpdate = c.targets(a.Prerequisites)
+                        targets, targetsNeedUpdate = c.Targets(a.Prerequisites)
                         isIntercommand = true
                 }
         }
@@ -284,7 +284,7 @@ func (a *Action) update() (updated bool, updatedTargets []string) {
                         prerequisites = append(prerequisites, pres...)
                         updatedPreNum++
                 } else if pc, ok := p.Command.(intercommand); ok {
-                        pres, nu := pc.targets(p.Prerequisites)
+                        pres, nu := pc.Targets(p.Prerequisites)
                         if nu { errorf("requiring updating %v for %v", pres, targets) }
                         prerequisites = append(prerequisites, pres...)
                 } else {
@@ -345,12 +345,12 @@ func (a *Action) force(targets []string, tarfis []os.FileInfo, prerequisites []s
         if updated {
                 var targetsNeedUpdate bool
                 if c, ok := a.Command.(intercommand); ok {
-                        updatedTargets, targetsNeedUpdate = c.targets(a.Prerequisites)
+                        updatedTargets, targetsNeedUpdate = c.Targets(a.Prerequisites)
                         updated = !targetsNeedUpdate
                 } else {
                         for _, t := range a.Targets {
                                 if fi, e := os.Stat(t); e != nil || fi == nil {
-                                        errorf("`%s' not built", t)
+                                        errorf("`%s' was not built", t)
                                 } else {
                                         updatedTargets = append(updatedTargets, t)
                                 }
@@ -374,6 +374,10 @@ func newAction(target string, c Command, pre ...*Action) *Action {
 }
 
 func NewAction(target string, c Command, pre ...*Action) *Action {
+        return newAction(target, c, pre...)
+}
+
+func NewInterAction(target string, c intercommand, pre ...*Action) *Action {
         return newAction(target, c, pre...)
 }
 
@@ -477,7 +481,7 @@ func (m *Module) createActionIfNil(ctx *Context) bool {
         ctx.m = m
 
         if m.Toolset.CreateActions(ctx) {
-                //fmt.Printf("smart: `%v' (%v)\n", m.Name, m.GetDir())
+                //fmt.Printf("smart: created `%v' (%v)\n", m.Name, m.GetDir())
         } else if *flagV {
                 fmt.Printf("%v:%v:%v: `%v' not built\n", s, lineno, colno, m.Name)
         }
@@ -713,7 +717,7 @@ func Build(vars map[string]string, cmds []string) (ctx *Context) {
         for 0 < len(ctx.moduleBuildList) {
                 i, ctx.moduleBuildList = &ctx.moduleBuildList[0], ctx.moduleBuildList[1:]
                 if !i.m.createActionIfNil(i.p) {
-                        errorf("module `%v' not built", i.m.Name)
+                        errorf("nil action (`%v')", i.m.Name)
                 }
         }
 
