@@ -31,7 +31,7 @@ func init() {
                 return
         }
 
-        Message("ndk-build: %v", ndk.root)
+        //Message("ndk-build: %v", ndk.root)
 }
 
 type toolset struct {
@@ -44,7 +44,7 @@ func (ndk *toolset) ConfigModule(ctx *Context, args []string, vars map[string]st
                 abi = "armeabi" // all
                 optim = "debug" // release|debug
                 platform = "android-9" // minimal is "android-8"
-                script = "out/boot.mk"
+                script = "out/boot.mk" // use BUILD_SCRIPT to override
                 stl = "system" // system|stlport_static|gnustl_static
         )
 
@@ -61,16 +61,16 @@ func (ndk *toolset) ConfigModule(ctx *Context, args []string, vars map[string]st
         ctx.Set("me.script",   strings.TrimSpace(script))
         ctx.Set("me.stl",      strings.TrimSpace(stl))
 
-        m := ctx.CurrentModule()
-        Message("ndk-build: config: name=%v, dir=%v, args=%v, vars=%v", m.Name, m.GetDir(), args, vars)
+        //m := ctx.CurrentModule()
+        //Message("ndk-build: config: name=%v, dir=%v, args=%v, vars=%v", m.Name, m.GetDir(), args, vars)
+        //Message("ndk-build: args=%v, vars=%v", args, vars)
         return script != ""
 }
 
 func (ndk *toolset) CreateActions(ctx *Context) bool {
-        targets, prequisites := make(map[string]int, 4), make(map[string]int, 16)
         m := ctx.CurrentModule()
 
-        cmd := &_ndkbuildCmd{
+        cmd := &delegate{
                 abis:     strings.Fields(ctx.Call("me.abi")),
                 abi:      ctx.Call("me.abi"),
                 script:   ctx.Call("me.script"),
@@ -79,27 +79,29 @@ func (ndk *toolset) CreateActions(ctx *Context) bool {
                 optim:    ctx.Call("me.optim"),
         }
         if !filepath.IsAbs(cmd.script) {
-                //cmd.script = filepath.Join(m.DirGet(), ctx.Call("me.script"))
-                cmd.script, _, _ = m.GetLocation()
+                s, _, _ := m.GetDeclareLocation()
+                cmd.script = filepath.Join(filepath.Dir(s), cmd.script)
         }
+
+        targets, prerequisites := make(map[string]int, 4), make(map[string]int, 16)
 
         m.Action = new(Action)
         m.Action.Command = cmd
-        m.Action.Prequisites = append(m.Action.Prequisites, NewAction(cmd.script, nil))
-        prequisites[cmd.script]++
+        m.Action.Prerequisites = append(m.Action.Prerequisites, NewAction(cmd.script, nil))
+        prerequisites[cmd.script]++
 
         var scripts []string
         if ctx.Call("me.is_custom_script") == "yes" {
                 scripts = append(scripts, cmd.script)
         } else {
-                pa := m.Action.Prequisites[0]
-                pa.Command = &_ndkbuildGenBuildScript{}
+                pa := m.Action.Prerequisites[0]
+                pa.Command = &genBuildScript{}
 
                 var e error
                 if scripts, e = FindFiles(m.GetDir(), `Android\.mk$`); e == nil {
                         for _, s := range scripts {
                                 if filepath.Base(s) != "Android.mk" { continue }
-                                pa.Prequisites = append(pa.Prequisites, NewAction(s, nil))
+                                pa.Prerequisites = append(pa.Prerequisites, NewAction(s, nil))
                         }
                 }
         }
@@ -110,13 +112,13 @@ func (ndk *toolset) CreateActions(ctx *Context) bool {
                         // skip standard modules, e.g. stdc++
                         if strings.HasPrefix(p.path, dump.ndkRoot) { continue }
 
-                        //fmt.Printf("target: %v: %v\n", s, p.built)
-                        //fmt.Printf("target: %v: %v\n", s, p.installed)
+                        /* fmt.Printf("target: %v: %v\n", s, p.built)
+                        fmt.Printf("target: %v: %v\n", s, p.installed) */
 
                         targets[strings.TrimPrefix(p.built, "./")]++
-                        prequisites[strings.TrimPrefix(p.script, "./")]++
+                        prerequisites[strings.TrimPrefix(p.script, "./")]++
                         for _, s := range p.sources {
-                                prequisites[filepath.Join(p.path, s)]++
+                                prerequisites[filepath.Join(p.path, s)]++
                         }
                 }
         }
@@ -126,36 +128,32 @@ func (ndk *toolset) CreateActions(ctx *Context) bool {
         for s, _ := range targets {
                 m.Action.Targets = append(m.Action.Targets, s)
         }
-        for s, _ := range prequisites {
-                m.Action.Prequisites = append(m.Action.Prequisites, NewAction(s, nil))
+        for s, _ := range prerequisites {
+                m.Action.Prerequisites = append(m.Action.Prerequisites, NewAction(s, nil))
         }
 
         return true
 }
 
-type _ndkbuildGenBuildScript struct {}
-type _ndkbuildGenDumpScript struct {}
-type _ndkbuildModuleInfo struct {
+type moduleInfo struct {
         name, filename, path, script, objsDir, built, installed, class string
         sources []string
 }
-type _ndkbuildDump struct {
+
+type dump struct {
         ndkRoot, targetOut, targetObjs, targetGdbSetup, targetGdbServer string
         modules []string
-        m map[string]_ndkbuildModuleInfo
+        m map[string]moduleInfo
 }
 
-type _ndkbuildCmd struct {
-        script, abi, platform, stl, optim string
-        abis []string
-}
+type genBuildScript struct {}
 
-func (g *_ndkbuildGenBuildScript) Execute(targets []string, prequisites []string) bool {
-        //Message("ndkbuild: GenBuildScript: %v: %v", targets, prequisites)
+func (g *genBuildScript) Execute(targets []string, prerequisites []string) bool {
+        //Message("ndkbuild: GenBuildScript: %v: %v", targets, prerequisites)
 
         buf := new(bytes.Buffer)
         fmt.Fprintf(buf, "# %v\n", targets)
-        for _, p := range prequisites {
+        for _, p := range prerequisites {
                 fmt.Fprintf(buf, "include %s\n", p)
         }
 
@@ -179,12 +177,14 @@ func (g *_ndkbuildGenBuildScript) Execute(targets []string, prequisites []string
         return true
 }
 
-func (g *_ndkbuildGenDumpScript) Execute(targets []string, prequisites []string) bool {
-        Message("ndkbuild: GenDumpScript: %v: %v", targets, prequisites)
+type genDumpScript struct {}
+
+func (g *genDumpScript) Execute(targets []string, prerequisites []string) bool {
+        Message("ndkbuild: GenDumpScript: %v: %v", targets, prerequisites)
 
         buf := new(bytes.Buffer)
         fmt.Fprintf(buf, "# %v\n", targets)
-        for _, p := range prequisites {
+        for _, p := range prerequisites {
                 fmt.Fprintf(buf, "include %s\n", p)
         }
 
@@ -203,14 +203,22 @@ func (g *_ndkbuildGenDumpScript) Execute(targets []string, prequisites []string)
         return true
 }
 
-func (n *_ndkbuildCmd) Execute(targets []string, prequisites []string) bool {
-        //Message("ndkbuild: %v: %v", targets, prequisites)
-        c := NewExcmd("ndk-build")
+type delegate struct {
+        script, abi, platform, stl, optim string
+        abis []string
+}
+
+func (n *delegate) Execute(targets []string, prerequisites []string) bool {
+        //Message("ndkbuild: %v: %v", targets, prerequisites)
+
         vars := n.getBuildVars(n.abi, n.script)
+        fmt.Printf("%v\n", vars)
+
+        c := NewExcmd("ndk-build")
         return c.Run(fmt.Sprintf("%v", targets), vars...)
 }
 
-func (n *_ndkbuildCmd) getBuildVars(abi string, script string) []string {
+func (n *delegate) getBuildVars(abi string, script string) []string {
         return []string{
                 fmt.Sprintf("NDK_PROJECT_PATH=%s", "."),
                 //fmt.Sprintf("NDK_MODULE_PATH=%s", "."),
@@ -224,8 +232,8 @@ func (n *_ndkbuildCmd) getBuildVars(abi string, script string) []string {
         }
 }
 
-func (n *_ndkbuildCmd) dumpAll(abi string, scripts []string) (res *_ndkbuildDump) {
-        res = &_ndkbuildDump{ m:make(map[string]_ndkbuildModuleInfo) }
+func (n *delegate) dumpAll(abi string, scripts []string) (res *dump) {
+        res = &dump{ m:make(map[string]moduleInfo) }
 
         tf := n.createSmartDumpFile(scripts); defer os.Remove(tf)
 
@@ -244,7 +252,7 @@ func (n *_ndkbuildCmd) dumpAll(abi string, scripts []string) (res *_ndkbuildDump
                 res.targetGdbServer = ctx.Call("TARGET_GDB_SERVER")
                 res.modules = strings.Fields(ctx.Call("MODULES"))
                 for _, s := range res.modules {
-                        m := &_ndkbuildModuleInfo{}
+                        m := &moduleInfo{}
                         m.name = ctx.Call(s+".NAME")
                         m.filename = ctx.Call(s+".FILENAME")
                         m.path = ctx.Call(s+".PATH")
@@ -260,8 +268,8 @@ func (n *_ndkbuildCmd) dumpAll(abi string, scripts []string) (res *_ndkbuildDump
         return
 }
 
-func (n *_ndkbuildCmd) dumpSingle(abi string) (res *_ndkbuildDump) {
-        res = &_ndkbuildDump{}
+func (n *delegate) dumpSingle(abi string) (res *dump) {
+        res = &dump{}
 
         tf := n.createDummyDumpFile(); defer os.Remove(tf)
 
@@ -301,7 +309,7 @@ func (n *_ndkbuildCmd) dumpSingle(abi string) (res *_ndkbuildDump) {
         return
 }
 
-func (n *_ndkbuildCmd) createDummyDumpFile() string {
+func (n *delegate) createDummyDumpFile() string {
         tf, e := ioutil.TempFile("/tmp", "smart-dummy-dump-")
         if e != nil {
                 Fatal("TempFile: %v", e)
@@ -347,7 +355,7 @@ dummy-dump:
         return tf.Name()
 }
 
-func (n *_ndkbuildCmd) createSmartDumpFile(scripts []string) string {
+func (n *delegate) createSmartDumpFile(scripts []string) string {
         tf, e := ioutil.TempFile("/tmp", "smart-dummy-dump-")
         if e != nil {
                 Fatal("TempFile: %v", e)

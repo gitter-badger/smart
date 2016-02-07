@@ -477,7 +477,7 @@ func (m *Module) createActionIfNil(ctx *Context) bool {
         ctx.m = m
 
         if m.Toolset.CreateActions(ctx) {
-                // ...
+                //fmt.Printf("smart: `%v' (%v)\n", m.Name, m.GetDir())
         } else if *flagV {
                 fmt.Printf("%v:%v:%v: `%v' not built\n", s, lineno, colno, m.Name)
         }

@@ -10,14 +10,14 @@ import (
         . "github.com/duzy/smart/test"
 )
 
-func testToolsetNdkBuild(t *testing.T) {
+func testCleanFiles(t *testing.T) {
         //modules, moduleOrderList, moduleBuildList := GetModules(), GetModuleOrderList(), GetModuleBuildList()
         if e := os.RemoveAll("libs"); e != nil { t.Errorf("failed remove `libs' directory") }
         if e := os.RemoveAll("out"); e != nil { t.Errorf("failed remove `out' directory") }
-        defer func() {
-                os.RemoveAll("libs")
-                os.RemoveAll("out")
-        }()
+}
+
+func testToolsetNdkBuild(t *testing.T) {
+        testCleanFiles(t)
 
         Build(ComputeTestRunParams())
 
@@ -61,8 +61,10 @@ func testToolsetNdkBuild(t *testing.T) {
 
         if fi, e := os.Stat("libs/armeabi/libnative-activity.so"); fi == nil || e != nil || fi.IsDir() { t.Errorf("failed: %v", e); return }
         if fi, e := os.Stat("libs/armeabi-v7a/libnative-activity.so"); fi == nil || e != nil || fi.IsDir() { t.Errorf("failed: %v", e); return }
+
+        //testCleanFiles(t)
 }
 
 func TestToolsetNdkBuild(t *testing.T) {
-        RunToolsetTestCase(t, "ndkbuild", testToolsetNdkBuild)
+        RunToolsetTestCase(t, "../../..", "ndkbuild", testToolsetNdkBuild)
 }

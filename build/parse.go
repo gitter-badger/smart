@@ -814,7 +814,7 @@ func (ctx *Context) call(loc location, name string, args ...string) string {
                                         fmt.Printf("called: %v (%v)\n", name, e)
                                         if se, ok := e.(*smarterror); ok {
                                                 lineno, colno := ctx.l.getLineColumn()
-                                                fmt.Printf("scope:%v:%v: %v\n", lineno, colno, se.message)
+                                                fmt.Printf("%v:%v:%v: %v\n", ctx.l.scope, lineno, colno, se.message)
                                                 os.Exit(-2)
                                         } else {
                                                 panic(e)
@@ -824,6 +824,9 @@ func (ctx *Context) call(loc location, name string, args ...string) string {
                         // Expand all arguments.
                         for i := range args { args[i] = ctx.expand(loc, args[i]) }
                         return f(ctx, loc, args)
+                } else if *flagW {
+                        lineno, colno := ctx.l.caculateLocationLineColumn(loc)
+                        fmt.Printf("%v:%v:%v:warning: `%v' undefined\n", ctx.l.scope, lineno, colno, name)
                 }
         case name == "$": return "$";
         case name == "call":

@@ -23,6 +23,7 @@ var (
         flagT = flag.String("T", "", "traverse")
         flagV = flag.Bool("v", false, "prompt command")
         flagVV = flag.Bool("V", false, "print command verbosely")
+        flagW = flag.Bool("w", false, "warn undefined symbols")
 )
 
 func GetFlagA() bool    { return *flagA }
