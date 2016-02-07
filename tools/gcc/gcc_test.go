@@ -6,17 +6,28 @@ package smart
 import (
         "path/filepath"
         "testing"
-        //"fmt"
+        "fmt"
         "os"
         . "github.com/duzy/smart/build"
         . "github.com/duzy/smart/test"
 )
 
-func testToolsetGcc(t *testing.T) {
+func testCleanFiles(t *testing.T) {
         if e := os.RemoveAll("out"); e != nil { t.Errorf("failed remove `out' directory") }
+        if objs, e := FindFiles(".", `\.o$`); e == nil && 0 < len(objs) {
+                fmt.Printf("test: remove %v\n", objs)
+                for _, s := range objs {
+                        if e := os.Remove(s); e != nil {
+                                t.Errorf("failed remove `%v'", s)
+                        }
+                }
+        }
+}
+
+func testToolsetGcc(t *testing.T) {
+        testCleanFiles(t)
 
         ctx := Build(ComputeTestRunParams())
-        //modules, moduleOrderList, moduleBuildList := ctx.GetModules(), ctx.GetModuleOrderList(), ctx.GetModuleBuildList()
         modules := ctx.GetModules()
 
         var m *Module
@@ -28,11 +39,11 @@ func testToolsetGcc(t *testing.T) {
         if m.Action == nil { t.Errorf("no action for the module"); return }
         if l := len(m.Action.Targets); l != 1 { t.Errorf("expection 1 targets, but %v", l); return }
         if fn := filepath.Join("out", m.Name, m.Name); m.Action.Targets[0] != fn { t.Errorf("expecting action target %v, but %v", fn, m.Action.Targets); return }
-        if l := len(m.Action.Prequisites); l != 1 { t.Errorf("expecting 1 prequisite, but %v", l); return }
-        if l := len(m.Action.Prequisites[0].Targets); l != 1 { t.Errorf("expecting 1 prequisite, but %v", l); return }
-        if s := m.Action.Prequisites[0].Targets[0]; s != filepath.Join("exe", "foo.c.o") { t.Errorf("expect exe/foo.c.o, but %v (%v)", s, m.Action.Prequisites[0].Targets); return }
-        if l := len(m.Action.Prequisites[0].Prequisites); l != 1 { t.Errorf("expecting 1 prequisite, but %v", l); return }
-        if s := m.Action.Prequisites[0].Prequisites[0].Targets[0]; s != filepath.Join("exe", "foo.c") { t.Errorf("expect exe/foo.c, but %v (%v)", s, m.Action.Prequisites[0].Prequisites[0].Targets); return }
+        if l := len(m.Action.Prerequisites); l != 1 { t.Errorf("expecting 1 prequisite, but %v", l); return }
+        if l := len(m.Action.Prerequisites[0].Targets); l != 1 { t.Errorf("expecting 1 prequisite, but %v", l); return }
+        if s := m.Action.Prerequisites[0].Targets[0]; s != filepath.Join("exe", "foo.c.o") { t.Errorf("expect exe/foo.c.o, but %v (%v)", s, m.Action.Prerequisites[0].Targets); return }
+        if l := len(m.Action.Prerequisites[0].Prerequisites); l != 1 { t.Errorf("expecting 1 prequisite, but %v", l); return }
+        if s := m.Action.Prerequisites[0].Prerequisites[0].Targets[0]; s != filepath.Join("exe", "foo.c") { t.Errorf("expect exe/foo.c, but %v (%v)", s, m.Action.Prerequisites[0].Prerequisites[0].Targets); return }
 
         if m, ok = modules["foo_shared"]; !ok { t.Errorf("expecting module foo_shared"); return }
         if m.Name != "foo_shared" { t.Errorf("expecting module foo_shared, but %v", m.Name); return }
@@ -40,11 +51,11 @@ func testToolsetGcc(t *testing.T) {
         if m.Kind != "shared" { t.Errorf("expecting shared for foo_shared, but %v", m.Kind); return }
         if m.Action == nil { t.Errorf("no action for the module"); return }
         if l := len(m.Action.Targets); l != 1 { t.Errorf("expection 1 targets, but %v", l); return }
-        if l := len(m.Action.Prequisites); l != 1 { t.Errorf("expecting 1 prequisite, but %v", l); return }
-        if l := len(m.Action.Prequisites[0].Targets); l != 1 { t.Errorf("expecting 1 prequisite, but %v", l); return }
-        if s := m.Action.Prequisites[0].Targets[0]; s != filepath.Join("shared", "foo.c.o") { t.Errorf("expect shared/foo.c.o, but %v (%v)", s, m.Action.Prequisites[0].Targets); return }
-        if l := len(m.Action.Prequisites[0].Prequisites); l != 1 { t.Errorf("expecting 1 prequisite, but %v", l); return }
-        if s := m.Action.Prequisites[0].Prequisites[0].Targets[0]; s != filepath.Join("shared", "foo.c") { t.Errorf("expect shared/foo.c, but %v (%v)", s, m.Action.Prequisites[0].Prequisites[0].Targets); return }
+        if l := len(m.Action.Prerequisites); l != 1 { t.Errorf("expecting 1 prequisite, but %v", l); return }
+        if l := len(m.Action.Prerequisites[0].Targets); l != 1 { t.Errorf("expecting 1 prequisite, but %v", l); return }
+        if s := m.Action.Prerequisites[0].Targets[0]; s != filepath.Join("shared", "foo.c.o") { t.Errorf("expect shared/foo.c.o, but %v (%v)", s, m.Action.Prerequisites[0].Targets); return }
+        if l := len(m.Action.Prerequisites[0].Prerequisites); l != 1 { t.Errorf("expecting 1 prequisite, but %v", l); return }
+        if s := m.Action.Prerequisites[0].Prerequisites[0].Targets[0]; s != filepath.Join("shared", "foo.c") { t.Errorf("expect shared/foo.c, but %v (%v)", s, m.Action.Prerequisites[0].Prerequisites[0].Targets); return }
 
         if m, ok = modules["foo_static"]; !ok { t.Errorf("expecting module foo_static"); return }
         if m.Name != "foo_static" { t.Errorf("expecting module foo_static, but %v", m.Name); return }
@@ -52,11 +63,11 @@ func testToolsetGcc(t *testing.T) {
         if m.Kind != "static" { t.Errorf("expecting static for foo_static, but %v", m.Kind); return }
         if m.Action == nil { t.Errorf("no action for the module"); return }
         if l := len(m.Action.Targets); l != 1 { t.Errorf("expection 1 targets, but %v", l); return }
-        if l := len(m.Action.Prequisites); l != 1 { t.Errorf("expecting 1 prequisite, but %v", l); return }
-        if l := len(m.Action.Prequisites[0].Targets); l != 1 { t.Errorf("expecting 1 prequisite, but %v", l); return }
-        if s := m.Action.Prequisites[0].Targets[0]; s != filepath.Join("static", "foo.c.o") { t.Errorf("expect static/foo.c.o, but %v (%v, %v)", s, m.Name, m.Action.Prequisites[0].Targets); return }
-        if l := len(m.Action.Prequisites[0].Prequisites); l != 1 { t.Errorf("expecting 1 prequisite, but %v", l); return }
-        if s := m.Action.Prequisites[0].Prequisites[0].Targets[0]; s != filepath.Join("static", "foo.c") { t.Errorf("expect static/foo.c, but %v (%v)", s, m.Action.Prequisites[0].Prequisites[0].Targets); return }
+        if l := len(m.Action.Prerequisites); l != 1 { t.Errorf("expecting 1 prequisite, but %v", l); return }
+        if l := len(m.Action.Prerequisites[0].Targets); l != 1 { t.Errorf("expecting 1 prequisite, but %v", l); return }
+        if s := m.Action.Prerequisites[0].Targets[0]; s != filepath.Join("static", "foo.c.o") { t.Errorf("expect static/foo.c.o, but %v (%v, %v)", s, m.Name, m.Action.Prerequisites[0].Targets); return }
+        if l := len(m.Action.Prerequisites[0].Prerequisites); l != 1 { t.Errorf("expecting 1 prequisite, but %v", l); return }
+        if s := m.Action.Prerequisites[0].Prerequisites[0].Targets[0]; s != filepath.Join("static", "foo.c") { t.Errorf("expect static/foo.c, but %v (%v)", s, m.Action.Prerequisites[0].Prerequisites[0].Targets); return }
 
         if m, ok = modules["foo_gcc_exe_use_shared"]; !ok { t.Errorf("expecting module foo_gcc_exe_use_shared"); return }
         if m.Name != "foo_gcc_exe_use_shared" { t.Errorf("expecting module foo_gcc_exe_use_shared, but %v", m.Name); return }
@@ -65,11 +76,11 @@ func testToolsetGcc(t *testing.T) {
         if m.Action == nil { t.Errorf("no action for the module"); return }
         if l := len(m.Action.Targets); l != 1 { t.Errorf("expection 1 targets, but %v", l); return }
         if fn := filepath.Join("out", m.Name, m.Name); m.Action.Targets[0] != fn { t.Errorf("expecting action target %v, but %v", fn, m.Action.Targets); return }
-        if l := len(m.Action.Prequisites); l != 1 { t.Errorf("expecting 1 prequisite, but %v", l); return }
-        if l := len(m.Action.Prequisites[0].Targets); l != 1 { t.Errorf("expecting 1 prequisite, but %v", l); return }
-        if s := m.Action.Prequisites[0].Targets[0]; s != filepath.Join("exe_use_shared", "foo.c.o") { t.Errorf("expect exe_use_shared/foo.c.o, but %v (%v)", s, m.Action.Prequisites[0].Targets); return }
-        if l := len(m.Action.Prequisites[0].Prequisites); l != 1 { t.Errorf("expecting 1 prequisite, but %v", l); return }
-        if s := m.Action.Prequisites[0].Prequisites[0].Targets[0]; s != filepath.Join("exe_use_shared", "foo.c") { t.Errorf("expect exe_use_shared/foo.c, but %v (%v)", s, m.Action.Prequisites[0].Prequisites[0].Targets); return }
+        if l := len(m.Action.Prerequisites); l != 1 { t.Errorf("expecting 1 prequisite, but %v", l); return }
+        if l := len(m.Action.Prerequisites[0].Targets); l != 1 { t.Errorf("expecting 1 prequisite, but %v", l); return }
+        if s := m.Action.Prerequisites[0].Targets[0]; s != filepath.Join("exe_use_shared", "foo.c.o") { t.Errorf("expect exe_use_shared/foo.c.o, but %v (%v)", s, m.Action.Prerequisites[0].Targets); return }
+        if l := len(m.Action.Prerequisites[0].Prerequisites); l != 1 { t.Errorf("expecting 1 prequisite, but %v", l); return }
+        if s := m.Action.Prerequisites[0].Prerequisites[0].Targets[0]; s != filepath.Join("exe_use_shared", "foo.c") { t.Errorf("expect exe_use_shared/foo.c, but %v (%v)", s, m.Action.Prerequisites[0].Prerequisites[0].Targets); return }
 
         if m, ok = modules["foo_gcc_exe_use_static"]; !ok { t.Errorf("expecting module foo_gcc_exe_static"); return }
         if m.Name != "foo_gcc_exe_use_static" { t.Errorf("expecting module foo_gcc_exe_static, but %v", m.Name); return }
@@ -78,11 +89,11 @@ func testToolsetGcc(t *testing.T) {
         if m.Action == nil { t.Errorf("no action for the module"); return }
         if l := len(m.Action.Targets); l != 1 { t.Errorf("expection 1 targets, but %v", l); return }
         if fn := filepath.Join("out", m.Name, m.Name); m.Action.Targets[0] != fn { t.Errorf("expecting action target %v, but %v", fn, m.Action.Targets); return }
-        if l := len(m.Action.Prequisites); l != 1 { t.Errorf("expecting 1 prequisite, but %v", l); return }
-        if l := len(m.Action.Prequisites[0].Targets); l != 1 { t.Errorf("expecting 1 prequisite, but %v", l); return }
-        if s := m.Action.Prequisites[0].Targets[0]; s != filepath.Join("exe_use_static", "foo.c.o") { t.Errorf("expect exe_use_static/foo.c.o, but %v (%v)", s, m.Action.Prequisites[0].Targets); return }
-        if l := len(m.Action.Prequisites[0].Prequisites); l != 1 { t.Errorf("expecting 1 prequisite, but %v", l); return }
-        if s := m.Action.Prequisites[0].Prequisites[0].Targets[0]; s != filepath.Join("exe_use_static", "foo.c") { t.Errorf("expect exe_use_static/foo.c, but %v (%v)", s, m.Action.Prequisites[0].Prequisites[0].Targets); return }
+        if l := len(m.Action.Prerequisites); l != 1 { t.Errorf("expecting 1 prequisite, but %v", l); return }
+        if l := len(m.Action.Prerequisites[0].Targets); l != 1 { t.Errorf("expecting 1 prequisite, but %v", l); return }
+        if s := m.Action.Prerequisites[0].Targets[0]; s != filepath.Join("exe_use_static", "foo.c.o") { t.Errorf("expect exe_use_static/foo.c.o, but %v (%v)", s, m.Action.Prerequisites[0].Targets); return }
+        if l := len(m.Action.Prerequisites[0].Prerequisites); l != 1 { t.Errorf("expecting 1 prequisite, but %v", l); return }
+        if s := m.Action.Prerequisites[0].Prerequisites[0].Targets[0]; s != filepath.Join("exe_use_static", "foo.c") { t.Errorf("expect exe_use_static/foo.c, but %v (%v)", s, m.Action.Prerequisites[0].Prerequisites[0].Targets); return }
 
         if fi, e := os.Stat("out"); fi == nil || e != nil || !fi.IsDir() { t.Errorf("failed: %v", e); return }
         if fi, e := os.Stat("out/foo_shared"); fi == nil || e != nil || !fi.IsDir() { t.Errorf("failed: %v", e); return }
@@ -100,7 +111,7 @@ func testToolsetGcc(t *testing.T) {
         if s := Runcmd("out/foo_gcc_exe_use_shared/foo_gcc_exe_use_shared"); s != "hello: out/foo_gcc_exe_use_shared/foo_gcc_exe_use_shared (shared: 100)\n" { t.Errorf("unexpected foo_gcc_exe output: '%v'", s); return }
         if s := Runcmd("out/foo_gcc_exe_use_static/foo_gcc_exe_use_static"); s != "hello: out/foo_gcc_exe_use_static/foo_gcc_exe_use_static (static: 100)\n" { t.Errorf("unexpected foo_gcc_exe output: '%v'", s); return }
 
-        os.RemoveAll("out")
+        testCleanFiles(t)
 }
 
 func TestToolsetGCC(t *testing.T) {

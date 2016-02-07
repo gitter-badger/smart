@@ -85,7 +85,7 @@ func IsIA32Command(s string) bool {
 
 // A command executed by an action while updating a target.
 type Command interface {
-        Execute(targets []string, prequisites []string) bool
+        Execute(targets []string, prerequisites []string) bool
 }
 
 type Excmd struct {
@@ -176,22 +176,23 @@ func (c *Excmd) run(targetHint string, args ...string) bool {
                 if err := cmd.Run(); err == nil {
                         updated = true
                 } else {
-                        message("%v", err)
+                        message("%v (%v)", err, c.path)
                         if c.path != "" {
-                                message(`"%v %v"`, c.path, strings.Join(args, " "))
+                                fmt.Fprintf(os.Stderr, "-------------------------------------\n")
+                                fmt.Fprintf(os.Stderr, "%v %v\n", c.path, strings.Join(args, " "))
                         }
                         so, se := c.stdout.String(), c.stderr.String()
                         if so != "" {
-                                fmt.Printf("------------------------------ stdout\n")
-                                fmt.Printf("%v", so)
-                                if !strings.HasSuffix(so, "\n") { fmt.Printf("\n") }
+                                fmt.Fprintf(os.Stderr, "------------------------------ stdout\n")
+                                fmt.Fprintf(os.Stderr, "%v", so)
+                                if !strings.HasSuffix(so, "\n") { fmt.Fprintf(os.Stderr, "\n") }
                         }
                         if se != "" {
-                                fmt.Printf("------------------------------ stderr\n")
-                                fmt.Printf("%v", se)
-                                if !strings.HasSuffix(se, "\n") { fmt.Printf("\n") }
+                                fmt.Fprintf(os.Stderr, "------------------------------ stderr\n")
+                                fmt.Fprintf(os.Stderr, "%v", se)
+                                if !strings.HasSuffix(se, "\n") { fmt.Fprintf(os.Stderr, "\n") }
                         }
-                        fmt.Printf("-------------------------------------\n")
+                        fmt.Fprintf(os.Stderr, "-------------------------------------\n")
                         errorf(`failed executing "%v"`, c.path)
                 }
 
@@ -206,10 +207,10 @@ func (c *Excmd) run(targetHint string, args ...string) bool {
 // intercommand represents a intermdiate action command
 type intercommand interface {
         Command
-        targets(prequisites []*Action) (names []string, needsUpdate bool)
+        targets(prerequisites []*Action) (names []string, needsUpdate bool)
 }
 
-func ComputeInterTargets(d, sre string, prequisites []*Action) (targets []string, outdates int, outdateMap map[int]int) {
+func ComputeInterTargets(d, sre string, prerequisites []*Action) (targets []string, outdates int, outdateMap map[int]int) {
         re := regexp.MustCompile(sre)
         outdateMap = map[int]int{}
         traverse(d, func(fn string, fi os.FileInfo) bool {
@@ -217,9 +218,9 @@ func ComputeInterTargets(d, sre string, prequisites []*Action) (targets []string
                 i := len(targets)
                 outdateMap[i] = 0
                 targets = append(targets, fn)
-                for _, p := range prequisites {
+                for _, p := range prerequisites {
                         if pc, ok := p.Command.(intercommand); ok {
-                                if _, needsUpdate := pc.targets(p.Prequisites); needsUpdate {
+                                if _, needsUpdate := pc.targets(p.Prerequisites); needsUpdate {
                                         outdateMap[i]++
                                 }
                         } else {
@@ -241,7 +242,7 @@ func ComputeInterTargets(d, sre string, prequisites []*Action) (targets []string
 // Action performs a command for updating targets
 type Action struct {
         Targets []string
-        Prequisites []*Action
+        Prerequisites []*Action
         Command Command
 }
 
@@ -251,7 +252,7 @@ func (a *Action) update() (updated bool, updatedTargets []string) {
         var isIntercommand bool
         if a.Command != nil {
                 if c, ok := a.Command.(intercommand); ok {
-                        targets, targetsNeedUpdate = c.targets(a.Prequisites)
+                        targets, targetsNeedUpdate = c.targets(a.Prerequisites)
                         isIntercommand = true
                 }
         }
@@ -277,17 +278,17 @@ func (a *Action) update() (updated bool, updatedTargets []string) {
         }
 
         updatedPreNum := 0
-        prequisites := []string{}
-        for _, p := range a.Prequisites {
+        prerequisites := []string{}
+        for _, p := range a.Prerequisites {
                 if u, pres := p.update(); u {
-                        prequisites = append(prequisites, pres...)
+                        prerequisites = append(prerequisites, pres...)
                         updatedPreNum++
                 } else if pc, ok := p.Command.(intercommand); ok {
-                        pres, nu := pc.targets(p.Prequisites)
+                        pres, nu := pc.targets(p.Prerequisites)
                         if nu { errorf("requiring updating %v for %v", pres, targets) }
-                        prequisites = append(prequisites, pres...)
+                        prerequisites = append(prerequisites, pres...)
                 } else {
-                        prequisites = append(prequisites, p.Targets...)
+                        prerequisites = append(prerequisites, p.Targets...)
                         for _, pt := range p.Targets {
                                 if fi, err := os.Stat(pt); err != nil {
                                         errorf("`%v' not found", pt)
@@ -312,7 +313,7 @@ func (a *Action) update() (updated bool, updatedTargets []string) {
         }
 
         if 0 < updatedPreNum || targetsNeedUpdate {
-                updated, updatedTargets = a.force(targets, fis, prequisites)
+                updated, updatedTargets = a.force(targets, fis, prerequisites)
         } else {
                 var rr []int
                 var request []string
@@ -329,22 +330,22 @@ func (a *Action) update() (updated bool, updatedTargets []string) {
                         }
                 }
 
-                //fmt.Printf("targets: %v, %v, %v, %v\n", targets, request, len(a.prequisites), prequisites)
+                //fmt.Printf("targets: %v, %v, %v, %v\n", targets, request, len(a.prerequisites), prerequisites)
                 if 0 < len(request) {
-                        updated, updatedTargets = a.force(request, requestfis, prequisites)
+                        updated, updatedTargets = a.force(request, requestfis, prerequisites)
                 }
         }
 
         return
 }
 
-func (a *Action) force(targets []string, tarfis []os.FileInfo, prequisites []string) (updated bool, updatedTargets []string) {
-        updated = a.Command.Execute(targets, prequisites)
+func (a *Action) force(targets []string, tarfis []os.FileInfo, prerequisites []string) (updated bool, updatedTargets []string) {
+        updated = a.Command.Execute(targets, prerequisites)
 
         if updated {
                 var targetsNeedUpdate bool
                 if c, ok := a.Command.(intercommand); ok {
-                        updatedTargets, targetsNeedUpdate = c.targets(a.Prequisites)
+                        updatedTargets, targetsNeedUpdate = c.targets(a.Prerequisites)
                         updated = !targetsNeedUpdate
                 } else {
                         for _, t := range a.Targets {
@@ -367,7 +368,7 @@ func newAction(target string, c Command, pre ...*Action) *Action {
         a := &Action{
                 Command: c,
                 Targets: []string{ target },
-                Prequisites: pre,
+                Prerequisites: pre,
         }
         return a
 }
@@ -498,8 +499,9 @@ func (m *Module) update() {
                 if *flagV {
                         s, lineno, colno := m.GetCommitLocation()
                         fmt.Printf("%v:%v:%v:warning: `%v' - nothing updated\n", s, lineno, colno, m.Name)
-
-                        s, lineno, colno = m.GetDeclareLocation()
+                }
+                if *flagVV {
+                        s, lineno, colno := m.GetDeclareLocation()
                         fmt.Printf("%v:%v:%v:info: `%v'\n", s, lineno, colno, m.Name)
                 }
         }
