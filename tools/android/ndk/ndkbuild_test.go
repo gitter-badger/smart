@@ -62,7 +62,7 @@ func testToolsetNdkBuild(t *testing.T) {
         if fi, e := os.Stat("libs/armeabi/libnative-activity.so"); fi == nil || e != nil || fi.IsDir() { t.Errorf("failed: %v", e); return }
         if fi, e := os.Stat("libs/armeabi-v7a/libnative-activity.so"); fi == nil || e != nil || fi.IsDir() { t.Errorf("failed: %v", e); return }
 
-        //testCleanFiles(t)
+        testCleanFiles(t)
 }
 
 func TestToolsetNdkBuild(t *testing.T) {
