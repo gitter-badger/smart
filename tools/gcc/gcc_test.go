@@ -13,13 +13,11 @@ import (
 )
 
 func testToolsetGcc(t *testing.T) {
-        modules, moduleOrderList, moduleBuildList := GetModules(), GetModuleOrderList(), GetModuleBuildList()
-        if l := len(modules); l != 0 { t.Errorf("expecting len(modules) for 0, but %v", l); return }
-        if l := len(moduleOrderList); l != 0 { t.Errorf("expecting len(moduleOrderList) for 0, but %v", l); return }
-        if l := len(moduleBuildList); l != 0 { t.Errorf("expecting len(moduleBuildList) for 0, but %v", l); return }
         if e := os.RemoveAll("out"); e != nil { t.Errorf("failed remove `out' directory") }
 
-        Build(ComputeTestRunParams())
+        ctx := Build(ComputeTestRunParams())
+        //modules, moduleOrderList, moduleBuildList := ctx.GetModules(), ctx.GetModuleOrderList(), ctx.GetModuleBuildList()
+        modules := ctx.GetModules()
 
         var m *Module
         var ok bool

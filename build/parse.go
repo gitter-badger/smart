@@ -641,6 +641,12 @@ func (l *lex) parse() bool {
         return l.pos == end
 }
 
+type pendedBuild struct {
+        m *Module
+        p *Context
+        args []string
+}
+
 // Context hold a parse context and the current module being processed.
 type Context struct {
         lexingStack []*lex
@@ -651,6 +657,19 @@ type Context struct {
 
         // variables holds the context
         defines map[string]*define
+
+        modules map[string]*Module
+        moduleOrderList []*Module
+        moduleBuildList []pendedBuild
+}
+
+func (ctx *Context) GetModules() map[string]*Module { return ctx.modules }
+func (ctx *Context) GetModuleOrderList() []*Module { return ctx.moduleOrderList }
+func (ctx *Context) GetModuleBuildList() []pendedBuild { return ctx.moduleBuildList }
+func (ctx *Context) ResetModules() {
+        ctx.modules = make(map[string]*Module, 8)
+        ctx.moduleOrderList = []*Module{}
+        ctx.moduleBuildList = []pendedBuild{}
 }
 
 func (ctx *Context) CurrentScope() string {
@@ -663,6 +682,16 @@ func (ctx *Context) CurrentLocation() location {
 
 func (ctx *Context) CurrentModule() *Module {
         return ctx.m
+}
+
+func (ctx *Context) DeferWith(m *Module) func() {
+        prev := ctx.m; ctx.m = m
+        return func() { ctx.m = prev }
+}
+
+func (ctx *Context) With(m *Module, work func()) {
+        revert := ctx.DeferWith(m); defer revert()
+        work()
 }
 
 func (ctx *Context) expand(loc location, str string) string {
@@ -1061,6 +1090,7 @@ func NewContext(scope string, s []byte, vars map[string]string) (ctx *Context, e
         ctx = &Context{
                 l: &lex{ parseBuffer:&parseBuffer{ scope:scope, s: s }, pos: 0 },
                 defines: make(map[string]*define, len(vars) + 32),
+                modules: make(map[string]*Module, 8),
         }
 
         for k, v := range vars {

@@ -15,7 +15,6 @@ var (
         builtins = map[string]builtin {
                 "module":       builtinModule,
                 "commit":       builtinCommit,
-                "build":        builtinBuild,
                 "dir":          builtinDir,
                 "info":         builtinInfo,
                 "use":          builtinUse,
@@ -94,22 +93,22 @@ func builtinModule(ctx *Context, loc location, args []string) (s string) {
                 m *Module
                 has bool
         )
-        if m, has = modules[name]; !has {
+        if m, has = ctx.modules[name]; !has {
                 m = &Module{
                         l: ctx.l,
                         Name: name,
                         Toolset: toolset,
                         Kind: kind,
-                        location: loc, defines: make(map[string]*define, 32),
+                        defines: make(map[string]*define, 32),
                 }
-                modules[m.Name] = m
-                moduleOrderList = append(moduleOrderList, m)
+                ctx.modules[m.Name] = m
+                ctx.moduleOrderList = append(ctx.moduleOrderList, m)
         } else if (m.Toolset != nil && toolsetName != "") && (m.Kind != "" || kind != "") {
                 s := ctx.l.scope
                 lineno, colno := ctx.l.caculateLocationLineColumn(loc)
                 fmt.Printf("%v:%v:%v: '%v' already declared\n", s, lineno, colno, name)
 
-                s, lineno, colno = m.GetLocation()
+                s, lineno, colno = m.GetDeclareLocation()
                 fmt.Printf("%v:%v:%v:warning: previous '%v'\n", s, lineno, colno, name)
 
                 errorf(fmt.Sprintf("module already declared (%v, $v)", ctx.m.Toolset, ctx.m.Kind))
@@ -120,7 +119,8 @@ func builtinModule(ctx *Context, loc location, args []string) (s string) {
                 m.Kind = kind
         }
 
-        m.l = ctx.l // reset the lex (it could be created by $(use))
+        // Reset the lex and location (because it could be created by $(use))
+        m.l, m.declareLoc = ctx.l, loc
         if ctx.m != nil {
                 ctx.moduleStack = append(ctx.moduleStack, ctx.m)
         }
@@ -140,9 +140,13 @@ func builtinCommit(ctx *Context, loc location, args []string) (s string) {
                 return
         }
 
-        verbose("commit `%v' (%v)", ctx.m.Name, ctx.m.GetDir())
+        if *flagVV {
+                lineno, colno := ctx.l.caculateLocationLineColumn(loc)
+                verbose("commit `%v' (%v:%v:%v)", ctx.m.Name, ctx.l.scope, lineno, colno)
+        }
 
-        moduleBuildList = append(moduleBuildList, pendedBuild{ctx.m, ctx, args})
+        ctx.m.commitLoc = loc
+        ctx.moduleBuildList = append(ctx.moduleBuildList, pendedBuild{ctx.m, ctx, args})
 
         i := len(ctx.moduleStack)-1
         if 0 <= i {
@@ -156,18 +160,13 @@ func builtinCommit(ctx *Context, loc location, args []string) (s string) {
         return
 }
 
-func builtinBuild(ctx *Context, loc location, args []string) string {
-        errorf("use $(commit) instead")
-        return ""
-}
-
 func builtinUse(ctx *Context, loc location, args []string) string {
         if ctx.m == nil { errorf("no module defined") }
         if ctx.m.Toolset == nil { errorf("no toolset for `%v'", ctx.m.Name) }
 
         for _, a := range args {
                 a = strings.TrimSpace(a)
-                if m, ok := modules[a]; ok {
+                if m, ok := ctx.modules[a]; ok {
                         ctx.m.Using = append(ctx.m.Using, m)
                         m.UsedBy = append(m.UsedBy, ctx.m)
                         ctx.m.Toolset.UseModule(ctx, m)
@@ -178,7 +177,7 @@ func builtinUse(ctx *Context, loc location, args []string) string {
                                 defines: make(map[string]*define, 32),
                         }
                         ctx.m.Using = append(ctx.m.Using, m)
-                        modules[a] = m
+                        ctx.modules[a] = m
                         ctx.m.Toolset.UseModule(ctx, m)
                 }
         }

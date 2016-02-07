@@ -89,7 +89,7 @@ func (sdk *toolset) ConfigModule(ctx *Context, args []string, vars map[string]st
 
 func (sdk *toolset) CreateActions(ctx *Context) bool {
         m, platform := ctx.CurrentModule(), strings.TrimSpace(ctx.Call("me.platform"))
-        if platform == "" { Fatal("unknown platform for `%v' (%v)", m.Name, ctx.Call("me.platform")) }
+        if platform == "" { Fatal("no platform selected (%v)", m.Name) }
 
         //fmt.Printf("platform: %v\n", platform)
 

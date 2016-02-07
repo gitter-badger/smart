@@ -403,14 +403,13 @@ func CreateSourceTransformActions(sources []string, namecommand func(src string)
 // Module is defined by a $(module) invocation in .smart script.
 type Module struct {
         Parent *Module // upper module
-        Name string
+        Name, Kind string
         Toolset toolset
-        Kind string
         Action *Action // action for building this module
         Using, UsedBy []*Module
         Updated bool // marked as 'true' if module is updated
         defines map[string]*define
-        location location // where does it defined (could be nil)
+        declareLoc, commitLoc location // where does it defined and commit (could be nil)
         l *lex // the lex scope where does it defined (could be nil)
 }
 
@@ -420,16 +419,23 @@ func (m *Module) GetDir() (s string) {
         }
         return
 }
-func (m *Module) GetLocation() (s string, lineno, colno int) {
+func (m *Module) GetDeclareLocation() (s string, lineno, colno int) {
         if l := m.l; l != nil {
-                lineno, colno = l.caculateLocationLineColumn(m.location)
+                lineno, colno = l.caculateLocationLineColumn(m.declareLoc)
+                s = l.scope
+        }
+        return
+}
+func (m *Module) GetCommitLocation() (s string, lineno, colno int) {
+        if l := m.l; l != nil {
+                lineno, colno = l.caculateLocationLineColumn(m.commitLoc)
                 s = l.scope
         }
         return
 }
 
 func (m *Module) GetSources(ctx *Context) (sources []string) {
-        sources = split(ctx.callWith(m.location, m, "sources"))
+        sources = split(ctx.callWith(m.commitLoc, m, "sources"))
         for i := range sources {
                 if sources[i][0] == '/' { continue }
                 sources[i] = filepath.Join(m.GetDir(), sources[i])
@@ -438,12 +444,13 @@ func (m *Module) GetSources(ctx *Context) (sources []string) {
 }
 
 func (m *Module) createActionIfNil(ctx *Context) bool {
+        s, lineno, colno := m.GetCommitLocation()
+
         numUsing := len(m.Using)
         for _, u := range m.Using {
                 if u.createActionIfNil(ctx) { numUsing-- }
         }
         if 0 < numUsing {
-                s, lineno, colno := m.GetLocation()
                 if *flagV || *flagVV {
                         fmt.Printf("%v:%v:%v: not all dependencies was built (%v, %v/%v)\n", s, lineno, colno, m.Name)
                 } else {
@@ -457,7 +464,7 @@ func (m *Module) createActionIfNil(ctx *Context) bool {
         }
 
         if m.Toolset == nil {
-                fmt.Printf("%v: no toolset for `%v'\n", m.location, m.Name)
+                fmt.Printf("%v:%v:%v: no such toolset (%v)\n", s, lineno, colno, m.Name)
                 return false
         }
 
@@ -471,7 +478,7 @@ func (m *Module) createActionIfNil(ctx *Context) bool {
         if m.Toolset.CreateActions(ctx) {
                 // ...
         } else if *flagV {
-                fmt.Printf("%v: module `%v' not built\n", m.location, m.Name)
+                fmt.Printf("%v:%v:%v: `%v' not built\n", s, lineno, colno, m.Name)
         }
 
         ctx.m = prev
@@ -479,35 +486,16 @@ func (m *Module) createActionIfNil(ctx *Context) bool {
 }
 
 func (m *Module) update() {
+        s, lineno, colno := m.GetCommitLocation() //m.GetDeclareLocation()
+
         if m.Action == nil {
-                s, lineno, colno := m.GetLocation()
                 fmt.Printf("%v:%v:%v:warning: no action (\"%v\")\n", s, lineno, colno, m.Name)
                 return
         }
 
         if updated, _ := m.Action.update(); !updated {
-                s, lineno, colno := m.GetLocation()
                 fmt.Printf("%v:%v:%v:warning: did nothing (\"%v\")\n", s, lineno, colno, m.Name)
         }
-}
-
-type pendedBuild struct {
-        m *Module
-        p *Context
-        args []string
-}
-
-var modules = map[string]*Module{}
-var moduleOrderList []*Module
-var moduleBuildList []pendedBuild
-
-func GetModules() map[string]*Module { return modules }
-func GetModuleOrderList() []*Module { return moduleOrderList }
-func GetModuleBuildList() []pendedBuild { return moduleBuildList }
-func ResetModules() {
-        modules = map[string]*Module{}
-        moduleOrderList = []*Module{}
-        moduleBuildList = []pendedBuild{}
 }
 
 type FileMatchRule struct {
@@ -671,7 +659,7 @@ func matchFileName(fn string, rules []*FileMatchRule) *FileMatchRule {
 }
 
 // Build builds the project with specified variables and commands.
-func Build(vars map[string]string, cmds []string) {
+func Build(vars map[string]string, cmds []string) (ctx *Context) {
         defer func() {
                 if e := recover(); e != nil {
                         if se, ok := e.(*smarterror); ok {
@@ -683,11 +671,14 @@ func Build(vars map[string]string, cmds []string) {
                 }
         }()
 
-        var d string
+        var (
+                d string
+                err error
+        )
         if d = *flagC; d == "" { d = "." }
 
         s := []byte{} // TODO: needs init script
-        ctx, err := NewContext("init", s, vars)
+        ctx, err = NewContext("init", s, vars)
         if err != nil {
                 fmt.Printf("smart: %v\n", err)
                 return
@@ -710,8 +701,8 @@ func Build(vars map[string]string, cmds []string) {
 
         // Build the modules
         var i *pendedBuild
-        for 0 < len(moduleBuildList) {
-                i, moduleBuildList = &moduleBuildList[0], moduleBuildList[1:]
+        for 0 < len(ctx.moduleBuildList) {
+                i, ctx.moduleBuildList = &ctx.moduleBuildList[0], ctx.moduleBuildList[1:]
                 if !i.m.createActionIfNil(i.p) {
                         errorf("module `%v' not built", i.m.Name)
                 }
@@ -732,5 +723,6 @@ func Build(vars map[string]string, cmds []string) {
                 for _, u := range mod.Using { updateMod(u) }
         }
 
-        for _, m := range moduleOrderList { updateMod(m) }
+        for _, m := range ctx.moduleOrderList { updateMod(m) }
+        return
 }

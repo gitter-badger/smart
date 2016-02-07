@@ -1,5 +1,6 @@
 *~
 *.6
+*.5
 /make/out
 /make/tests/work
 /smart
