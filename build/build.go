@@ -486,15 +486,22 @@ func (m *Module) createActionIfNil(ctx *Context) bool {
 }
 
 func (m *Module) update() {
-        s, lineno, colno := m.GetCommitLocation() //m.GetDeclareLocation()
-
         if m.Action == nil {
-                fmt.Printf("%v:%v:%v:warning: no action (\"%v\")\n", s, lineno, colno, m.Name)
+                if *flagV {
+                        s, lineno, colno := m.GetCommitLocation()
+                        fmt.Printf("%v:%v:%v:warning: no action (\"%v\")\n", s, lineno, colno, m.Name)
+                }
                 return
         }
 
         if updated, _ := m.Action.update(); !updated {
-                fmt.Printf("%v:%v:%v:warning: did nothing (\"%v\")\n", s, lineno, colno, m.Name)
+                if *flagV {
+                        s, lineno, colno := m.GetCommitLocation()
+                        fmt.Printf("%v:%v:%v:warning: `%v' - nothing updated\n", s, lineno, colno, m.Name)
+
+                        s, lineno, colno = m.GetDeclareLocation()
+                        fmt.Printf("%v:%v:%v:info: `%v'\n", s, lineno, colno, m.Name)
+                }
         }
 }
 
