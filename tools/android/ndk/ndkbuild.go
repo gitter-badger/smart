@@ -212,7 +212,7 @@ func (n *delegate) Execute(targets []string, prerequisites []string) bool {
         //Message("ndkbuild: %v: %v", targets, prerequisites)
 
         vars := n.getBuildVars(n.abi, n.script)
-        fmt.Printf("%v\n", vars)
+        //fmt.Printf("%v\n", vars)
 
         c := NewExcmd("ndk-build")
         return c.Run(fmt.Sprintf("%v", targets), vars...)
