@@ -12,17 +12,8 @@ func init() {
         RegisterToolset("clang", &toolset{})
 }
 
-type toolset struct {
-}
-
-func (clang *toolset) ConfigModule(ctx *Context, args []string, vars map[string]string) bool {
-        return true
-}
+type toolset struct { BasicToolset }
 
 func (clang *toolset) CreateActions(ctx *Context) bool {
-        return false
-}
-
-func (clang *toolset) UseModule(ctx *Context, m, o *Module) bool {
         return false
 }

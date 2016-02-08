@@ -178,21 +178,21 @@ func (c *Excmd) run(targetHint string, args ...string) bool {
                 } else {
                         message("%v (%v)", err, c.path)
                         if c.path != "" {
-                                fmt.Fprintf(os.Stderr, "-------------------------------------\n")
+                                fmt.Fprintf(os.Stderr, "--------------------------------------------------------------------------------\n")
                                 fmt.Fprintf(os.Stderr, "%v %v\n", c.path, strings.Join(args, " "))
                         }
                         so, se := c.stdout.String(), c.stderr.String()
                         if so != "" {
-                                fmt.Fprintf(os.Stderr, "------------------------------ stdout\n")
+                                fmt.Fprintf(os.Stderr, "------------------------------------------------------------------------- stdout\n")
                                 fmt.Fprintf(os.Stderr, "%v", so)
                                 if !strings.HasSuffix(so, "\n") { fmt.Fprintf(os.Stderr, "\n") }
                         }
                         if se != "" {
-                                fmt.Fprintf(os.Stderr, "------------------------------ stderr\n")
+                                fmt.Fprintf(os.Stderr, "------------------------------------------------------------------------- stderr\n")
                                 fmt.Fprintf(os.Stderr, "%v", se)
                                 if !strings.HasSuffix(se, "\n") { fmt.Fprintf(os.Stderr, "\n") }
                         }
-                        fmt.Fprintf(os.Stderr, "-------------------------------------\n")
+                        fmt.Fprintf(os.Stderr, "--------------------------------------------------------------------------------\n")
                         errorf(`failed executing "%v"`, c.path)
                 }
 
@@ -236,6 +236,34 @@ func ComputeInterTargets(d, sre string, prerequisites []*Action) (targets []stri
                 outdates += outdateMap[i]
                 return true
         })
+        return
+}
+
+func ComputeKnownInterTargets(targets []string, prerequisites []*Action) (outdates int, outdateMap map[int]int) {
+        outdateMap = map[int]int{}
+        for i, fn := range targets {
+                fi, e := os.Stat(fn)
+                if e != nil || fi == nil { // Target not existed.
+                        outdateMap[i]++
+                        continue
+                }
+                for _, p := range prerequisites {
+                        if pc, ok := p.Command.(intercommand); ok {
+                                if _, needsUpdate := pc.Targets(p.Prerequisites); needsUpdate {
+                                        outdateMap[i]++
+                                }
+                        } else {
+                                for _, t := range p.Targets {
+                                        if pfi, _ := os.Stat(t); pfi == nil {
+                                                errorf("`%v' not found", t)
+                                        } else if fi.ModTime().Before(pfi.ModTime()) {
+                                                outdateMap[i]++
+                                        }
+                                }
+                        }
+                }
+                outdates += outdateMap[i]
+        }
         return
 }
 
@@ -440,7 +468,7 @@ func (m *Module) GetCommitLocation() (s string, lineno, colno int) {
 }
 
 func (m *Module) GetSources(ctx *Context) (sources []string) {
-        sources = split(ctx.callWith(m.commitLoc, m, "sources"))
+        sources = Split(ctx.callWith(m.commitLoc, m, "sources"))
         for i := range sources {
                 if sources[i][0] == '/' { continue }
                 sources[i] = filepath.Join(m.GetDir(), sources[i])
@@ -469,7 +497,7 @@ func (m *Module) createActionIfNil(ctx *Context) bool {
         }
 
         if m.Toolset == nil {
-                fmt.Printf("%v:%v:%v: no such toolset (%v)\n", s, lineno, colno, m.Name)
+                fmt.Printf("%v:%v:%v: nil toolset (%v)\n", s, lineno, colno, m.Name)
                 return false
         }
 
@@ -506,7 +534,7 @@ func (m *Module) update() {
                 }
                 if *flagVV {
                         s, lineno, colno := m.GetDeclareLocation()
-                        fmt.Printf("%v:%v:%v:info: `%v'\n", s, lineno, colno, m.Name)
+                        fmt.Printf("%v:%v:%v:info: module `%v'\n", s, lineno, colno, m.Name)
                 }
         }
 }
@@ -717,7 +745,7 @@ func Build(vars map[string]string, cmds []string) (ctx *Context) {
         for 0 < len(ctx.moduleBuildList) {
                 i, ctx.moduleBuildList = &ctx.moduleBuildList[0], ctx.moduleBuildList[1:]
                 if !i.m.createActionIfNil(i.p) {
-                        errorf("nil action (`%v')", i.m.Name)
+                        errorf("nil action (%v)", i.m.Name)
                 }
         }
 

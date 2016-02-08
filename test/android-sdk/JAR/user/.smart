@@ -1,4 +1,4 @@
 # -*- makefile -*-
-$(module foo_androidsdk_use_jar, android-sdk, apk)
+$(module foo_androidsdk_jar_user, android-sdk, apk)
 $(use foo_androidsdk_jar)
 $(commit)

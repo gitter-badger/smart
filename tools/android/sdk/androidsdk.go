@@ -67,6 +67,9 @@ func (sdk *toolset) getResourceFiles(ds ...string) (as []*Action) {
 func (sdk *toolset) ConfigModule(ctx *Context, args []string, vars map[string]string) bool {
         d := filepath.Dir(ctx.CurrentScope())
         sources, err := FindFiles(filepath.Join(d, "src"), `\.java$`)
+        if len(sources) == 0 {
+                sources, err = FindFiles(filepath.Join(d, "java"), `\.java$`)
+        }
         for i := range sources {
                 if strings.HasPrefix(sources[i], d) {
                         sources[i] = sources[i][len(d)+1:]
@@ -76,7 +79,7 @@ func (sdk *toolset) ConfigModule(ctx *Context, args []string, vars map[string]st
         //fmt.Printf("sources: (%v) %v\n", d, sources)
 
         if err != nil {
-                Fatal(fmt.Sprintf("can't find Java sources in `%v'", d))
+                Fatal(fmt.Sprintf("no Java sources in `%v'", d))
         }
 
         var platform string
@@ -96,7 +99,7 @@ func (sdk *toolset) CreateActions(ctx *Context) bool {
         gen := &basicGen{ platform:platform, out:filepath.Join("out", m.Name), d:filepath.Dir(ctx.CurrentScope()) }
 
         var a *Action
-        var prequisites []*Action
+        var prerequisites []*Action
         var staticLibs []string
         var hasRes, hasAssets, hasSrc bool
         if fi, err := os.Stat(filepath.Join(gen.d, "src")); err == nil && fi.IsDir() { hasSrc = true }
@@ -114,18 +117,15 @@ func (sdk *toolset) CreateActions(ctx *Context) bool {
                 if sources := m.GetSources(ctx); 0 < len(sources) {
                         var classpath []string
                         for _, u := range m.Using {
-                                if u.Kind != "jar" { Fatal("can't use module of type `%v'", u.Kind) }
-                                if v := strings.TrimSpace(ctx.Call("me.export.jar")); v != "" {
-                                        classpath = append(classpath, v)
-                                }
-                                /*
-                                if v := strings.TrimSpace(ctx.call("me.export.libs.static")); v != "" {
-                                        classpath = append(classpath, v)
-                                } */
+                                if strings.ToLower(u.Kind) != "jar" { Fatal("using `%v' module", u.Kind) }
+                                ctx.With(u, func() {
+                                        classpath = append(classpath, strings.Fields(ctx.Call("me.export.jar"))...)
+                                        classpath = append(classpath, strings.Fields(ctx.Call("me.export.libs.static"))...)
+                                })
                         }
 
-                        staticLibs = append(staticLibs, strings.Split(strings.TrimSpace(ctx.Call("me.libs.static")), " ")...)
-                        classpath = append(classpath, strings.Split(strings.TrimSpace(ctx.Call("me.classpath")), " ")...)
+                        staticLibs = append(staticLibs, strings.Fields(ctx.Call("me.libs.static"))...)
+                        classpath = append(classpath, strings.Fields(ctx.Call("me.classpath"))...)
                         classpath = append(classpath, staticLibs...)
 
                         for _, src := range sources { ps = append(ps, NewAction(src, nil)) }
@@ -139,17 +139,17 @@ func (sdk *toolset) CreateActions(ctx *Context) bool {
         }
 
         if a != nil {
-                prequisites = append(prequisites, a)
+                prerequisites = append(prerequisites, a)
         }
 
-        switch m.Kind {
+        switch strings.ToLower(m.Kind) {
         case "apk":
                 c := &genAPK{genTar{ basicGen:gen, target:filepath.Join(gen.out, m.Name+".apk"), staticlibs:staticLibs, }}
-                m.Action = NewInterAction(m.Name+".apk", c, prequisites...)
+                m.Action = NewInterAction(m.Name+".apk", c, prerequisites...)
         case "jar":
                 c := &genJAR{genTar{ basicGen:gen, target:filepath.Join(gen.out, m.Name+".jar"), staticlibs:staticLibs, }}
                 ctx.Set("me.export.jar", c.target)
-                m.Action = NewInterAction(m.Name+".jar", c, prequisites...)
+                m.Action = NewInterAction(m.Name+".jar", c, prerequisites...)
         default:
                 Fatal("unknown module type `%v'", m.Kind)
         }
@@ -164,21 +164,21 @@ type genR struct{
         r string // "r" holds the R.java file path
         outdates int
 }
-func (ic *genR) Targets(prequisites []*Action) (targets []string, needsUpdate bool) {
+func (ic *genR) Targets(prerequisites []*Action) (targets []string, needsUpdate bool) {
         if ic.r != "" {
                 targets = []string{ ic.r }
                 needsUpdate = 0 < ic.outdates
                 return
         }
 
-        targets, outdates, _ := ComputeInterTargets(filepath.Join(ic.out, "res"), `R\.java$`, prequisites)
+        targets, outdates, _ := ComputeInterTargets(filepath.Join(ic.out, "res"), `R\.java$`, prerequisites)
         if 0 < len(targets) { ic.r = targets[0] }
 
         needsUpdate = ic.r == "" || 0 < outdates
         return
 }
-func (ic *genR) Execute(targets []string, prequisites []string) bool {
-        //fmt.Printf("%v: %v", targets, prequisites)
+func (ic *genR) Execute(targets []string, prerequisites []string) bool {
+        //fmt.Printf("%v: %v", targets, prerequisites)
 
         ic.r = ""
 
@@ -223,13 +223,13 @@ type genClasses struct{
         classpath []string // holds the *.class file
         outdates int
 }
-func (ic *genClasses) Targets(prequisites []*Action) (targets []string, needsUpdate bool) {
-        targets, outdates, _ := ComputeInterTargets(filepath.Join(ic.out, "classes"), `\.class$`, prequisites)
+func (ic *genClasses) Targets(prerequisites []*Action) (targets []string, needsUpdate bool) {
+        targets, outdates, _ := ComputeInterTargets(filepath.Join(ic.out, "classes"), `\.class$`, prerequisites)
         needsUpdate = len(targets) == 0 || 0 < outdates
         //fmt.Printf("classes: %v\n", targets);
         return
 }
-func (ic *genClasses) Execute(targets []string, prequisites []string) bool {
+func (ic *genClasses) Execute(targets []string, prerequisites []string) bool {
         classpath := filepath.Join(sdk, "platforms", ic.platform, "android.jar")
         if 0 < len(ic.classpath) {
                 classpath += ":" + strings.Join(ic.classpath, ":")
@@ -246,7 +246,7 @@ func (ic *genClasses) Execute(targets []string, prequisites []string) bool {
 
         args = append(args, "-source", sdkSourceCompatibility)
         args = append(args, "-target", sdkTargetCompatibility)
-        args = append(args, prequisites...)
+        args = append(args, prerequisites...)
         c := NewExcmd("javac")
         c.SetMkdir(outClasses)
         if !c.Run("classes", args...) {
@@ -292,7 +292,7 @@ type genTar struct {
 type genAPK struct { genTar }
 type genJAR struct { genTar }
 
-func (ic *genTar) Targets(prequisites []*Action) (targets []string, needsUpdate bool) {
+func (ic *genTar) Targets(prerequisites []*Action) (targets []string, needsUpdate bool) {
         if ic.target == "" {
                 Fatal("unknown APK name")
         }
@@ -413,7 +413,7 @@ func (ic *genTar) packageAddFiles(packFilename string, files ...string) {
         }
 }
 
-func sdkGetKeystore() (keystore, keypass, storepass string) {
+func getKeystore() (keystore, keypass, storepass string) {
         var canditates []string
 
         defaultPass := "smart.android"
@@ -460,7 +460,7 @@ func sdkGetKeystore() (keystore, keypass, storepass string) {
         return "", "", ""
 }
 
-func sdkExtractClasses(outclasses, lib string, cs []string) (classes []string) {
+func extractClasses(outclasses, lib string, cs []string) (classes []string) {
         f, err := os.Open(lib)
         if err != nil { Fatal("open: %v (%v)", lib, err) }
         defer f.Close()
@@ -495,7 +495,7 @@ func sdkExtractClasses(outclasses, lib string, cs []string) (classes []string) {
         return
 }
 
-func sdkExtractStaticLibsClasses(outclasses string, libs []string) (classes []string) {
+func extractStaticLibsClasses(outclasses string, libs []string) (classes []string) {
         for _, lib := range libs {
                 if lib = strings.TrimSpace(lib); lib == "" { continue }
 
@@ -510,18 +510,18 @@ func sdkExtractStaticLibsClasses(outclasses string, libs []string) (classes []st
 
                 //fmt.Printf("jar: %v: %v\n", lib, cs)
 
-                classes = append(classes, sdkExtractClasses(outclasses, lib, cs)...)
+                classes = append(classes, extractClasses(outclasses, lib, cs)...)
         }
         //fmt.Printf("embeded-classes: %v\n", classes)
         return
 }
 
-func (ic *genAPK) Execute(targets []string, prequisites []string) bool {
+func (ic *genAPK) Execute(targets []string, prerequisites []string) bool {
         outclasses := filepath.Join(ic.out, "classes")
 
         // extract classes from static libraries (me.libs.static)
 
-        embclasses := sdkExtractStaticLibsClasses(outclasses, ic.staticlibs)
+        embclasses := extractStaticLibsClasses(outclasses, ic.staticlibs)
         //fmt.Printf("staticlibs: %v\n", embclasses)
 
         // make classes.dex
@@ -531,7 +531,7 @@ func (ic *genAPK) Execute(targets []string, prequisites []string) bool {
         args = append(args, "--dex", "--output=../classes.dex")
 
         countClasses := 0
-        for _, s := range prequisites {
+        for _, s := range prerequisites {
                 if s == "" { continue }
                 if strings.HasPrefix(s, outclasses) {
                         args = append(args, s[len(outclasses)+1:])
@@ -576,7 +576,7 @@ func (ic *genAPK) Execute(targets []string, prequisites []string) bool {
                 Fatal("package: %v(%v)", unsignedApk, "classes")
         }
 
-        keystore, keypass, storepass := sdkGetKeystore()
+        keystore, keypass, storepass := getKeystore()
         if keystore == ""       { Fatal("keystore is empty") }
         if keypass == ""        { Fatal("keypass is empty") }
         if storepass == ""      { Fatal("storepass is empty") }
@@ -612,7 +612,7 @@ func (ic *genAPK) Execute(targets []string, prequisites []string) bool {
         return true
 }
 
-func (ic *genJAR) Execute(targets []string, prequisites []string) bool {
+func (ic *genJAR) Execute(targets []string, prerequisites []string) bool {
         // package native libs
         libname := filepath.Join(ic.out, "library.jar")
         ic.createPackage(libname) // createDummyPackage

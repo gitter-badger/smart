@@ -5,6 +5,7 @@ package main
 
 import (
         "github.com/duzy/smart/build"
+        _ "github.com/duzy/smart/tools/shell"
         _ "github.com/duzy/smart/tools/gcc"
         _ "github.com/duzy/smart/tools/clang"
         _ "github.com/duzy/smart/tools/android/ndk"

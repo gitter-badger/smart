@@ -267,7 +267,7 @@ sub set_defaults
    #$testee = "GNU make";
    #$make_path = "make";
    $testee = "Smart";
-   $make_path = "../out/gcc/debug/bin/smart";
+   $make_path = "smart";
    $tmpfilesuffix = "mk";
    $pwd = &get_this_pwd;
 }

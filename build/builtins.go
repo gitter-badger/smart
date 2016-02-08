@@ -81,10 +81,8 @@ func builtinModule(ctx *Context, loc location, args []string) (s string) {
 
         var toolset toolset
         if ts, ok := toolsets[toolsetName]; !ok {
-                //ctx.lineno -= 1; ctx.colno = ctx.prevColno + 1
-                errorf("toolset `%v' unknown", toolsetName)
-                if ts == nil { errorf("builtin fatal error") }
-                // TODO: send arguments to toolset
+                lineno, colno := ctx.l.caculateLocationLineColumn(loc)
+                fmt.Printf("%v:%v:%v: unknown toolset '%v'\n", ctx.l.scope, lineno, colno, toolsetName)
         } else {
                 toolset = ts.toolset
         }
@@ -126,11 +124,13 @@ func builtinModule(ctx *Context, loc location, args []string) (s string) {
         }
         ctx.m = m
 
-        // parsed arguments in forms like "PLATFORM=android-9"
-        var a []string
-        if 2 < len(args) { a = args[2:] }
-        vars, rest := splitVarArgs(a)
-        toolset.ConfigModule(ctx, rest, vars)
+        if toolset != nil {
+                // parsed arguments in forms like "PLATFORM=android-9"
+                var a []string
+                if 2 < len(args) { a = args[2:] }
+                vars, rest := splitVarArgs(a)
+                toolset.ConfigModule(ctx, rest, vars)
+        }
         return
 }
 

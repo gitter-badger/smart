@@ -85,8 +85,8 @@ func message(s string, a ...interface{}) {
         fmt.Printf(s, a...)
 }
 
-// split split a string by space or tab
-func split(str string) (items []string) {
+// Split splits a string by space or tab
+func Split(str string) (items []string) {
         /*
         a := strings.Split(str, " ")
         for _, s := range a {

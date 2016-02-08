@@ -801,6 +801,7 @@ func (ctx *Context) Set(name string, a ...interface{}) {
         ctx.set(name, a...)
 }
 
+// TODO: leveled-module call: $(module1.child1.var)
 func (ctx *Context) call(loc location, name string, args ...string) string {
         vars := ctx.defines
 
@@ -1007,13 +1008,17 @@ func (ctx *Context) processNode(n *node) (err error) {
                 panic("'!=' not implemented")
 
         case nodeCall:
-                if s := ctx.expandNode(n); s != "" {
-                        errorf("illigal: %v (%v)", s, n.str())
+                if s := strings.TrimSpace(ctx.expandNode(n)); s != "" {
+                        lineno, colno := ctx.l.caculateLocationLineColumn(n.loc())
+                        fmt.Fprintf(os.Stderr, "%v:%v:%v: illigal: '%v'\n",
+                                ctx.l.scope, lineno, colno, s)
                 }
 
         case nodeImmediateText:
-                if s := ctx.expandNode(n); s != "" {
-                        errorf("error: '%v'", s)
+                if s := strings.TrimSpace(ctx.expandNode(n)); s != "" {
+                        lineno, colno := ctx.l.caculateLocationLineColumn(n.loc())
+                        fmt.Fprintf(os.Stderr, "%v:%v:%v: syntax error: '%v'\n",
+                                ctx.l.scope, lineno, colno, s)
                 }
 
         default:

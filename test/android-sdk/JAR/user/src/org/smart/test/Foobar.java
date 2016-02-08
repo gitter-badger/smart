@@ -19,7 +19,6 @@ public class Foobar extends Activity
         Log.d("smart:", ""+org.smart.test.foo.R.string.app_name);
         Log.d("smart:", ""+org.smart.test.foo.R.layout.main);
         Log.d("smart:", ""+org.smart.test.foo.R.id.foo);
-
         setContentView(org.smart.test.foo.R.layout.main);
     }
 }
