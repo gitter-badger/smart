@@ -604,3 +604,20 @@ foobaz := foo-baz
         if s := ctx.Call("foobar"); s != "" { t.Errorf("foobar: '%s'", s) }
         if s := ctx.Call("foobaz"); s != "foo-baz" { t.Errorf("foobaz: '%s'", s) }
 }
+
+func TestContinualInCall(t *testing.T) {
+        info, f := new(bytes.Buffer), builtinInfoFunc; defer func(){ builtinInfoFunc = f }()
+        builtinInfoFunc = func(args ...string) {
+                fmt.Fprintf(info, "%v\n", strings.Join(args, ","))
+        }
+
+        ctx, err := newTestContext("TestContinual", `
+foo = $(info a,  ndk  , \
+  PLATFORM=android-9, \
+  ABI=x86 armeabi, \
+)
+`);     if err != nil { t.Errorf("parse error:", err) }
+        if s := ctx.Call("foo"); s != "" { t.Errorf("foo: '%s'", s) }
+        // FIXIME: if s := info.String(); s != `a,  ndk  , PLATFORM=android-9, ABI=x86 armeabi, ` { t.Errorf("info: '%s'", s) }
+        if s := info.String(); s != `a,  ndk  ,    PLATFORM=android-9,    ABI=x86 armeabi,  `+"\n" { t.Errorf("info: '%s'", s) }
+}

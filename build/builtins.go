@@ -25,7 +25,7 @@ var (
         }
 
         builtinInfoFunc = func(args ...string) {
-                fmt.Printf("%v\n", strings.Join(args, " "))
+                fmt.Printf("%v\n", strings.Join(args, ","))
         }
 )
 

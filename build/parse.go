@@ -402,7 +402,7 @@ state_loop:
                         }
                         break state_loop
 
-                default: l.escapeTextLine()
+                default: l.escapeTextLine(l.top().node)
                 }
         }
 }
@@ -471,12 +471,12 @@ state_loop:
                         l.pop() // Pop out the value node and forward to the define node.
                         break state_loop
 
-                default: l.escapeTextLine()
+                default: l.escapeTextLine(l.top().node)
                 }
         }
 }
 
-func (l *lex) escapeTextLine() {
+func (l *lex) escapeTextLine(t *node) {
         if l.rune != '\\' { return }
 
         // Escape: \\n \#
@@ -486,7 +486,13 @@ func (l *lex) escapeTextLine() {
                 case '\n':
                         en := l.new(nodeEscape)
                         en.pos -= 2 // for the '\\\n', '\\#', etc.
-                        t := l.top().node
+                        if l.rune == '\n' {
+                                /* FIXME: skip spaces after '\\\n' ?
+                                for unicode.IsSpace(l.peek()) {
+                                        l.get()
+                                        en.end = l.pos
+                                } */
+                        }
                         t.children = append(t.children, en)
                 }
         }
@@ -548,13 +554,13 @@ state_loop:
                 case l.rune == '#': fallthrough
                 case l.rune == '\n': fallthrough
                 case l.rune == rune(0): // end of string
-                        i := len(st.node.children)-1
-                        st.node.children[i].end = l.pos
+                        st.node.end = l.pos
                         if l.rune != rune(0) {
-                                st.node.children[i].end-- // exclude the '\n' or '#'
+                                st.node.end-- // exclude the '\n' or '#'
                         }
 
-                        fmt.Printf("RuleTextLine: '%v'\n", st.node.children[i].str())
+                        lineno, colno := l.caculateLocationLineColumn(st.node.loc())
+                        fmt.Fprintf(os.Stderr, "%v:%v:%v:todo: %v\n", l.scope, lineno, colno, st.node.str())
 
                         st = l.pop() // pop out the node
 
@@ -564,7 +570,7 @@ state_loop:
                         }
                         break state_loop
 
-                default: l.escapeTextLine()
+                default: l.escapeTextLine(l.top().node)
                 }
         }
 }
@@ -598,6 +604,12 @@ state_loop:
                         i := len(st.node.children)-1
                         st.node.children[i].end = l.pos-1
                         st.node.children = append(st.node.children, a)
+
+                case l.rune == '\\':
+                        i := len(st.node.children)-1
+                        if 0 <= i {
+                                l.escapeTextLine(st.node.children[i])
+                        }
 
                 case l.rune == '$' && st.code != init:
                         st = l.push(nodeCall, l.stateDollar, 0)
@@ -948,11 +960,10 @@ func (ctx *Context) expandNode(n *node) string {
         case nodeDeferredText:  fallthrough
         case nodeImmediateText:
                 if nc == 0 { return n.str() }
+
                 b, l, pos := new(bytes.Buffer), n.l, n.pos
                 for _, c := range n.children {
-                        if pos < c.pos {
-                                b.Write(l.s[pos:c.pos])
-                        }
+                        if pos < c.pos { b.Write(l.s[pos:c.pos]) }
                         b.WriteString(ctx.expandNode(c))
                         pos = c.end
                 }
@@ -1020,6 +1031,12 @@ func (ctx *Context) processNode(n *node) (err error) {
                         fmt.Fprintf(os.Stderr, "%v:%v:%v: syntax error: '%v'\n",
                                 ctx.l.scope, lineno, colno, s)
                 }
+
+        case nodeRuleSingleColoned:
+        case nodeRuleDoubleColoned:
+                lineno, colno := ctx.l.caculateLocationLineColumn(n.loc())
+                fmt.Fprintf(os.Stderr, "%v:%v:%v:TODO: not implemented\n",
+                        ctx.l.scope, lineno, colno)
 
         default:
                 panic(n.kind.String()+" not implemented")

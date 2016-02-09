@@ -528,11 +528,11 @@ func (m *Module) update() {
         }
 
         if updated, _ := m.Action.update(); !updated {
-                if *flagV {
+                if *flagV && *flagVV {
                         s, lineno, colno := m.GetCommitLocation()
-                        fmt.Printf("%v:%v:%v:warning: `%v' - nothing updated\n", s, lineno, colno, m.Name)
+                        fmt.Printf("%v:%v:%v:info: nothing updated (%v)\n", s, lineno, colno, m.Name)
                 }
-                if *flagVV {
+                if *flagV && *flagVV {
                         s, lineno, colno := m.GetDeclareLocation()
                         fmt.Printf("%v:%v:%v:info: module `%v'\n", s, lineno, colno, m.Name)
                 }
