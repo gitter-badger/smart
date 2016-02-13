@@ -26,6 +26,7 @@ func ComputeTestRunParams() (vars map[string]string, cmds []string) {
         }
         SetFlagVV(true)
         SetFlagV(true)
+        SetFlagL(false)
         return
 }
 

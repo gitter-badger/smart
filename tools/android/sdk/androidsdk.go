@@ -17,11 +17,13 @@ import (
         . "github.com/duzy/smart/build"
 )
 
-var sdk = "/android-sdk-linux_x86"
-var sdkBuildToolVersion = "23.0.2"
-var sdkDefaultPlatform = "android-23" // "android-10"
-var sdkSourceCompatibility = "1.7" // gradle: sourceCompatibility = 1.7
-var sdkTargetCompatibility = "1.7" // gradle: targetCompatibility = 1.7
+var (
+        sdk = "/android-sdk-linux_x86"
+        sdkBuildToolVersion = "23.0.2"
+        sdkDefaultPlatform = "android-23" // "android-10"
+        sdkSourceCompatibility = "1.7" // gradle: sourceCompatibility = 1.7
+        sdkTargetCompatibility = "1.7" // gradle: targetCompatibility = 1.7
+)
 
 func init() {
         RegisterToolset("android-sdk", &toolset{})
@@ -64,39 +66,49 @@ func (sdk *toolset) getResourceFiles(ds ...string) (as []*Action) {
         return
 }
 
-func (sdk *toolset) ConfigModule(ctx *Context, args []string, vars map[string]string) bool {
-        d := filepath.Dir(ctx.CurrentScope())
-        sources, err := FindFiles(filepath.Join(d, "src"), `\.java$`)
-        if len(sources) == 0 {
-                sources, err = FindFiles(filepath.Join(d, "java"), `\.java$`)
-        }
-        for i := range sources {
-                if strings.HasPrefix(sources[i], d) {
-                        sources[i] = sources[i][len(d)+1:]
-                }
-        }
-
-        //fmt.Printf("sources: (%v) %v\n", d, sources)
-
-        if err != nil {
-                Fatal(fmt.Sprintf("no Java sources in `%v'", d))
-        }
-
-        var platform string
+func (sdk *toolset) ConfigModule(ctx *Context, args []string, vars map[string]string) {
+        var (
+                kind, platform string
+                sources []string
+                err error
+        )
+        if 0 < len(args) { kind = strings.TrimSpace(args[0]) }
         if s, ok := vars["PLATFORM"]; ok { platform = s } else { platform = sdkDefaultPlatform }
+        if kind == "external" {
+                // ...
+        } else {
+                d := filepath.Dir(ctx.CurrentScope())
+                sources, err = FindFiles(filepath.Join(d, "src"), `\.java$`)
+                if len(sources) == 0 {
+                        sources, err = FindFiles(filepath.Join(d, "java"), `\.java$`)
+                }
+                for i := range sources {
+                        sources[i] = strings.TrimPrefix(sources[i], d)
+                }
 
+                //fmt.Printf("sources: (%v) %v\n", d, sources)
+
+                if err != nil {
+                        Fatal(fmt.Sprintf("no Java sources in `%v'", d))
+                }
+
+                ctx.Set("me.sources", strings.Join(sources, " "))
+        }
         ctx.Set("me.platform", platform)
-        ctx.Set("me.sources", strings.Join(sources, " "))
-        return true
+        ctx.Set("me.kind", kind)
 }
 
 func (sdk *toolset) CreateActions(ctx *Context) bool {
         m, platform := ctx.CurrentModule(), strings.TrimSpace(ctx.Call("me.platform"))
-        if platform == "" { Fatal("no platform selected (%v)", m.Name) }
+        if platform == "" { Fatal("no platform selected (%v)", m.GetName(ctx)) }
 
         //fmt.Printf("platform: %v\n", platform)
 
-        gen := &basicGen{ platform:platform, out:filepath.Join("out", m.Name), d:filepath.Dir(ctx.CurrentScope()) }
+        gen := &basicGen{
+                d:filepath.Dir(ctx.CurrentScope()),
+                out:filepath.Join("out", m.GetName(ctx)),
+                platform:platform,
+        }
 
         var a *Action
         var prerequisites []*Action
@@ -108,7 +120,7 @@ func (sdk *toolset) CreateActions(ctx *Context) bool {
         if hasRes { gen.res = filepath.Join(gen.d, "res") }
         if hasAssets { gen.assets = filepath.Join(gen.d, "assets") }
         if hasRes || hasAssets {
-                a = NewInterAction("R.java", &genR{ basicGen:gen },
+                a = NewInterAction("R.java", &genResJavaFiles{ basicGen:gen },
                         sdk.getResourceFiles(gen.res, gen.assets)...)
         }
         if hasSrc {
@@ -117,7 +129,7 @@ func (sdk *toolset) CreateActions(ctx *Context) bool {
                 if sources := m.GetSources(ctx); 0 < len(sources) {
                         var classpath []string
                         for _, u := range m.Using {
-                                if strings.ToLower(u.Kind) != "jar" { Fatal("using `%v' module", u.Kind) }
+                                if strings.ToLower(u.Get(ctx, "kind")) != "jar" { Fatal("using `%v' module", u.Get(ctx, "kind")) }
                                 ctx.With(u, func() {
                                         classpath = append(classpath, strings.Fields(ctx.Call("me.export.jar"))...)
                                         classpath = append(classpath, strings.Fields(ctx.Call("me.export.libs.static"))...)
@@ -142,16 +154,24 @@ func (sdk *toolset) CreateActions(ctx *Context) bool {
                 prerequisites = append(prerequisites, a)
         }
 
-        switch strings.ToLower(m.Kind) {
+        switch strings.ToLower(m.Get(ctx, "kind")) {
         case "apk":
-                c := &genAPK{genTar{ basicGen:gen, target:filepath.Join(gen.out, m.Name+".apk"), staticlibs:staticLibs, }}
-                m.Action = NewInterAction(m.Name+".apk", c, prerequisites...)
+                c := &genAPK{genTar{ basicGen:gen, target:filepath.Join(gen.out, m.GetName(ctx)+".apk"), staticlibs:staticLibs, }}
+                m.Action = NewInterAction(m.GetName(ctx)+".apk", c, prerequisites...)
         case "jar":
-                c := &genJAR{genTar{ basicGen:gen, target:filepath.Join(gen.out, m.Name+".jar"), staticlibs:staticLibs, }}
+                c := &genJAR{genTar{ basicGen:gen, target:filepath.Join(gen.out, m.GetName(ctx)+".jar"), staticlibs:staticLibs, }}
                 ctx.Set("me.export.jar", c.target)
-                m.Action = NewInterAction(m.Name+".jar", c, prerequisites...)
+                m.Action = NewInterAction(m.GetName(ctx)+".jar", c, prerequisites...)
+        case "external":
+                Fatal("TODO: `%v' of `%v'", m.GetName(ctx), m.Get(ctx, "kind"))
         default:
-                Fatal("unknown module type `%v'", m.Kind)
+                s, l, c := m.GetDeclareLocation()
+                fmt.Printf("%v:%v:%v: `%v' of `%v'\n", s, l, c, m.GetName(ctx), m.Get(ctx, "kind"))
+
+                s, l, c = m.GetCommitLocation()
+                fmt.Printf("%v:%v:%v: `%v'\n", s, l, c, m.GetName(ctx))
+
+                Fatal("unknown type `%v'", m.Get(ctx, "kind"))
         }
         return true
 }
@@ -159,12 +179,29 @@ func (sdk *toolset) CreateActions(ctx *Context) bool {
 type basicGen struct{
         platform, out, d, res, assets string
 }
-type genR struct{
+
+func (gen *basicGen) aapt_S() (args []string) {
+        s := filepath.Join(gen.d, "res")
+        if fi, err := os.Stat(s); err == nil && fi != nil && fi.IsDir() {
+                args = append(args, "-S", s)
+        }
+        return
+}
+
+func (gen *basicGen) aapt_A() (args []string) {
+        s := filepath.Join(gen.d, "assets")
+        if fi, err := os.Stat(s); err == nil && fi != nil && fi.IsDir() {
+                args = append(args, "-A", s)
+        }
+        return
+}
+
+type genResJavaFiles struct{
         *basicGen
         r string // "r" holds the R.java file path
         outdates int
 }
-func (ic *genR) Targets(prerequisites []*Action) (targets []string, needsUpdate bool) {
+func (ic *genResJavaFiles) Targets(prerequisites []*Action) (targets []string, needsUpdate bool) {
         if ic.r != "" {
                 targets = []string{ ic.r }
                 needsUpdate = 0 < ic.outdates
@@ -177,9 +214,7 @@ func (ic *genR) Targets(prerequisites []*Action) (targets []string, needsUpdate 
         needsUpdate = ic.r == "" || 0 < outdates
         return
 }
-func (ic *genR) Execute(targets []string, prerequisites []string) bool {
-        //fmt.Printf("%v: %v", targets, prerequisites)
-
+func (ic *genResJavaFiles) Execute(targets []string, prerequisites []string) bool {
         ic.r = ""
 
         outRes := filepath.Join(ic.out, "res")
@@ -192,29 +227,28 @@ func (ic *genR) Execute(targets []string, prerequisites []string) bool {
                 "-I", filepath.Join(sdk, "platforms", ic.platform, "android.jar"),
         }
 
-        if ic.res != "" { args = append(args, "-S", ic.res) }
+        if ic.res != ""    { args = append(args, "-S", ic.res) }
         if ic.assets != "" { args = append(args, "-A", ic.assets) }
         // TODO: -P -G
 
         c := NewExcmd(getBuildTool("aapt"))
         c.SetIA32(IsIA32Command(c.GetPath()))
         c.SetMkdir(outRes)
+        /*
         if GetFlagV() {
-                if ic.res != "" { Verbose("resources `%v'", ic.res) }
+                if ic.res != ""    { Verbose("resources `%v'", ic.res) }
                 if ic.assets != "" { Verbose("assets `%v'", ic.assets) }
-        }
+        } */
         //args = append(args, "--min-sdk-version", "7")
         //args = append(args, "--target-sdk-version", "7")
         if !c.Run("resources", args...) {
                 Fatal("resources: %v", outRes)
         }
 
-        if ic.r = FindFile(outRes, `R\.java$`); ic.r != "" {
-                return true
+        if ic.r = FindFile(outRes, `R\.java$`); ic.r == "" {
+                Fatal("resources: R.java not found")
         }
-
-        Fatal("resources: R.java not found")
-        return false
+        return ic.r != ""
 }
 
 type genClasses struct{
@@ -561,7 +595,7 @@ func (ic *genAPK) Execute(targets []string, prerequisites []string) bool {
                 "-M", filepath.Join(ic.d, "AndroidManifest.xml"),
                 "-I", filepath.Join(sdk, "platforms", ic.platform, "android.jar"),
         }
-        if ic.res != "" { args = append(args, "-S", ic.res) }
+        if ic.res != ""    { args = append(args, "-S", ic.res) }
         if ic.assets != "" { args = append(args, "-A", ic.assets) }
         //args = append(args, "--min-sdk-version", "7")
         //args = append(args, "--target-sdk-version", "7")
@@ -624,7 +658,7 @@ func (ic *genJAR) Execute(targets []string, prerequisites []string) bool {
                 "-M", filepath.Join(ic.d, "AndroidManifest.xml"),
                 "-I", filepath.Join(sdk, "platforms", ic.platform, "android.jar"),
         }
-        if ic.res != "" { args = append(args, "-S", ic.res) }
+        if ic.res != ""    { args = append(args, "-S", ic.res) }
         if ic.assets != "" { args = append(args, "-A", ic.assets) }
         //args = append(args, "--min-sdk-version", "7")
         //args = append(args, "--target-sdk-version", "7")

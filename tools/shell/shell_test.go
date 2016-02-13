@@ -13,6 +13,7 @@ import (
 func testCleanFiles(t *testing.T) {
         if e := os.RemoveAll("foo"); e != nil { t.Errorf("failed remove `foo'") }
         if e := os.RemoveAll("foobar"); e != nil { t.Errorf("failed remove `foobar'") }
+        if e := os.RemoveAll("o/o/o/foo"); e != nil { t.Errorf("failed remove `o/o/o/foo'") }
 }
 
 func testToolsetShell(t *testing.T) {
@@ -30,6 +31,12 @@ func testToolsetShell(t *testing.T) {
         if m.Kind != "touch" { t.Errorf("expecting touch but %v", m.Kind); return }
         if m.Action == nil { t.Errorf("no action for the module"); return }
         if fi, e := os.Stat("foo"); fi == nil || e != nil { t.Errorf("failed: %v", e); return }
+
+        if m, ok = modules["touch-o-o-o-foo"]; !ok { t.Errorf("expecting module touch-o-o-o-foo"); return }
+        if m.Name != "touch-o-o-o-foo" { t.Errorf("expecting touch-o-o-o-foo but %v", m.Name); return }
+        if m.Kind != "touch" { t.Errorf("expecting touch but %v", m.Kind); return }
+        if m.Action == nil { t.Errorf("no action for the module"); return }
+        if fi, e := os.Stat("o/o/o/foo"); fi == nil || e != nil { t.Errorf("failed: %v", e); return }
 
         if m, ok = modules["touch-foobar"]; !ok { t.Errorf("expecting module touch-foobar"); return }
         if m.Name != "touch-foobar" { t.Errorf("expecting touch-foobar, but %v", m.Name); return }

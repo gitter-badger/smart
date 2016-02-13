@@ -95,11 +95,21 @@ func createCompileActions(includes, sources []string) (actions []*Action, numAsm
 
 type toolset struct { BasicToolset }
 
+func (gcc *toolset) ConfigModule(ctx *Context, args []string, vars map[string]string) {
+        var (
+                kind string
+        )
+        if 0 < len(args) {
+                kind = strings.TrimSpace(args[0])
+        }
+        ctx.Set("me.kind", kind) // ctx.m.Set("kind", kind)
+}
+
 func (gcc *toolset) createLinkAction(ctx *Context, out, ext string, im *imported) *Link {
         var (
                 cmd = new(Link)
                 m = ctx.CurrentModule()
-                targetName = m.Name + ext
+                targetName = m.GetName(ctx) + ext
         )
 
         cmd.out, cmd.libdirs, cmd.libs = out, im.libdirs, im.libs
@@ -117,7 +127,7 @@ func (gcc *toolset) createLinkAction(ctx *Context, out, ext string, im *imported
         }
 
         if cmd.ex == nil {
-                Fatal("no command (%v)", m.Name)
+                Fatal("no command (%v)", m.GetName(ctx))
         }
 
         return cmd
@@ -137,7 +147,7 @@ func (gcc *toolset) createStatic(ctx *Context, out string, im *imported) {
         var (
                 cmd = new(Archive)
                 m = ctx.CurrentModule()
-                targetName = m.Name
+                targetName = m.GetName(ctx)
         )
 
         cmd.out = out
@@ -154,7 +164,7 @@ func (gcc *toolset) createStatic(ctx *Context, out string, im *imported) {
 func (gcc *toolset) CreateActions(ctx *Context) bool {
         var (
                 m = ctx.CurrentModule()
-                out = filepath.Join("out", m.Name)
+                out = filepath.Join("out", m.GetName(ctx))
         )
 
         // Add proper prefixes to includes, libdirs, libs.
@@ -167,15 +177,15 @@ func (gcc *toolset) CreateActions(ctx *Context) bool {
         }
 
         sources := m.GetSources(ctx)
-        if len(sources) == 0 { Fatal("no sources (%v)", m.Name) }
+        if len(sources) == 0 { Fatal("no sources (%v)", m.GetName(ctx)) }
 
         im.prerequisites, im.numAsm, im.numC, im.numCxx = createCompileActions(im.includes, sources)
 
-        switch m.Kind {
+        switch m.Get(ctx, "kind") {
         case "exe":    gcc.createExe(ctx, out, im)
         case "shared": gcc.createShared(ctx, out, im)
         case "static": gcc.createStatic(ctx, out, im)
-        default: Fatal(fmt.Sprintf("unknown type `%v'", m.Kind))
+        default: Fatal(fmt.Sprintf("unknown type `%v'", m.Get(ctx, "kind")))
         }
 
         return m.Action != nil

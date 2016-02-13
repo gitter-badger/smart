@@ -18,14 +18,16 @@ import (
 
 type define struct {
         name string
-        node []interface{} // *node, *flatstr
+        node []interface{} // *node, *flatstr, string
         readonly bool
         loc location
 }
 
 type nodeType int
 
+var meDot = "me."
 const (
+
         nodeComment nodeType = iota
         nodeEscape
         nodeDeferredText
@@ -696,13 +698,13 @@ func (ctx *Context) CurrentModule() *Module {
         return ctx.m
 }
 
-func (ctx *Context) DeferWith(m *Module) func() {
+func (ctx *Context) NewDeferWith(m *Module) func() {
         prev := ctx.m; ctx.m = m
         return func() { ctx.m = prev }
 }
 
 func (ctx *Context) With(m *Module, work func()) {
-        revert := ctx.DeferWith(m); defer revert()
+        revert := ctx.NewDeferWith(m); defer revert()
         work()
 }
 
@@ -849,44 +851,48 @@ func (ctx *Context) call(loc location, name string, args ...string) string {
                 return ""
         case name == "me":
                 if ctx.m != nil {
-                        return ctx.m.Name
+                        return ctx.m.GetName(ctx) //return ctx.m.Get(ctx, "dir")
                 }
                 return ""
-        case strings.HasPrefix(name, "me.") && ctx.m != nil:
-                vars = ctx.m.defines
+        case strings.HasPrefix(name, meDot) && ctx.m != nil:
+                vars, name = ctx.m.defines, strings.TrimPrefix(name, meDot)
         }
 
         if vars != nil {
-                if v, ok := vars[name]; ok {
-                        b, f0, fn := new(bytes.Buffer), "%s", " %s"
-                        for n, i := range v.node {
-                                f := f0[0:]
-                                if 0 < n { f = fn[0:] }
-                                switch t := i.(type) {
-                                case string: fmt.Fprintf(b, f, t)
-                                case *flatstr: fmt.Fprintf(b, f, t.s)
-                                case *node: fmt.Fprintf(b, f, ctx.expandNode(t.children[1]))
-                                default: errorf("unknown supported '%v'", t)
-                                }
-                        }
-                        return b.String()
+                if d, ok := vars[name]; ok && d != nil {
+                        return ctx.getDefineValue(d)
                 }
         }
 
         return ""
 }
 
+func (ctx *Context) getDefineValue(d *define) string {
+        b, f0, fn := new(bytes.Buffer), "%s", " %s"
+        for n, i := range d.node {
+                f := f0[0:]
+                if 0 < n { f = fn[0:] }
+                switch t := i.(type) {
+                case string:   fmt.Fprintf(b, f, t)
+                case *flatstr: fmt.Fprintf(b, f, t.s)
+                case *node:    fmt.Fprintf(b, f, ctx.expandNode(t.children[1]))
+                default: errorf("unknown supported '%v'", t)
+                }
+        }
+        return b.String()
+}
+
 func (ctx *Context) callWith(loc location, m *Module, name string, args ...string) (s string) {
         o := ctx.m
         ctx.m = m
-        s = ctx.call(loc, "me."+name, args...)
+        s = ctx.call(loc, meDot+name, args...)
         ctx.m = o
         return
 }
 
 func (ctx *Context) get(name string) *define {
         vars := ctx.defines
-        if strings.HasPrefix(name, "me.") && ctx.m != nil {
+        if strings.HasPrefix(name, meDot) && ctx.m != nil {
                 vars = ctx.m.defines
         }
         if vars == nil {
@@ -908,14 +914,14 @@ func (ctx *Context) set(name string, a ...interface{}) (v *define) {
         }
 
         vars := ctx.defines
-        if strings.HasPrefix(name, "me.") {
+        if strings.HasPrefix(name, meDot) {
                 if ctx.m == nil {
                         /* lineno, colno := ctx.l.getLineColumn()
                         fmt.Printf("%v:%v:%v:warning: no module defined for '%v'\n",
                                 ctx.l.scope, lineno, colno, name) */
                         return
                 }
-                vars = ctx.m.defines
+                vars, name = ctx.m.defines, strings.TrimPrefix(name, meDot)
         }
         if vars == nil {
                 fmt.Printf("%v:warning: no \"me\" module\n", &loc)

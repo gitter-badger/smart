@@ -39,7 +39,7 @@ type toolset struct {
         root string
 }
 
-func (ndk *toolset) ConfigModule(ctx *Context, args []string, vars map[string]string) bool {
+func (ndk *toolset) ConfigModule(ctx *Context, args []string, vars map[string]string) {
         var (
                 abi = "armeabi" // all
                 optim = "debug" // release|debug
@@ -64,7 +64,6 @@ func (ndk *toolset) ConfigModule(ctx *Context, args []string, vars map[string]st
         //m := ctx.CurrentModule()
         //Message("ndk-build: config: name=%v, dir=%v, args=%v, vars=%v", m.Name, m.GetDir(), args, vars)
         //Message("ndk-build: args=%v, vars=%v", args, vars)
-        return script != ""
 }
 
 func (ndk *toolset) CreateActions(ctx *Context) bool {
@@ -98,7 +97,7 @@ func (ndk *toolset) CreateActions(ctx *Context) bool {
                 pa.Command = &genBuildScript{}
 
                 var e error
-                if scripts, e = FindFiles(m.GetDir(), `Android\.mk$`); e == nil {
+                if scripts, e = FindFiles(m.GetDir(ctx), `Android\.mk$`); e == nil {
                         for _, s := range scripts {
                                 if filepath.Base(s) != "Android.mk" { continue }
                                 pa.Prerequisites = append(pa.Prerequisites, NewAction(s, nil))

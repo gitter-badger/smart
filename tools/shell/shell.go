@@ -44,14 +44,17 @@ func (shell *toolset) CreateActions(ctx *Context) bool {
                 targets: Split(ctx.Call("me.targets")),
         }
 
+        m := ctx.CurrentModule()
+        d := m.GetDir()
+
         for _, s := range Split(ctx.Call("me.path")) {
-                ac.cmds = append(ac.cmds, NewExcmd(s))
+                c := NewExcmd(s)
+                c.SetDir(d)
+                ac.cmds = append(ac.cmds, c)
         }
 
-        m := ctx.CurrentModule()
         m.Action = NewInterAction(m.Name, ac)
 
-        d := m.GetDir()
         for i, s := range ac.targets {
                 if !filepath.IsAbs(s) {
                         ac.targets[i] = filepath.Join(d, s)
@@ -59,6 +62,9 @@ func (shell *toolset) CreateActions(ctx *Context) bool {
         }
 
         for _, s := range Split(ctx.Call("me.depends")) {
+                if !filepath.IsAbs(s) {
+                        s = filepath.Join(d, s)
+                }
                 m.Action.Prerequisites = append(m.Action.Prerequisites, NewAction(s, nil))
         }
 

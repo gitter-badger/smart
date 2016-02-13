@@ -8,6 +8,7 @@ import (
         "strings"
         "bytes"
         "fmt"
+        "os"
 )
 
 func newTestLex(file, s string) (l *lex) {
@@ -593,7 +594,7 @@ dddd := xxx-$(sh$ared)-$(stat$ic)-$(a$$a)-xxx
 }
 
 func TestEmptyValue(t *testing.T) {
-        ctx, err := newTestContext("TestLexCalls", `
+        ctx, err := newTestContext("TestEmptyValue", `
 foo =
 bar = bar
 foobar := 
@@ -611,7 +612,7 @@ func TestContinualInCall(t *testing.T) {
                 fmt.Fprintf(info, "%v\n", strings.Join(args, ","))
         }
 
-        ctx, err := newTestContext("TestContinual", `
+        ctx, err := newTestContext("TestContinualInCall", `
 foo = $(info a,  ndk  , \
   PLATFORM=android-9, \
   ABI=x86 armeabi, \
@@ -620,4 +621,38 @@ foo = $(info a,  ndk  , \
         if s := ctx.Call("foo"); s != "" { t.Errorf("foo: '%s'", s) }
         // FIXIME: if s := info.String(); s != `a,  ndk  , PLATFORM=android-9, ABI=x86 armeabi, ` { t.Errorf("info: '%s'", s) }
         if s := info.String(); s != `a,  ndk  ,    PLATFORM=android-9,    ABI=x86 armeabi,  `+"\n" { t.Errorf("info: '%s'", s) }
+}
+
+func TestModuleVariables(t *testing.T) {
+        if wd, e := os.Getwd(); e != nil || workdir != wd { t.Errorf("%v != %v (%v)", workdir, wd, e) }
+
+        info, f := new(bytes.Buffer), builtinInfoFunc; defer func(){ builtinInfoFunc = f }()
+        builtinInfoFunc = func(args ...string) {
+                fmt.Fprintf(info, "%v\n", strings.Join(args, ","))
+        }
+
+        ctx, err := newTestContext("TestModuleVariables", `
+$(module test)
+$(info $(me) $(me.name) $(me.dir))
+$(commit)
+
+#$(module test) ## error
+`);     if err != nil { t.Errorf("parse error:", err) }
+
+        if ctx.modules == nil { t.Errorf("nil modules") }
+        if m, ok := ctx.modules["test"]; !ok || m == nil { t.Errorf("nil 'test' module") } else {
+                if d, _ := m.defines["name"]; !ok || d == nil { t.Errorf("no 'name' defined") } else {
+                        if s := ctx.getDefineValue(d); s != "test" { t.Errorf("name != 'test' (%v)", s) }
+                }
+                if d, _ := m.defines["dir"]; !ok || d == nil { t.Errorf("no 'dir' defined") } else {
+                        if s := ctx.getDefineValue(d); s != workdir { t.Errorf("dir != '%v' (%v)", workdir, s) }
+                }
+                ctx.With(m, func() {
+                        if s := ctx.Call("me"); s != "test" { t.Errorf("me != test (%v)", s) }
+                        if s := ctx.Call("me.dir"); s != workdir { t.Errorf("me.dir != %v (%v)", workdir, s) }
+                        if s := ctx.Call("me.name"); s != "test" { t.Errorf("me.name != test (%v)", s) }
+                })
+        }
+
+        if s := info.String(); s != `test test `+workdir+"\n" { t.Errorf("info: '%s'", s) }
 }

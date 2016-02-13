@@ -17,6 +17,8 @@ import (
 )
 
 var (
+        workdir, _ = os.Getwd()
+
         toolsets = map[string]*toolsetStub{}
 
         generalMetaFiles = []*FileMatchRule{
@@ -32,14 +34,14 @@ var (
 
 // toolset represents a toolchain like gcc and related utilities.
 type toolset interface {
-        // ConfigModule setup the current module being processed by parser.
+        // ConfigModule setup the current module being processed.
         // `args' and `vars' is passed in on the `$(module)' invocation.
-        ConfigModule(p *Context, args []string, vars map[string]string) bool
+        ConfigModule(p *Context, args []string, vars map[string]string)
 
-        // CreateActions creates the module action graph
+        // CreateActions creates the current module's action graph
         CreateActions(p *Context) bool
 
-        // UseModule
+        // UseModule lets a toolset decides how to use a module.
         UseModule(p *Context, o *Module) bool
 }
 
@@ -59,8 +61,7 @@ func RegisterToolset(name string, ts toolset) {
 type BasicToolset struct {        
 }
 
-func (tt *BasicToolset) ConfigModule(ctx *Context, args []string, vars map[string]string) bool {
-        return false
+func (tt *BasicToolset) ConfigModule(ctx *Context, args []string, vars map[string]string) {
 }
 
 func (tt *BasicToolset) CreateActions(ctx *Context) bool {
@@ -173,10 +174,13 @@ func (c *Excmd) run(targetHint string, args ...string) bool {
                         }
                 }
 
-                if err := cmd.Run(); err == nil {
+                err := cmd.Run()
+                if err == nil {
                         updated = true
-                } else {
-                        message("%v (%v)", err, c.path)
+                }
+
+                if (*flagL /**flagV && *flagVV*/) || err != nil {
+                        if err != nil { message("%v (%v)", err, c.path) }
                         if c.path != "" {
                                 fmt.Fprintf(os.Stderr, "--------------------------------------------------------------------------------\n")
                                 fmt.Fprintf(os.Stderr, "%v %v\n", c.path, strings.Join(args, " "))
@@ -193,7 +197,7 @@ func (c *Excmd) run(targetHint string, args ...string) bool {
                                 if !strings.HasSuffix(se, "\n") { fmt.Fprintf(os.Stderr, "\n") }
                         }
                         fmt.Fprintf(os.Stderr, "--------------------------------------------------------------------------------\n")
-                        errorf(`failed executing "%v"`, c.path)
+                        if err != nil { errorf(`failed executing "%v"`, c.path) }
                 }
 
                 if c.postcall != nil {
@@ -436,22 +440,16 @@ func CreateSourceTransformActions(sources []string, namecommand func(src string)
 // Module is defined by a $(module) invocation in .smart script.
 type Module struct {
         Parent *Module // upper module
-        Name, Kind string
         Toolset toolset
         Action *Action // action for building this module
         Using, UsedBy []*Module
         Updated bool // marked as 'true' if module is updated
         defines map[string]*define
         declareLoc, commitLoc location // where does it defined and commit (could be nil)
+        //x *Context // the context of the module
         l *lex // the lex scope where does it defined (could be nil)
 }
 
-func (m *Module) GetDir() (s string) {
-        if m.l != nil {
-                s = filepath.Dir(m.l.scope)
-        }
-        return
-}
 func (m *Module) GetDeclareLocation() (s string, lineno, colno int) {
         if l := m.l; l != nil {
                 lineno, colno = l.caculateLocationLineColumn(m.declareLoc)
@@ -459,6 +457,7 @@ func (m *Module) GetDeclareLocation() (s string, lineno, colno int) {
         }
         return
 }
+
 func (m *Module) GetCommitLocation() (s string, lineno, colno int) {
         if l := m.l; l != nil {
                 lineno, colno = l.caculateLocationLineColumn(m.commitLoc)
@@ -467,11 +466,21 @@ func (m *Module) GetCommitLocation() (s string, lineno, colno int) {
         return
 }
 
+func (m *Module) Get(ctx *Context, name string) (s string) {
+        if d, ok := m.defines[name]; ok && d != nil {
+                s = ctx.getDefineValue(d)
+        }
+        return
+}
+
+func (m *Module) GetName(ctx *Context) string { return m.Get(ctx, "name") }
+func (m *Module) GetDir(ctx *Context) string { return m.Get(ctx, "dir") }
+
 func (m *Module) GetSources(ctx *Context) (sources []string) {
-        sources = Split(ctx.callWith(m.commitLoc, m, "sources"))
+        sources = Split(m.Get(ctx, "sources")) // Split(ctx.callWith(m.commitLoc, m, "sources"))
         for i := range sources {
-                if sources[i][0] == '/' { continue }
-                sources[i] = filepath.Join(m.GetDir(), sources[i])
+                if filepath.IsAbs(sources[i]) { continue }
+                sources[i] = filepath.Join(m.GetDir(ctx), sources[i])
         }
         return
 }
@@ -485,7 +494,7 @@ func (m *Module) createActionIfNil(ctx *Context) bool {
         }
         if 0 < numUsing {
                 if *flagV || *flagVV {
-                        fmt.Printf("%v:%v:%v: not all dependencies was built (%v, %v/%v)\n", s, lineno, colno, m.Name)
+                        fmt.Printf("%v:%v:%v: not all dependencies was built (%v, %v/%v)\n", s, lineno, colno, m.GetName(ctx))
                 } else {
                         fmt.Printf("%v:%v:%v: not all dependencies was built\n", s, lineno, colno)
                 }
@@ -497,12 +506,12 @@ func (m *Module) createActionIfNil(ctx *Context) bool {
         }
 
         if m.Toolset == nil {
-                fmt.Printf("%v:%v:%v: nil toolset (%v)\n", s, lineno, colno, m.Name)
+                fmt.Printf("%v:%v:%v: nil toolset (%v)\n", s, lineno, colno, m.GetName(ctx))
                 return false
         }
 
         if *flagVV {
-                fmt.Printf("smart: config `%v' (%v)\n", m.Name, m.GetDir())
+                fmt.Printf("smart: config `%v' (%v)\n", m.GetName(ctx), m.GetDir(ctx))
         }
 
         prev := ctx.m
@@ -511,18 +520,18 @@ func (m *Module) createActionIfNil(ctx *Context) bool {
         if m.Toolset.CreateActions(ctx) {
                 //fmt.Printf("smart: created `%v' (%v)\n", m.Name, m.GetDir())
         } else if *flagV {
-                fmt.Printf("%v:%v:%v: `%v' not built\n", s, lineno, colno, m.Name)
+                fmt.Printf("%v:%v:%v: `%v' not built\n", s, lineno, colno, m.GetName(ctx))
         }
 
         ctx.m = prev
         return m.Action != nil
 }
 
-func (m *Module) update() {
+func (m *Module) update(ctx *Context) {
         if m.Action == nil {
                 if *flagV {
                         s, lineno, colno := m.GetCommitLocation()
-                        fmt.Printf("%v:%v:%v:warning: no action (\"%v\")\n", s, lineno, colno, m.Name)
+                        fmt.Printf("%v:%v:%v:warning: no action (\"%v\")\n", s, lineno, colno, m.GetName(ctx))
                 }
                 return
         }
@@ -530,11 +539,11 @@ func (m *Module) update() {
         if updated, _ := m.Action.update(); !updated {
                 if *flagV && *flagVV {
                         s, lineno, colno := m.GetCommitLocation()
-                        fmt.Printf("%v:%v:%v:info: nothing updated (%v)\n", s, lineno, colno, m.Name)
+                        fmt.Printf("%v:%v:%v:info: nothing updated (%v)\n", s, lineno, colno, m.GetName(ctx))
                 }
                 if *flagV && *flagVV {
                         s, lineno, colno := m.GetDeclareLocation()
-                        fmt.Printf("%v:%v:%v:info: module `%v'\n", s, lineno, colno, m.Name)
+                        fmt.Printf("%v:%v:%v:info: module `%v'\n", s, lineno, colno, m.GetName(ctx))
                 }
         }
 }
@@ -745,7 +754,7 @@ func Build(vars map[string]string, cmds []string) (ctx *Context) {
         for 0 < len(ctx.moduleBuildList) {
                 i, ctx.moduleBuildList = &ctx.moduleBuildList[0], ctx.moduleBuildList[1:]
                 if !i.m.createActionIfNil(i.p) {
-                        errorf("nil action (%v)", i.m.Name)
+                        errorf("nil action (%v)", i.m.GetName(ctx))
                 }
         }
 
@@ -754,9 +763,9 @@ func Build(vars map[string]string, cmds []string) (ctx *Context) {
                 updateDeps(mod)
                 if !mod.Updated {
                         if *flagV {
-                                fmt.Printf("smart: update `%v'...\n", mod.Name)
+                                fmt.Printf("smart: update `%v'...\n", mod.GetName(ctx))
                         }
-                        mod.update()
+                        mod.update(ctx)
                         mod.Updated = true
                 }
         }

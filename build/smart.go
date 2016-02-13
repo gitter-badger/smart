@@ -22,8 +22,9 @@ var (
         flagC = flag.String("C", "", "change directory")
         flagT = flag.String("T", "", "traverse")
         flagV = flag.Bool("v", false, "prompt command")
-        flagVV = flag.Bool("V", false, "print command verbosely")
+        flagVV= flag.Bool("V", false, "print command verbosely")
         flagW = flag.Bool("w", false, "warn undefined symbols")
+        flagL = flag.Bool("l", false, "warn undefined symbols")
 )
 
 func GetFlagA() bool    { return *flagA }
@@ -31,6 +32,7 @@ func GetFlagG() bool    { return *flagG }
 func GetFlagO() string  { return *flagO }
 func GetFlagC() string  { return *flagC }
 func GetFlagT() string  { return *flagT }
+func GetFlagL() bool    { return *flagL }
 func GetFlagV() bool    { return *flagV }
 func GetFlagVV() bool   { return *flagVV }
 
@@ -39,6 +41,7 @@ func SetFlagG(v bool)   { *flagG = v }
 func SetFlagO(v string) { *flagO = v }
 func SetFlagC(v string) { *flagC = v }
 func SetFlagT(v string) { *flagT = v }
+func SetFlagL(v bool)   { *flagL = v }
 func SetFlagV(v bool)   { *flagV = v }
 func SetFlagVV(v bool)  { *flagVV = v }
 

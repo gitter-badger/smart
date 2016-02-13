@@ -1,0 +1,5 @@
+# -*- makefile-gmake -*-
+$(module touch-o-o-o-foo, shell, touch)
+me.targets := foo
+me.args := foo
+$(commit)
