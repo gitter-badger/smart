@@ -9,6 +9,8 @@ import (
         "bytes"
         "fmt"
         "os"
+        "os/exec"
+        "path/filepath"
 )
 
 func newTestLex(file, s string) (l *lex) {
@@ -450,7 +452,7 @@ c = xxx \#\
         cc = c.children[1]; checkNode(cc, nodeDeferredText, 4, "xxx \\#\\\n  yyy \\#\\\n", "\\#", "\\\n", "\\#", "\\\n")
 }
 
-func _TestLexRules(t *testing.T) {
+func TestLexRules(t *testing.T) {
         /*
 ## Bash
 foobar : foo bar blah {{
@@ -462,7 +464,7 @@ blah : blah.c [tcl]{{
     [ gcc -c $< -o $@ ]
 }}
         */
-        l := newTestLex("TestLexCalls", `
+        l := newTestLex("TestLexRules", `
 foobar : foo bar blah
 
 foo: foo.c ; gcc -c $< -o $@
@@ -472,23 +474,30 @@ bar: bar.c
 	@echo "compiling..."
 	@gcc -c $< -o $@
 
+baz:bar
+zz::foo
+
 blah : blah.c
 	gcc -c $< -o $@
 `)
         l.parse()
 
-        if ex := 4; len(l.nodes) != ex { t.Errorf("expecting %v nodes but got %v", ex, len(l.nodes)) }
+        if ex, n := 6, len(l.nodes); n != ex { t.Errorf("expecting %v nodes but got %v", ex, n) }
         
         var (
-                countDeferredDefines = 0
+                countRuleSingleColoned = 0
+                countRuleDoubleColoned = 0
         )
         for _, n := range l.nodes {
+                //fmt.Fprintf(os.Stderr, "TestLexRules: %v: %v\n", n.kind, n.children[0].str())
                 switch n.kind {
-                case nodeDefineDeferred:        countDeferredDefines++
+                case nodeRuleSingleColoned:     countRuleSingleColoned++
+                case nodeRuleDoubleColoned:     countRuleDoubleColoned++
                 }
         }
-        if ex := 3; countDeferredDefines != ex          { t.Errorf("expecting %v %v nodes, but got %v", ex, nodeDefineDeferred,      countDeferredDefines) }
-        if n := countDeferredDefines; len(l.nodes) != n {
+        if ex := 5; countRuleSingleColoned != ex          { t.Errorf("expecting %v %v nodes, but got %v", ex, nodeRuleSingleColoned,      countRuleSingleColoned) }
+        if ex := 1; countRuleDoubleColoned != ex          { t.Errorf("expecting %v %v nodes, but got %v", ex, nodeRuleDoubleColoned,      countRuleDoubleColoned) }
+        if n := countRuleSingleColoned+countRuleDoubleColoned; len(l.nodes) != n {
                 t.Errorf("expecting %v nodes totally, but got %v", len(l.nodes), n)
         }
 
@@ -498,8 +507,8 @@ blah : blah.c
         )
         checkNode := func(c *node, k nodeType, cc int, s string, cs ...string) {
                 if c.kind != k { t.Errorf("%v: expecting kind %v but got %v", i, k, c.kind) }
-                if ss := c.str(); ss != s { t.Errorf("%v: expecting %v but got %v", i, s, ss) }
-                if len(c.children) != cc { t.Errorf("%v: expecting %v children but got %v", i, cc, len(c.children)) }
+                if ss := c.str(); ss != s { t.Errorf("%v: expecting '%v' but got '%v'", i, s, ss) }
+                if len(c.children) != cc { t.Errorf("%v: expecting '%v' children but got '%v'", i, cc, len(c.children)) }
 
                 var cn int
                 for cn = 0; cn < len(c.children) && cn < len(cs); cn++ {
@@ -516,17 +525,18 @@ blah : blah.c
 
         var cc *node
 
-        i = 0; c = l.nodes[i]; checkNode(c, nodeDefineDeferred, 2, `=`, `a`, `xxx\#xxx`)
-        cc = c.children[0]; checkNode(cc, nodeImmediateText, 0, `a`)
-        cc = c.children[1]; checkNode(cc, nodeDeferredText, 1, `xxx\#xxx`, `\#`)
+        i = 0; c = l.nodes[i]; checkNode(c, nodeRuleSingleColoned, 2, `:`, `foobar`, `foo bar blah`)
+        cc = c.children[0]; checkNode(cc, nodeImmediateText, 0, `foobar`)
+        cc = c.children[1]; checkNode(cc, nodePrerequisites, 0, `foo bar blah`)
 
-        i = 1; c = l.nodes[i]; checkNode(c, nodeDefineDeferred, 2, `=`, `b`, "xxx\\\n  yyy \\\n  zzz \\\n")
-        cc = c.children[0]; checkNode(cc, nodeImmediateText, 0, `b`)
-        cc = c.children[1]; checkNode(cc, nodeDeferredText, 3, "xxx\\\n  yyy \\\n  zzz \\\n", "\\\n", "\\\n", "\\\n")
+        i = 1; c = l.nodes[i]; checkNode(c, nodeRuleSingleColoned, 3, `:`, `foo`, "foo.c", "gcc -c $< -o $@")
+        cc = c.children[0]; checkNode(cc, nodeImmediateText, 0, `foo`)
+        cc = c.children[1]; checkNode(cc, nodePrerequisites, 0, "foo.c")
 
-        i = 2; c = l.nodes[i]; checkNode(c, nodeDefineDeferred, 2, `=`, `c`, "xxx \\#\\\n  yyy \\#\\\n")
-        cc = c.children[0]; checkNode(cc, nodeImmediateText, 0, `c`)
-        cc = c.children[1]; checkNode(cc, nodeDeferredText, 4, "xxx \\#\\\n  yyy \\#\\\n", "\\#", "\\\n", "\\#", "\\\n")
+        i = 2; c = l.nodes[i]; checkNode(c, nodeRuleSingleColoned, 3, `:`, `bar`, "bar.c", "\t# this is command line comment\n# this is script comment being ignored\n\t@echo \"compiling...\"\n\t@gcc -c $< -o $@\n")
+        cc = c.children[0]; checkNode(cc, nodeImmediateText, 0, `bar`)
+        cc = c.children[1]; checkNode(cc, nodePrerequisites, 0, "bar.c")
+        cc = c.children[2]; checkNode(cc, nodeActions, 4, "\t# this is command line comment\n# this is script comment being ignored\n\t@echo \"compiling...\"\n\t@gcc -c $< -o $@\n", "# this is command line comment", "# this is script comment being ignored", "@echo \"compiling...\"", "@gcc -c $< -o $@")
 }
 
 func TestParse(t *testing.T) {
@@ -655,4 +665,90 @@ $(commit)
         }
 
         if s := info.String(); s != `test test `+workdir+"\n" { t.Errorf("info: '%s'", s) }
+}
+
+func TestModuleTargets(t *testing.T) {
+        if wd, e := os.Getwd(); e != nil || workdir != wd { t.Errorf("%v != %v (%v)", workdir, wd, e) }
+
+        info, f := new(bytes.Buffer), builtinInfoFunc; defer func(){ builtinInfoFunc = f }()
+        builtinInfoFunc = func(args ...string) {
+                fmt.Fprintf(info, "%v\n", strings.Join(args, ","))
+        }
+
+        ctx, err := newTestContext("TestModuleTargets", `
+$(module test)
+
+## test.foo
+foo:
+	@echo "$..$@"
+
+$(commit)
+`);     if err != nil { t.Errorf("parse error:", err) }
+
+        if ctx.modules == nil { t.Errorf("nil modules") }
+        if m, ok := ctx.modules["test"]; !ok || m == nil { t.Errorf("nil 'test' module") } else {
+                /// ...
+        }
+
+        if s := info.String(); s != `` { t.Errorf("info: '%s'", s) }
+}
+
+func TestToolsetVariables(t *testing.T) {
+        if wd, e := os.Getwd(); e != nil || workdir != wd { t.Errorf("%v != %v (%v)", workdir, wd, e) }
+
+        info, f := new(bytes.Buffer), builtinInfoFunc; defer func(){ builtinInfoFunc = f }()
+        builtinInfoFunc = func(args ...string) {
+                fmt.Fprintf(info, "%v\n", strings.Join(args, ","))
+        }
+
+        ndk, _ := exec.LookPath("ndk-build")
+        sdk, _ := exec.LookPath("android")
+        if ndk == "" { t.Errorf("'ndk-build' is not in the PATH") }
+        if sdk == "" { t.Errorf("'android' is not in the PATH") }
+
+        ndk = filepath.Dir(ndk)
+        sdk = filepath.Dir(filepath.Dir(sdk))
+
+        _, err := newTestContext("TestToolsetVariables", `
+$(info $(shell:name))
+$(info $(android-sdk:name))
+$(info $(android-sdk:root))
+$(info $(android-sdk:support))
+$(info $(ndk-build:name))
+$(info $(ndk-build:root))
+`);     if err != nil { t.Errorf("parse error:", err) }
+        if v, s := info.String(), fmt.Sprintf(`shell
+android-sdk
+%s
+%s/extras/android/support
+ndk-build
+%s
+`, sdk, sdk, ndk); v != s { t.Errorf("`%s` != `%s`", v, s) }
+}
+
+func _TestDefineToolset(t *testing.T) {
+        if wd, e := os.Getwd(); e != nil || workdir != wd { t.Errorf("%v != %v (%v)", workdir, wd, e) }
+
+        info, f := new(bytes.Buffer), builtinInfoFunc; defer func(){ builtinInfoFunc = f }()
+        builtinInfoFunc = func(args ...string) {
+                fmt.Fprintf(info, "%v\n", strings.Join(args, ","))
+        }
+
+        ctx, err := newTestContext("TestDefineToolset", `
+$(toolset test)
+
+#
+#  Define a new toolset 'test'
+#
+#    - need to reference to the building module
+#    - define rules for building the module
+#
+
+$(commit)
+`);     if err != nil { t.Errorf("parse error:", err) }
+        if ctx.modules == nil { t.Errorf("nil modules") }
+
+        /// ...
+
+        if s := info.String(); s != `` { t.Errorf("info: '%s'", s) }
 }

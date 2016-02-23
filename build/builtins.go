@@ -14,6 +14,7 @@ type builtin func(ctx *Context, loc location, args []string) string
 
 var (
         builtins = map[string]builtin {
+                "toolset":      builtinToolset,
                 "module":       builtinModule,
                 "commit":       builtinCommit,
                 "dir":          builtinDir,
@@ -64,6 +65,11 @@ func builtinTitle(ctx *Context, loc location, args []string) string {
                 args[i] = strings.ToTitle(s)
         }
         return strings.Join(args, " ")
+}
+
+func builtinToolset(ctx *Context, loc location, args []string) (s string) {
+        errorf("todo: %v", args)
+        return
 }
 
 func builtinModule(ctx *Context, loc location, args []string) (s string) {

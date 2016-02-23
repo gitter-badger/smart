@@ -4,9 +4,9 @@
 
 ## Overview
 
-This utility named `smart` is made to ease the build process of software development.
-It's inspired by [GNU make]() (having almost the same syntax as makefile) and written
-in [Go]().
+This `smart` utility is made to ease the build process of software development.
+It's inspired by [GNU make]() (having almost the same syntax as makefile, but not guaranteed
+to be compatible [GNU make]()). It's written in [Go]().
 
 ## Example
 

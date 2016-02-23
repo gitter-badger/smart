@@ -25,9 +25,7 @@ type define struct {
 
 type nodeType int
 
-var meDot = "me."
 const (
-
         nodeComment nodeType = iota
         nodeEscape
         nodeDeferredText
@@ -43,6 +41,7 @@ const (
         nodeRuleDoubleColoned   // ::
         nodePrerequisites
         nodeActions
+        nodeAction
         nodeCall
         nodeCallName
         nodeCallArg
@@ -86,26 +85,30 @@ define immediate !=
   immediate
 endef
 */
-var nodeTypeNames = []string {
-        nodeComment:                    "comment",
-        nodeEscape:                     "escape",
-        nodeDeferredText:               "deferred-text",
-        nodeImmediateText:              "immediate-text",
-        nodeValueText:                  "value-text",
-        nodeDefineDeferred:             "define-deferred",
-        nodeDefineQuestioned:           "define-questioned",
-        nodeDefineSingleColoned:        "define-single-coloned",
-        nodeDefineDoubleColoned:        "define-double-coloned",
-        nodeDefineNot:                  "define-not",
-        nodeDefineAppend:               "define-append",
-        nodeRuleSingleColoned:          "rule-single-coloned",
-        nodeRuleDoubleColoned:          "rule-double-coloned",
-        nodePrerequisites:              "prerequisites",
-        nodeActions:                    "actions",
-        nodeCall:                       "call",
-        nodeCallName:                   "call-name",
-        nodeCallArg:                    "call-arg",
-}
+var (
+        meDot = "me."
+        nodeTypeNames = []string {
+                nodeComment:                    "comment",
+                nodeEscape:                     "escape",
+                nodeDeferredText:               "deferred-text",
+                nodeImmediateText:              "immediate-text",
+                nodeValueText:                  "value-text",
+                nodeDefineDeferred:             "define-deferred",
+                nodeDefineQuestioned:           "define-questioned",
+                nodeDefineSingleColoned:        "define-single-coloned",
+                nodeDefineDoubleColoned:        "define-double-coloned",
+                nodeDefineNot:                  "define-not",
+                nodeDefineAppend:               "define-append",
+                nodeRuleSingleColoned:          "rule-single-coloned",
+                nodeRuleDoubleColoned:          "rule-double-coloned",
+                nodePrerequisites:              "prerequisites",
+                nodeActions:                    "actions",
+                nodeAction:                     "action",
+                nodeCall:                       "call",
+                nodeCallName:                   "call-name",
+                nodeCallArg:                    "call-arg",
+        }
+)
 
 func (k nodeType) String() string {
         return nodeTypeNames[int(k)]
@@ -289,8 +292,7 @@ func (l *lex) stateAppendNode() {
 
         /*
         fmt.Printf("AppendNode: %v: '%v' %v '%v' (%v, %v, %v)\n", t.kind,
-                l.str(t.children[0]), l.str(t),
-                l.str(t.children[1]), len(l.stack), l.pos, l.rune) //*/
+                t.children[0].str(), t.str(), t.children[1].str(), len(l.stack), l.pos, l.rune) //*/
 
         // Pop out and append the node.
         l.nodes = append(l.nodes, t)
@@ -333,8 +335,16 @@ state_loop:
                                 st.node.end-- // exclude the '\n'
                         }
 
-                        // append the comment node
-                        l.nodes = append(l.nodes, st.node)
+                        /*
+                        lineno, colno := l.caculateLocationLineColumn(st.node.loc())
+                        fmt.Fprintf(os.Stderr, "%v:%v:%v: stateComment: (%v) %v\n", l.scope, lineno, colno, len(l.stack), st.node.str()) //*/
+
+                        if 0 < len(l.stack) {
+                                st = l.top()
+                                st.node.children = append(st.node.children, st.node)
+                        } else {
+                                l.nodes = append(l.nodes, st.node) // append the comment node
+                        }
                         break state_loop
                 }
         }
@@ -420,7 +430,6 @@ func (l *lex) stateDefine() {
         case nodeDefineDoubleColoned: n = 3; fallthrough
         case nodeDefineSingleColoned:        fallthrough
         case nodeDefineNot:          vt = nodeImmediateText
-
         case nodeDefineDeferred:      n = 1; fallthrough
         default:                     vt = nodeDeferredText
         }
@@ -438,7 +447,6 @@ func (l *lex) stateDefine() {
 
 func (l *lex) stateDefineTextLine() {
         st := l.top()
-
 state_loop:
         for l.get() {
                 /*
@@ -501,39 +509,40 @@ func (l *lex) escapeTextLine(t *node) {
 }
 
 func (l *lex) stateRule() {
-        if l.get() {
-                t, n := nodeRuleSingleColoned, 1 // Assuming single colon.
-                switch {
-                case l.rune == '\n': // targets :
-                        targets := l.pop().node
+        r, t, n := l.peek(), nodeRuleSingleColoned, 1 // Assuming single colon.
+        switch {
+        case r == '\n': // targets :
+                l.get() // drop the '\n'
+                targets := l.pop().node
+                l.nodes = append(l.nodes, targets) // append the single-coloned-define
 
-                        // append the single-coloned-define
-                        l.nodes = append(l.nodes, targets)
-
-                case l.rune == ':': // targets :: blah blah blah
-                        if l.peek() == '=' {
-                                l.get() // consume the '=' for '::='
-                                l.top().code = int(nodeDefineDoubleColoned)
-                                l.step = l.stateDefine
-                                return
-                        }
-                        t, n = nodeRuleDoubleColoned, 2; fallthrough
-                default: // targets : blah blah blah
-                        targets := l.pop().node
-
-                        st := l.push(t, l.stateAppendNode, 0)
-                        st.node.children = []*node{ targets }
-                        st.node.pos -= n // for the ':' or '::'
-
-                        prerequisites := l.push(nodePrerequisites, l.stateRuleTextLine, 0).node
-                        st.node.children = append(st.node.children, prerequisites)
+        case r == ':': // targets :: blah blah blah
+                l.get() // drop the ':'
+                if l.peek() == '=' {
+                        l.get() // consume the '=' for '::='
+                        l.top().code = int(nodeDefineDoubleColoned)
+                        l.step = l.stateDefine
+                        return
                 }
+                t, n = nodeRuleDoubleColoned, 2; fallthrough
+        default: // targets : blah blah blah
+                targets := l.pop().node
+
+                st := l.push(t, l.stateAppendNode, 0)
+                st.node.children = []*node{ targets }
+                st.node.pos -= n // for the ':' or '::'
+
+                prerequisites := l.push(nodePrerequisites, l.stateRuleTextLine, 0).node
+                st.node.children = append(st.node.children, prerequisites)
+
+                /*
+                lineno, colno := l.caculateLocationLineColumn(st.node.loc())
+                fmt.Fprintf(os.Stderr, "%v:%v:%v:todo: stateRule: %v\n", l.scope, lineno, colno, st.node.children[0].str()) //*/
         }
 }
 
 func (l *lex) stateRuleTextLine() {
         st := l.top()
-
 state_loop:
         for l.get() {
                 if st.code == 0 && !unicode.IsSpace(l.rune) { // skip spaces after ':' or '::'
@@ -554,6 +563,7 @@ state_loop:
                         break state_loop
 
                 case l.rune == '#': fallthrough
+                case l.rune == ';': fallthrough
                 case l.rune == '\n': fallthrough
                 case l.rune == rune(0): // end of string
                         st.node.end = l.pos
@@ -561,12 +571,65 @@ state_loop:
                                 st.node.end-- // exclude the '\n' or '#'
                         }
 
+                        /*
                         lineno, colno := l.caculateLocationLineColumn(st.node.loc())
-                        fmt.Fprintf(os.Stderr, "%v:%v:%v:todo: %v\n", l.scope, lineno, colno, st.node.str())
+                        fmt.Fprintf(os.Stderr, "%v:%v:%v:todo: stateRuleTextLine: %v\n", l.scope, lineno, colno, st.node.str()) //*/
 
                         st = l.pop() // pop out the node
 
-                        if l.rune == '#' {
+                        switch l.rune {
+                        case ';':
+                                st.node.end = l.backwardNonSpace(l.pos-1)
+                                st = l.push(nodeAction, l.stateInlineAction, 0)
+                                //st.node.pos-- // for the ';'
+                        case '#':
+                                st = l.push(nodeComment, l.stateComment, 0)
+                                st.node.pos-- // for the '#'
+                        case '\n':
+                                if l.peek() == '\t' {
+                                        st = l.push(nodeActions, l.stateTabbedActions, 0)
+                                        //st.node.pos-- // for the '\t'
+                                }
+                        }
+                        break state_loop
+
+                default: l.escapeTextLine(l.top().node)
+                }
+        }
+}
+
+func (l *lex) stateInlineAction() {
+        st := l.top()
+state_loop:
+        for l.get() {
+                if st.code == 0 && !unicode.IsSpace(l.rune) { // skip spaces after ';'
+                        st.node.pos, st.code = l.pos-1, 1
+                }
+
+                switch {
+                case l.rune == '$':
+                        st = l.push(nodeCall, l.stateDollar, 0)
+                        st.node.pos-- // for the '$'
+                        break state_loop
+
+                case l.rune == '#': fallthrough
+                case l.rune == '\n': fallthrough
+                case l.rune == rune(0): // end of string
+                        a := st.node
+                        a.end = l.pos
+                        if l.rune != rune(0) {
+                                a.end-- // exclude the '\n' or '#'
+                        }
+
+                        /*
+                        lineno, colno := l.caculateLocationLineColumn(st.node.loc())
+                        fmt.Fprintf(os.Stderr, "%v:%v:%v:todo: stateInlineAction: %v\n", l.scope, lineno, colno, st.node.str()) //*/
+
+                        st = l.pop() // pop out the node
+                        st = l.top() // the rule node
+                        st.node.children = append(st.node.children, a)
+
+                        if l.peek() == '#' {
                                 st = l.push(nodeComment, l.stateComment, 0)
                                 st.node.pos-- // for the '#'
                         }
@@ -577,7 +640,71 @@ state_loop:
         }
 }
 
-func (l *lex) stateTabAction() { // tab-indented action of a rule
+func (l *lex) stateTabbedActions() { // tab-indented action of a rule
+        if st := l.top(); l.get() {
+                switch {
+                case l.rune == '\t':
+                        st = l.push(nodeAction, l.stateAction, 0)
+                        //st.node.pos-- // for the '\t'
+
+                case l.rune == '#':
+                        st = l.push(nodeComment, l.stateComment, 0)
+                        st.node.pos-- // for the '#'
+
+                default:
+                        a := st.node
+                        a.end = l.pos
+                        if l.rune == '\n' {
+                                a.end--
+                        }
+
+                        st = l.pop() // pop out the actions
+                        st = l.top() // the rule node
+                        st.node.children = append(st.node.children, a)
+
+                        /*
+                        lineno, colno := l.caculateLocationLineColumn(st.node.loc())
+                        fmt.Fprintf(os.Stderr, "%v:%v:%v:todo: stateTabbedActions: %v (%v)\n", l.scope, lineno, colno, st.node.str(), l.top().node.kind) //*/
+                }
+        }
+}
+
+func (l *lex) stateAction() { // tab-indented action of a rule
+        st := l.top()
+state_loop:
+        for l.get() {
+                switch {
+                case l.rune == '$':
+                        st = l.push(nodeCall, l.stateDollar, 0)
+                        st.node.pos-- // for the '$'
+                        break state_loop
+                case l.rune == '\n': fallthrough
+                case l.rune == rune(0): // end of string
+                        a := st.node
+                        a.end = l.pos
+                        if l.rune != rune(0) {
+                                a.end-- // exclude the '\n'
+                        }
+
+                        l.pop() // pop out the node
+
+                        st = l.top()
+                        st.node.children = append(st.node.children, a)
+
+                        /*
+                        lineno, colno := l.caculateLocationLineColumn(a.loc())
+                        fmt.Fprintf(os.Stderr, "%v:%v:%v:todo: stateAction: %v (of %v)\n", l.scope, lineno, colno, a.str(), st.node.kind) //*/
+
+                        if l.rune == '\n' {
+                                switch next := l.peek(); {
+                                case next == '#':
+                                        st = l.push(nodeComment, l.stateComment, 0)
+                                        st.node.pos-- // for the '#'
+                                }
+                        }
+                        break state_loop
+                }
+        }
 }
 
 func (l *lex) stateDollar() {
@@ -648,9 +775,14 @@ func (l *lex) parse() bool {
         l.step, l.pos = l.stateGlobal, 0
         end := len(l.s); for l.pos < end { l.step() }
 
+        var t *lexStack
         for 0 < len(l.stack) {
-                l.step() // Make extra step to allow handling rune(0),
-                l.pop()  // then pop out the state.
+                t = l.top() // the current top state
+                l.step() // Make extra step to give it a chance handling rune(0),
+                if t == l.top() {
+                        l.pop() // pop out the state if the top is still there
+                }
+
         }
         return l.pos == end
 }
