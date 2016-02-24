@@ -39,6 +39,7 @@ const (
         nodeDefineAppend        // +=     deferred or immediate (parsed into deferred)
         nodeRuleSingleColoned   // :
         nodeRuleDoubleColoned   // ::
+        nodeTargets
         nodePrerequisites
         nodeActions
         nodeAction
@@ -101,6 +102,7 @@ var (
                 nodeDefineAppend:               "define-append",
                 nodeRuleSingleColoned:          "rule-single-coloned",
                 nodeRuleDoubleColoned:          "rule-double-coloned",
+                nodeTargets:                    "targets",
                 nodePrerequisites:              "prerequisites",
                 nodeActions:                    "actions",
                 nodeAction:                     "action",
@@ -337,11 +339,12 @@ state_loop:
 
                         /*
                         lineno, colno := l.caculateLocationLineColumn(st.node.loc())
-                        fmt.Fprintf(os.Stderr, "%v:%v:%v: stateComment: (%v) %v\n", l.scope, lineno, colno, len(l.stack), st.node.str()) //*/
+                        fmt.Fprintf(os.Stderr, "%v:%v:%v: stateComment: (stack=%v) %v\n", l.scope, lineno, colno, len(l.stack), st.node.str()) //*/
 
                         if 0 < len(l.stack) {
+                                c := st.node
                                 st = l.top()
-                                st.node.children = append(st.node.children, st.node)
+                                st.node.children = append(st.node.children, c)
                         } else {
                                 l.nodes = append(l.nodes, st.node) // append the comment node
                         }
@@ -449,10 +452,6 @@ func (l *lex) stateDefineTextLine() {
         st := l.top()
 state_loop:
         for l.get() {
-                /*
-                if st.code == 0 && l.rune != '\n' && !unicode.IsSpace(l.rune) { // skip spaces after '='
-                        st.node.pos, st.code = l.pos-1, 1
-                } */
                 if st.code == 0 { // skip spaces after '='
                         if !unicode.IsSpace(l.rune) {
                                 st.node.pos, st.code = l.pos-1, 1
@@ -527,6 +526,7 @@ func (l *lex) stateRule() {
                 t, n = nodeRuleDoubleColoned, 2; fallthrough
         default: // targets : blah blah blah
                 targets := l.pop().node
+                targets.kind = nodeTargets
 
                 st := l.push(t, l.stateAppendNode, 0)
                 st.node.children = []*node{ targets }
@@ -586,7 +586,7 @@ state_loop:
                                 st = l.push(nodeComment, l.stateComment, 0)
                                 st.node.pos-- // for the '#'
                         case '\n':
-                                if l.peek() == '\t' {
+                                if p := l.peek(); p == '\t' || p == '#' {
                                         st = l.push(nodeActions, l.stateTabbedActions, 0)
                                         //st.node.pos-- // for the '\t'
                                 }
@@ -612,7 +612,7 @@ state_loop:
                         st.node.pos-- // for the '$'
                         break state_loop
 
-                case l.rune == '#': fallthrough
+                //case l.rune == '#': fallthrough
                 case l.rune == '\n': fallthrough
                 case l.rune == rune(0): // end of string
                         a := st.node
@@ -651,6 +651,10 @@ func (l *lex) stateTabbedActions() { // tab-indented action of a rule
                         st = l.push(nodeComment, l.stateComment, 0)
                         st.node.pos-- // for the '#'
 
+                        /*
+                        lineno, colno := l.caculateLocationLineColumn(st.node.loc())
+                        fmt.Fprintf(os.Stderr, "%v:%v:%v: stateTabbedActions: %v (%v, stack=%v)\n", l.scope, lineno, colno, st.node.str(), l.top().node.kind, len(l.stack)) //*/
+
                 default:
                         a := st.node
                         a.end = l.pos
@@ -664,7 +668,7 @@ func (l *lex) stateTabbedActions() { // tab-indented action of a rule
 
                         /*
                         lineno, colno := l.caculateLocationLineColumn(st.node.loc())
-                        fmt.Fprintf(os.Stderr, "%v:%v:%v:todo: stateTabbedActions: %v (%v)\n", l.scope, lineno, colno, st.node.str(), l.top().node.kind) //*/
+                        fmt.Fprintf(os.Stderr, "%v:%v:%v: stateTabbedActions: %v (%v)\n", l.scope, lineno, colno, st.node.str(), l.top().node.kind) //*/
                 }
         }
 }
@@ -694,14 +698,6 @@ state_loop:
                         /*
                         lineno, colno := l.caculateLocationLineColumn(a.loc())
                         fmt.Fprintf(os.Stderr, "%v:%v:%v:todo: stateAction: %v (of %v)\n", l.scope, lineno, colno, a.str(), st.node.kind) //*/
-
-                        if l.rune == '\n' {
-                                switch next := l.peek(); {
-                                case next == '#':
-                                        st = l.push(nodeComment, l.stateComment, 0)
-                                        st.node.pos-- // for the '#'
-                                }
-                        }
                         break state_loop
                 }
         }

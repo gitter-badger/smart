@@ -523,20 +523,35 @@ blah : blah.c
                 if cn != len(cs) { t.Errorf("%v: expecting at least %v children, but got %v", i, len(cs), cn) }
         }
 
-        var cc *node
-
+        var (
+                cc, cx *node
+                ex nodeType
+        )
         i = 0; c = l.nodes[i]; checkNode(c, nodeRuleSingleColoned, 2, `:`, `foobar`, `foo bar blah`)
-        cc = c.children[0]; checkNode(cc, nodeImmediateText, 0, `foobar`)
+        cc = c.children[0]; checkNode(cc, nodeTargets, 0, `foobar`)
         cc = c.children[1]; checkNode(cc, nodePrerequisites, 0, `foo bar blah`)
 
         i = 1; c = l.nodes[i]; checkNode(c, nodeRuleSingleColoned, 3, `:`, `foo`, "foo.c", "gcc -c $< -o $@")
-        cc = c.children[0]; checkNode(cc, nodeImmediateText, 0, `foo`)
+        cc = c.children[0]; checkNode(cc, nodeTargets, 0, `foo`)
         cc = c.children[1]; checkNode(cc, nodePrerequisites, 0, "foo.c")
 
         i = 2; c = l.nodes[i]; checkNode(c, nodeRuleSingleColoned, 3, `:`, `bar`, "bar.c", "\t# this is command line comment\n# this is script comment being ignored\n\t@echo \"compiling...\"\n\t@gcc -c $< -o $@\n")
-        cc = c.children[0]; checkNode(cc, nodeImmediateText, 0, `bar`)
+        cc = c.children[0]; checkNode(cc, nodeTargets, 0, `bar`)
         cc = c.children[1]; checkNode(cc, nodePrerequisites, 0, "bar.c")
         cc = c.children[2]; checkNode(cc, nodeActions, 4, "\t# this is command line comment\n# this is script comment being ignored\n\t@echo \"compiling...\"\n\t@gcc -c $< -o $@\n", "# this is command line comment", "# this is script comment being ignored", "@echo \"compiling...\"", "@gcc -c $< -o $@")
+        if ex = nodeActions; cc.kind != ex { t.Errorf("expecting %v but %v", ex, cc.kind) }
+        if cx, ex = cc.children[0], nodeAction;  cx.kind != ex { t.Errorf("expecting %v but %v", ex, cx.kind) } else {
+                if s, ss := cx.str(), "# this is command line comment"; s != ss { t.Errorf("expecting %v but %v", ss, s) }
+        }
+        if cx, ex = cc.children[1], nodeComment; cx.kind != ex { t.Errorf("expecting %v but %v", ex, cx.kind) } else {
+                if s, ss := cx.str(), "# this is script comment being ignored"; s != ss { t.Errorf("expecting %v but %v", ss, s) }
+        }
+        if cx, ex = cc.children[2], nodeAction;  cx.kind != ex { t.Errorf("expecting %v but %v", ex, cx.kind) } else {
+                if s, ss := cx.str(), "@echo \"compiling...\""; s != ss { t.Errorf("expecting %v but %v", ss, s) }
+        }
+        if cx, ex = cc.children[3], nodeAction;  cx.kind != ex { t.Errorf("expecting %v but %v", ex, cx.kind) } else {
+                if s, ss := cx.str(), "@gcc -c $< -o $@"; s != ss { t.Errorf("expecting %v but %v", ss, s) }
+        }
 }
 
 func TestParse(t *testing.T) {
