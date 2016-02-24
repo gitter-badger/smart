@@ -393,13 +393,14 @@ state_loop:
                         }
 
                 case l.rune == ':':
-                        if l.peek() == '=' {
+                        if r := l.peek(); r == '=' {
                                 l.get() // consume the '=' for ':='
                                 l.top().code = int(nodeDefineSingleColoned)
                                 l.step = l.stateDefine
                         } else {
                                 l.top().node.end = l.backwardNonSpace(l.pos-1)
                                 l.step = l.stateRule
+                                //fmt.Fprintf(os.Stderr, "line head text: %v (%v)\n", l.top().node.str(), string(r))
                         }
                         break state_loop
 
@@ -510,11 +511,6 @@ func (l *lex) escapeTextLine(t *node) {
 func (l *lex) stateRule() {
         r, t, n := l.peek(), nodeRuleSingleColoned, 1 // Assuming single colon.
         switch {
-        case r == '\n': // targets :
-                l.get() // drop the '\n'
-                targets := l.pop().node
-                l.nodes = append(l.nodes, targets) // append the single-coloned-define
-
         case r == ':': // targets :: blah blah blah
                 l.get() // drop the ':'
                 if l.peek() == '=' {
@@ -524,7 +520,12 @@ func (l *lex) stateRule() {
                         return
                 }
                 t, n = nodeRuleDoubleColoned, 2; fallthrough
+        case r == '\n': fallthrough // targets :
         default: // targets : blah blah blah
+                if r == '\n' {
+                        l.get() // drop the '\n'
+                }
+
                 targets := l.pop().node
                 targets.kind = nodeTargets
 
@@ -537,7 +538,7 @@ func (l *lex) stateRule() {
 
                 /*
                 lineno, colno := l.caculateLocationLineColumn(st.node.loc())
-                fmt.Fprintf(os.Stderr, "%v:%v:%v:todo: stateRule: %v\n", l.scope, lineno, colno, st.node.children[0].str()) //*/
+                fmt.Fprintf(os.Stderr, "%v:%v:%v: stateRule: %v\n", l.scope, lineno, colno, st.node.children[0].str()) //*/
         }
 }
 
@@ -545,7 +546,7 @@ func (l *lex) stateRuleTextLine() {
         st := l.top()
 state_loop:
         for l.get() {
-                if st.code == 0 && !unicode.IsSpace(l.rune) { // skip spaces after ':' or '::'
+                if st.code == 0 && (l.rune == '\n' || !unicode.IsSpace(l.rune)) { // skip spaces after ':' or '::'
                         st.node.pos, st.code = l.pos-1, 1
                 }
 
@@ -573,7 +574,7 @@ state_loop:
 
                         /*
                         lineno, colno := l.caculateLocationLineColumn(st.node.loc())
-                        fmt.Fprintf(os.Stderr, "%v:%v:%v:todo: stateRuleTextLine: %v\n", l.scope, lineno, colno, st.node.str()) //*/
+                        fmt.Fprintf(os.Stderr, "%v:%v:%v: stateRuleTextLine: %v\n", l.scope, lineno, colno, st.node.str()) //*/
 
                         st = l.pop() // pop out the node
 
