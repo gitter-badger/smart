@@ -477,12 +477,15 @@ bar: bar.c
 baz:bar
 zz::foo
 
+a:
+	echo blah blah
+
 blah : blah.c
 	gcc -c $< -o $@
 `)
         l.parse()
 
-        if ex, n := 6, len(l.nodes); n != ex { t.Errorf("expecting %v nodes but got %v", ex, n) }
+        if ex, n := 7, len(l.nodes); n != ex { t.Errorf("expecting %v nodes but got %v", ex, n) }
         
         var (
                 countRuleSingleColoned = 0
@@ -495,7 +498,7 @@ blah : blah.c
                 case nodeRuleDoubleColoned:     countRuleDoubleColoned++
                 }
         }
-        if ex := 5; countRuleSingleColoned != ex          { t.Errorf("expecting %v %v nodes, but got %v", ex, nodeRuleSingleColoned,      countRuleSingleColoned) }
+        if ex := 6; countRuleSingleColoned != ex          { t.Errorf("expecting %v %v nodes, but got %v", ex, nodeRuleSingleColoned,      countRuleSingleColoned) }
         if ex := 1; countRuleDoubleColoned != ex          { t.Errorf("expecting %v %v nodes, but got %v", ex, nodeRuleDoubleColoned,      countRuleDoubleColoned) }
         if n := countRuleSingleColoned+countRuleDoubleColoned; len(l.nodes) != n {
                 t.Errorf("expecting %v nodes totally, but got %v", len(l.nodes), n)
@@ -552,6 +555,11 @@ blah : blah.c
         if cx, ex = cc.children[3], nodeAction;  cx.kind != ex { t.Errorf("expecting %v but %v", ex, cx.kind) } else {
                 if s, ss := cx.str(), "@gcc -c $< -o $@"; s != ss { t.Errorf("expecting %v but %v", ss, s) }
         }
+
+        i = 3; c = l.nodes[i]; checkNode(c, nodeRuleSingleColoned, 2, `:`, `baz`, "bar")
+        i = 4; c = l.nodes[i]; checkNode(c, nodeRuleDoubleColoned, 2, `::`, `zz`, "foo")
+        i = 5; c = l.nodes[i]; checkNode(c, nodeRuleSingleColoned, 3, `:`, `a`, "", "\techo blah blah\n")
+        i = 6; c = l.nodes[i]; checkNode(c, nodeRuleSingleColoned, 3, `:`, `blah`, "blah.c", "\tgcc -c $< -o $@\n")
 }
 
 func TestParse(t *testing.T) {
@@ -697,14 +705,26 @@ $(module test)
 foo:
 	@echo "$..$@"
 
+foobar: foo
+	@echo "$..$@ : $<"
+
 $(commit)
 `);     if err != nil { t.Errorf("parse error:", err) }
 
         if ctx.modules == nil { t.Errorf("nil modules") }
+        if _, ok := ctx.rules["foo"]; ok { t.Errorf("foo defined in context") }
         if m, ok := ctx.modules["test"]; !ok || m == nil { t.Errorf("nil 'test' module") } else {
-                /// ...
+                if r, ok := m.rules["foo"]; !ok { t.Errorf("foo not defined in %v", m.GetName(ctx)) } else {
+                        if n := len(r.targets); n != 1 { t.Errorf("incorrect number of targets: %v %v", n, r.targets) }
+                        if n := len(r.prerequisites); n != 0 { t.Errorf("incorrect number of prerequisites: %v %v", n, r.prerequisites) }
+                        if n := len(r.actions); n != 1 { t.Errorf("incorrect number of actions: %v %v", n, r.actions) }
+                }
+                if r, ok := m.rules["foobar"]; !ok { t.Errorf("foobar not defined in %v", m.GetName(ctx)) } else {
+                        if n := len(r.targets); n != 1 { t.Errorf("incorrect number of targets: %v %v", n, r.targets) }
+                        if n := len(r.prerequisites); n != 1 { t.Errorf("incorrect number of prerequisites: %v %v", n, r.prerequisites) }
+                        if n := len(r.actions); n != 1 { t.Errorf("incorrect number of actions: %v %v", n, r.actions) }
+                }
         }
-
         if s := info.String(); s != `` { t.Errorf("info: '%s'", s) }
 }
 

@@ -23,6 +23,12 @@ type define struct {
         loc location
 }
 
+type rule struct {
+        targets, prerequisites []string
+        actions []interface{} // *node, string
+        node *node
+}
+
 type nodeType int
 
 const (
@@ -523,7 +529,7 @@ func (l *lex) stateRule() {
         case r == '\n': fallthrough // targets :
         default: // targets : blah blah blah
                 if r == '\n' {
-                        l.get() // drop the '\n'
+                        //l.get() // drop the '\n'
                 }
 
                 targets := l.pop().node
@@ -563,8 +569,8 @@ state_loop:
                         st.node.pos-- // for the '$'
                         break state_loop
 
-                case l.rune == '#': fallthrough
-                case l.rune == ';': fallthrough
+                case l.rune == '#':  fallthrough
+                case l.rune == ';':  fallthrough
                 case l.rune == '\n': fallthrough
                 case l.rune == rune(0): // end of string
                         st.node.end = l.pos
@@ -798,8 +804,11 @@ type Context struct {
         l *lex // the current lexer
         m *Module // the current module being processed
 
-        // variables holds the context
+        // variables in the context
         defines map[string]*define
+
+        // rules in the context
+        rules map[string]*rule
 
         modules map[string]*Module
         moduleOrderList []*Module
@@ -1093,6 +1102,8 @@ func (ctx *Context) expandNode(n *node) string {
         case nodeCallArg:       fallthrough
         case nodeCallName:      fallthrough
         case nodeDeferredText:  fallthrough
+        case nodeTargets:       fallthrough
+        case nodePrerequisites: fallthrough
         case nodeImmediateText:
                 if nc == 0 { return n.str() }
 
@@ -1115,7 +1126,25 @@ func (ctx *Context) expandNode(n *node) string {
 }
 
 func (ctx *Context) processNode(n *node) (err error) {
+        /*
+        lineno, colno := ctx.l.caculateLocationLineColumn(n.loc())
+        fmt.Fprintf(os.Stderr, "%v:%v:%v: '%v'\n", ctx.l.scope, lineno, colno, n.kind) //*/
+
         switch n.kind {
+        case nodeCall:
+                if s := strings.TrimSpace(ctx.expandNode(n)); s != "" {
+                        lineno, colno := ctx.l.caculateLocationLineColumn(n.loc())
+                        fmt.Fprintf(os.Stderr, "%v:%v:%v: illigal: '%v'\n",
+                                ctx.l.scope, lineno, colno, s)
+                }
+
+        case nodeImmediateText:
+                if s := strings.TrimSpace(ctx.expandNode(n)); s != "" {
+                        lineno, colno := ctx.l.caculateLocationLineColumn(n.loc())
+                        fmt.Fprintf(os.Stderr, "%v:%v:%v: syntax error: '%v'\n",
+                                ctx.l.scope, lineno, colno, s)
+                }
+
         case nodeDefineQuestioned:
                 if name := ctx.expandNode(n.children[0]); ctx.call(n.loc(), name) == "" {
                         ctx.set(name, n)
@@ -1153,25 +1182,31 @@ func (ctx *Context) processNode(n *node) (err error) {
         case nodeDefineNot:
                 panic("'!=' not implemented")
 
-        case nodeCall:
-                if s := strings.TrimSpace(ctx.expandNode(n)); s != "" {
-                        lineno, colno := ctx.l.caculateLocationLineColumn(n.loc())
-                        fmt.Fprintf(os.Stderr, "%v:%v:%v: illigal: '%v'\n",
-                                ctx.l.scope, lineno, colno, s)
-                }
-
-        case nodeImmediateText:
-                if s := strings.TrimSpace(ctx.expandNode(n)); s != "" {
-                        lineno, colno := ctx.l.caculateLocationLineColumn(n.loc())
-                        fmt.Fprintf(os.Stderr, "%v:%v:%v: syntax error: '%v'\n",
-                                ctx.l.scope, lineno, colno, s)
-                }
-
-        case nodeRuleSingleColoned:
+        case nodeRuleSingleColoned: fallthrough
         case nodeRuleDoubleColoned:
+                r := &rule{
+                        targets:Split(ctx.expandNode(n.children[0])),
+                        prerequisites:Split(ctx.expandNode(n.children[1])),
+                        node:n,
+                }
+                if 2 < len(n.children) {
+                        for c, _ := range n.children[2].children {
+                                r.actions = append(r.actions, c)
+                        }
+                }
+
+                // Map each target to the new rule.
+                for _, s := range r.targets {
+                        if ctx.m != nil {
+                                ctx.m.rules[s] = r
+                        } else {
+                                ctx.rules[s] = r
+                        }
+                }
+
+                /*
                 lineno, colno := ctx.l.caculateLocationLineColumn(n.loc())
-                fmt.Fprintf(os.Stderr, "%v:%v:%v:TODO: not implemented\n",
-                        ctx.l.scope, lineno, colno)
+                fmt.Fprintf(os.Stderr, "%v:%v:%v: %v\n", ctx.l.scope, lineno, colno, n.kind) //*/
 
         default:
                 panic(n.kind.String()+" not implemented")
@@ -1249,8 +1284,9 @@ func (ctx *Context) include(fn string) (err error) {
 func NewContext(scope string, s []byte, vars map[string]string) (ctx *Context, err error) {
         ctx = &Context{
                 l: &lex{ parseBuffer:&parseBuffer{ scope:scope, s: s }, pos: 0 },
-                defines: make(map[string]*define, len(vars) + 32),
+                defines: make(map[string]*define, len(vars) + 16),
                 modules: make(map[string]*Module, 8),
+                rules: make(map[string]*rule, 8),
         }
 
         for k, v := range vars {

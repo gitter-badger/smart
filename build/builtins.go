@@ -103,7 +103,8 @@ func builtinModule(ctx *Context, loc location, args []string) (s string) {
                 m = &Module{
                         l: nil,
                         Toolset: toolset,
-                        defines: make(map[string]*define, 32),
+                        defines: make(map[string]*define, 8),
+                        rules: make(map[string]*rule, 4),
                 }
                 ctx.modules[name] = m
                 ctx.moduleOrderList = append(ctx.moduleOrderList, m)
@@ -196,7 +197,8 @@ func builtinUse(ctx *Context, loc location, args []string) string {
                                 // '$(use)' and not really declared yet.
                                 l: nil,
                                 UsedBy: []*Module{ ctx.m },
-                                defines: make(map[string]*define, 32),
+                                defines: make(map[string]*define, 8),
+                                rules: make(map[string]*rule, 4),
                         }
                         ctx.m.Using = append(ctx.m.Using, m)
                         ctx.modules[a] = m

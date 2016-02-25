@@ -445,6 +445,7 @@ type Module struct {
         Using, UsedBy []*Module
         Updated bool // marked as 'true' if module is updated
         defines map[string]*define
+        rules map[string]*rule
         declareLoc, commitLoc location // where does it defined and commit (could be nil)
         //x *Context // the context of the module
         l *lex // the lex scope where does it defined (could be nil)
