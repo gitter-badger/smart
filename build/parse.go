@@ -721,7 +721,7 @@ func (l *lex) stateDollar() {
                 case l.rune == '{': l.push(nodeCallName, l.stateCallName, 0).delm = '}'
                 default:
                         name := l.new(nodeCallName)
-                        name.end = l.pos
+                        name.pos = l.pos - 1 // include the single char
                         st := l.top() // nodeCall
                         st.node.children = append(st.node.children, name)
                         l.endCall(st, 0)
