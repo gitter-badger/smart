@@ -287,6 +287,34 @@ func (l *lex) top() *lexStack {
         return nil
 }
 
+/*
+func (l *lex) forward(i, n int) int {
+        for x = len(l.s); i < x && 0 < n {
+                r, l := utf8.DecodeLastRune(l.s[0:i])
+                if unicode.IsSpace(r) {
+                        i += l
+                } else {
+                        break
+                }
+                n--
+        }
+        return i
+}
+
+func (l *lex) backward(i, n int) int {
+        for 0 < i && 0 < n {
+                r, l := utf8.DecodeLastRune(l.s[0:i])
+                if unicode.IsSpace(r) {
+                        i -= l
+                } else {
+                        break
+                }
+                n--
+        }
+        return i
+}
+*/
+
 func (l *lex) backwardNonSpace(i int) int {
         for 0 < i {
                 r, l := utf8.DecodeLastRune(l.s[0:i])
@@ -790,21 +818,15 @@ func (l *lex) endCall(st *lexStack, off int) {
         call := st.node
         call.end = l.pos //- off
 
-        //fmt.Fprintf(os.Stderr, "%v: '%v'\n", call.kind, call.str())
+        /*
+        lineno, colno := l.caculateLocationLineColumn(call.loc())
+        fmt.Fprintf(os.Stderr, "%v:%v:%v: %v (of %v)\n", l.scope, lineno, colno, call.str(), st.node.kind) //*/
 
         l.pop() // pop out the current nodeCall
 
+        // Append the call to it's parent.
         t := l.top().node
-        switch t.kind {
-        case nodeDeferredText: fallthrough
-        case nodeImmediateText:
-                t.children = append(t.children, call)
-        default:
-                // Add to the last child.
-                i := len(t.children)-1
-                if 0 <= i { t = t.children[i] }
-                t.children = append(t.children, call)
-        }
+        t.children = append(t.children, call)
 }
 
 /*
