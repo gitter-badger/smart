@@ -43,6 +43,9 @@ type toolset interface {
 
         // UseModule lets a toolset decides how to use a module.
         UseModule(p *Context, o *Module) bool
+
+        // Call toolset variable.
+        Call(p *Context, name string, args ...string) string
 }
 
 type toolsetStub struct {
@@ -70,6 +73,10 @@ func (tt *BasicToolset) CreateActions(ctx *Context) bool {
 
 func (tt *BasicToolset) UseModule(ctx *Context, o *Module) bool {
         return false
+}
+
+func (tt *BasicToolset) Call(p *Context, name string, args ...string) string {
+        return ""
 }
 
 func IsIA32Command(s string) bool {

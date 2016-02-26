@@ -51,6 +51,8 @@ const (
         nodeAction
         nodeCall
         nodeCallName
+        nodeCallNamePrefix
+        nodeCallNamePart
         nodeCallArg
 )
 
@@ -114,6 +116,8 @@ var (
                 nodeAction:                     "action",
                 nodeCall:                       "call",
                 nodeCallName:                   "call-name",
+                nodeCallNamePrefix:             "call-name-prefix",
+                nodeCallNamePart:               "call-name-part",
                 nodeCallArg:                    "call-arg",
         }
 )
@@ -711,12 +715,103 @@ state_loop:
 }
 
 func (l *lex) stateDollar() {
-        st := l.top() // nodeCall 
-        st.node.children = []*node{ l.new(nodeCallName) }
-
-        l.step = l.stateCallee
+        if l.get() {
+                switch {
+                case l.rune == '(': l.push(nodeCallName, l.stateCallName, 0).delm = ')'
+                case l.rune == '{': l.push(nodeCallName, l.stateCallName, 0).delm = '}'
+                default:
+                        name := l.new(nodeCallName)
+                        name.end = l.pos
+                        st := l.top() // nodeCall
+                        st.node.children = append(st.node.children, name)
+                        l.endCall(st, 0)
+                }
+        }
 }
 
+func (l *lex) stateCallName() {
+        st := l.top() // Must be a nodeCallName.
+        delm := st.delm
+state_loop:
+        for l.get() {
+                switch {
+                case l.rune == '$':
+                        l.push(nodeCall, l.stateDollar, 0).node.pos-- // 'pos--' for the '$'
+                        break state_loop
+                case l.rune == '\\':
+                        l.escapeTextLine(st.node)
+                case l.rune == ' ': fallthrough
+                case l.rune == delm:
+                        name := st.node
+                        name.end = l.pos - 1
+                        l.pop()
+                        
+                        st = l.top()
+                        st.node.children = append(st.node.children, name)
+                        switch l.rune {
+                        case delm:
+                                l.endCall(st, 1)
+                        case ' ':
+                                l.push(nodeCallArg, l.stateCallArg, 0).delm = delm
+                        }
+                        break state_loop
+                }
+        }
+}
+
+func (l *lex) stateCallArg() {
+        st := l.top() // Must be a nodeCallArg.
+        delm := st.delm
+state_loop:
+        for l.get() {
+                switch {
+                case l.rune == '$':
+                        l.push(nodeCall, l.stateDollar, 0).node.pos-- // 'pos--' for the '$'
+                        break state_loop
+                case l.rune == ',': fallthrough
+                case l.rune == delm:
+                        arg := st.node
+                        arg.end = l.pos - 1
+                        l.pop()
+
+                        st = l.top()
+                        st.node.children = append(st.node.children, arg)
+                        if l.rune == delm {
+                                l.endCall(st, 1)
+                        } else {
+                                l.push(nodeCallArg, l.stateCallArg, 0).delm = delm
+                        }
+                        break state_loop
+                }
+        }
+}
+
+func (l *lex) endCall(st *lexStack, off int) {
+        call := st.node
+        call.end = l.pos //- off
+
+        //fmt.Fprintf(os.Stderr, "%v: '%v'\n", call.kind, call.str())
+
+        l.pop() // pop out the current nodeCall
+
+        t := l.top().node
+        switch t.kind {
+        case nodeDeferredText: fallthrough
+        case nodeImmediateText:
+                t.children = append(t.children, call)
+        default:
+                // Add to the last child.
+                i := len(t.children)-1
+                if 0 <= i { t = t.children[i] }
+                t.children = append(t.children, call)
+        }
+}
+
+/*
+stateDollar:
+        st.node.children = []*node{ l.new(nodeCallName) }
+        l.step = l.stateCallee 
+*/
 func (l *lex) stateCallee() {
         const ( init int = iota; name; args )
         st := l.top() // Must be a nodeCall.
