@@ -32,8 +32,15 @@ var (
         }
 )
 
+type scope interface {
+        // Call toolset variable.
+        Call(p *Context, ids []string, args ...string) string
+}
+
 // toolset represents a toolchain like gcc and related utilities.
 type toolset interface {
+        scope
+
         // ConfigModule setup the current module being processed.
         // `args' and `vars' is passed in on the `$(module)' invocation.
         ConfigModule(p *Context, args []string, vars map[string]string)
@@ -43,9 +50,6 @@ type toolset interface {
 
         // UseModule lets a toolset decides how to use a module.
         UseModule(p *Context, o *Module) bool
-
-        // Call toolset variable.
-        Call(p *Context, name string, args ...string) string
 }
 
 type toolsetStub struct {
@@ -75,8 +79,8 @@ func (tt *BasicToolset) UseModule(ctx *Context, o *Module) bool {
         return false
 }
 
-func (tt *BasicToolset) Call(p *Context, name string, args ...string) string {
-        return ""
+func (tt *BasicToolset) Call(p *Context, ids []string, args ...string) string {
+        return "xx"
 }
 
 func IsIA32Command(s string) bool {

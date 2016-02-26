@@ -51,8 +51,8 @@ const (
         nodeAction
         nodeCall
         nodeCallName
-        nodeCallNamePrefix
-        nodeCallNamePart
+        nodeCallNamePrefix      // :
+        nodeCallNamePart        // .
         nodeCallArg
 )
 
@@ -766,6 +766,15 @@ state_loop:
                 case l.rune == '$':
                         l.push(nodeCall, l.stateDollar, 0).node.pos-- // 'pos--' for the '$'
                         break state_loop
+                case l.rune == ':' && st.code == 0:
+                        prefix := l.new(nodeCallNamePrefix)
+                        prefix.pos = l.pos - 1
+                        st.node.children = append(st.node.children, prefix)
+                        st.code++
+                case l.rune == '.':
+                        part := l.new(nodeCallNamePart)
+                        part.pos = l.pos - 1
+                        st.node.children = append(st.node.children, part)
                 case l.rune == '\\':
                         l.escapeTextLine(st.node)
                 case l.rune == ' ': fallthrough
@@ -773,7 +782,7 @@ state_loop:
                         name := st.node
                         name.end = l.pos - 1
                         l.pop()
-                        
+
                         st = l.top()
                         st.node.children = append(st.node.children, name)
                         switch l.rune {
@@ -796,6 +805,8 @@ state_loop:
                 case l.rune == '$':
                         l.push(nodeCall, l.stateDollar, 0).node.pos-- // 'pos--' for the '$'
                         break state_loop
+                case l.rune == '\\':
+                        l.escapeTextLine(st.node)
                 case l.rune == ',': fallthrough
                 case l.rune == delm:
                         arg := st.node
@@ -1070,51 +1081,65 @@ func (ctx *Context) Set(name string, a ...interface{}) {
         ctx.set(name, a...)
 }
 
-// TODO: leveled-module call: $(module1.child1.var)
 func (ctx *Context) call(loc location, name string, args ...string) string {
-        vars := ctx.defines
+        if i := strings.Index(name, ":"); 0 <= i {
+                return ctx.callScoped(loc, name[0:i], strings.Split(name[i+1:], "."), args...)
+        }
+        return ctx.callMultipart(loc, strings.Split(name, "."), args...)
+}
 
-        switch {
-        default:
-                if f, ok := builtins[name]; ok {
-                        /*
-                        defer func() {
-                                // Process smarterror to dump error message with location.
-                                if e := recover(); e != nil {
-                                        fmt.Printf("called: %v (%v)\n", name, e)
-                                        if se, ok := e.(*smarterror); ok {
-                                                lineno, colno := ctx.l.getLineColumn()
-                                                fmt.Printf("%v:%v:%v: %v\n", ctx.l.scope, lineno, colno, se.message)
-                                                os.Exit(-2)
-                                        } else {
-                                                panic(e)
-                                        }
-                                }
-                        }() */
-                        // Expand all arguments.
-                        for i := range args { args[i] = ctx.expand(loc, args[i]) }
-                        return f(ctx, loc, args)
-                } else if *flagW {
+func (ctx *Context) callScoped(loc location, name string, parts []string, args ...string) (s string) {
+        if ts, ok := toolsets[name]; ok && ts != nil {
+                s = ts.toolset.Call(ctx, parts, args...)
+        } else {
+                errorf("'%v:%v' is undefined", name, strings.Join(parts, "."))
+        }
+        return
+}
+
+func (ctx *Context) callMultipart(loc location, parts []string, args ...string) string {
+        num := len(parts)
+        vars, name := ctx.defines, parts[num-1]
+
+        if num == 1 { // single part name
+                switch {
+                default:
+                        if f, ok := builtins[name]; ok {
+                                // Expand all arguments.
+                                //fmt.Printf("%v: %v\n", name, args)
+                                //for i := range args { args[i] = ctx.expand(loc, args[i]) }
+                                //fmt.Printf("%v: %v\n", name, args)
+                                return f(ctx, loc, args)
+                        } else if *flagW {
+                                lineno, colno := ctx.l.caculateLocationLineColumn(loc)
+                                fmt.Printf("%v:%v:%v:warning: `%v' undefined\n", ctx.l.scope, lineno, colno, name)
+                        }
+                case name == "$": return "$";
+                case name == "call":
+                        if 0 < len(args) {
+                                return ctx.call(loc, args[0], args[1:]...)
+                        }
+                        return ""
+                case name == "me":
+                        if ctx.m != nil {
+                                return ctx.m.GetName(ctx) //return ctx.m.Get(ctx, "dir")
+                        }
+                        return ""
+                }
+        } else if parts[0] == "me" {
+                // TODO: leveled-module call: $(module1.child1.var)
+                if ctx.m == nil {
                         lineno, colno := ctx.l.caculateLocationLineColumn(loc)
-                        fmt.Printf("%v:%v:%v:warning: `%v' undefined\n", ctx.l.scope, lineno, colno, name)
+                        fmt.Printf("%v:%v:%v:warning: `me.%v' undefined (me is nil)\n", ctx.l.scope, lineno, colno, name)
+                } else {
+                        vars = ctx.m.defines
+                        parts = parts[1:]
                 }
-        case name == "$": return "$";
-        case name == "call":
-                if 0 < len(args) {
-                        return ctx.call(loc, args[0], args[1:]...)
-                }
-                return ""
-        case name == "me":
-                if ctx.m != nil {
-                        return ctx.m.GetName(ctx) //return ctx.m.Get(ctx, "dir")
-                }
-                return ""
-        case strings.HasPrefix(name, meDot) && ctx.m != nil:
-                vars, name = ctx.m.defines, strings.TrimPrefix(name, meDot)
         }
 
         if vars != nil {
                 if d, ok := vars[name]; ok && d != nil {
+                        //fmt.Printf("me: %v (%v)\n", name, ctx.getDefineValue(d))
                         return ctx.getDefineValue(d)
                 }
         }
@@ -1198,45 +1223,72 @@ func (ctx *Context) set(name string, a ...interface{}) (v *define) {
         return
 }
 
+func (ctx *Context) multipart(n *node) (*bytes.Buffer, []int) {
+        b, l, pos, parts := new(bytes.Buffer), n.l, n.pos, []int{ -1 }
+        for _, c := range n.children {
+                if pos < c.pos { b.Write(l.s[pos:c.pos]) }; pos = c.end
+                switch c.kind {
+                case nodeCallNamePrefix: b.WriteString(":"); parts[0] = b.Len()
+                case nodeCallNamePart:   b.WriteString("."); parts = append(parts, b.Len())
+                default:   b.WriteString(ctx.expandNode(c))
+                }
+        }
+        if pos < n.end {
+                b.Write(l.s[pos:n.end])
+        }
+        return b, parts
+}
+
 func (ctx *Context) expandNode(n *node) string {
         nc := len(n.children)
 
         switch n.kind {
         case nodeEscape:
-                switch i := n.pos + 1; ctx.l.s[i] {
+                switch ctx.l.s[n.pos + 1] {
                 case '\n': return " "
                 case '#':  return "#"
                 }
                 return ""
 
         case nodeCall:
-                name, args := ctx.expandNode(n.children[0]), []string{}
+                var parts, args []string
                 for _, an := range n.children[1:] {
                         args = append(args, ctx.expandNode(an))
                 }
-                return ctx.call(n.loc(), name, args...)
 
-        case nodeCallArg:       fallthrough
+                callScoped, pos := false, 0
+                b, i := ctx.multipart(n.children[0])
+                if 0 <= i[0] {
+                        pos, callScoped = i[0], true
+                }
+
+                for _, n := range i[1:] {
+                        parts = append(parts, string(b.Bytes()[pos:n-1]))
+                        pos = n
+                }
+                parts = append(parts, string(b.Bytes()[pos:]))
+
+                if callScoped {
+                        name := string(b.Bytes()[0:i[0]-1])
+                        return ctx.callScoped(n.loc(), name, parts, args...)
+                } else {
+                        return ctx.callMultipart(n.loc(), parts, args...)
+                }
+
         case nodeCallName:      fallthrough
+        case nodeCallArg:       fallthrough
         case nodeDeferredText:  fallthrough
         case nodeTargets:       fallthrough
         case nodePrerequisites: fallthrough
         case nodeImmediateText:
-                if nc == 0 { return n.str() }
-
-                b, l, pos := new(bytes.Buffer), n.l, n.pos
-                for _, c := range n.children {
-                        if pos < c.pos { b.Write(l.s[pos:c.pos]) }
-                        b.WriteString(ctx.expandNode(c))
-                        pos = c.end
+                if 0 < nc {
+                        b, _ := ctx.multipart(n)
+                        return b.String()
+                } else {
+                        return n.str()
                 }
-                if pos < n.end {
-                        b.Write(l.s[pos:n.end])
-                }
-                return b.String()
-
         default:
-                panic(fmt.Sprintf("TODO: %v: %v (%v)\n", n.kind, n.str(), nc))
+                panic(fmt.Sprintf("fixme: %v: %v (%v)\n", n.kind, n.str(), nc))
         }
 
         return ""

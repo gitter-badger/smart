@@ -13,6 +13,15 @@ import (
         "path/filepath"
 )
 
+type testToolset struct {
+        BasicToolset
+        tag string
+}
+
+func (tt *testToolset) Call(p *Context, ids []string, args ...string) string {
+        return fmt.Sprintf("%v:%v:%v", tt.tag, strings.Join(ids, "."), strings.Join(args, ","))
+}
+
 func newTestLex(file, s string) (l *lex) {
         l = &lex{ parseBuffer:&parseBuffer{ scope:file, s:[]byte(s) }, pos:0, }
         return
@@ -1000,15 +1009,11 @@ name = $(prefix:part1.part2.part3)
                                         c0 := c0.children[0]
                                         if a, b := c0.str(), "prefix:name"; a != b { t.Errorf("expecting %v but %v", b, a) }
                                         if a, b := c0.kind, nodeCallName; a != b { t.Errorf("expecting %v but %v", b, a) }
-                                        if a, b := len(c0.children), 2; a != b { t.Errorf("expecting %v but %v", b, a) } else {
-                                                c0, c1 := c0.children[0], c0.children[1]
-                                                if a, b := c0.str(), "prefix"; a != b { t.Errorf("expecting %v but %v", b, a) }
+                                        if a, b := len(c0.children), 1; a != b { t.Errorf("expecting %v but %v", b, a) } else {
+                                                c0 := c0.children[0]
+                                                if a, b := c0.str(), ":"; a != b { t.Errorf("expecting %v but %v", b, a) }
                                                 if a, b := c0.kind, nodeCallNamePrefix; a != b { t.Errorf("expecting %v but %v", b, a) }
                                                 if a, b := len(c0.children), 0; a != b { t.Errorf("expecting %v but %v", b, a) } else {
-                                                }
-                                                if a, b := c1.str(), "name"; a != b { t.Errorf("expecting %v but %v", b, a) }
-                                                if a, b := c1.kind, nodeCallNamePart; a != b { t.Errorf("expecting %v but %v", b, a) }
-                                                if a, b := len(c1.children), 0; a != b { t.Errorf("expecting %v but %v", b, a) } else {
                                                 }
                                         }
                                 }
@@ -1034,23 +1039,19 @@ name = $(prefix:part1.part2.part3)
                                         c0 := c0.children[0]
                                         if a, b := c0.str(), "prefix:part1.part2.part3"; a != b { t.Errorf("expecting %v but %v", b, a) }
                                         if a, b := c0.kind, nodeCallName; a != b { t.Errorf("expecting %v but %v", b, a) }
-                                        if a, b := len(c0.children), 4; a != b { t.Errorf("expecting %v but %v", b, a) } else {
-                                                c0, c1, c2, c3 := c0.children[0], c0.children[1], c0.children[2], c0.children[3]
-                                                if a, b := c0.str(), "prefix"; a != b { t.Errorf("expecting %v but %v", b, a) }
+                                        if a, b := len(c0.children), 3; a != b { t.Errorf("expecting %v but %v", b, a) } else {
+                                                c0, c1, c2 := c0.children[0], c0.children[1], c0.children[2]
+                                                if a, b := c0.str(), ":"; a != b { t.Errorf("expecting %v but %v", b, a) }
                                                 if a, b := c0.kind, nodeCallNamePrefix; a != b { t.Errorf("expecting %v but %v", b, a) }
                                                 if a, b := len(c0.children), 0; a != b { t.Errorf("expecting %v but %v", b, a) } else {
                                                 }
-                                                if a, b := c1.str(), "part1"; a != b { t.Errorf("expecting %v but %v", b, a) }
+                                                if a, b := c1.str(), "."; a != b { t.Errorf("expecting %v but %v", b, a) }
                                                 if a, b := c1.kind, nodeCallNamePart; a != b { t.Errorf("expecting %v but %v", b, a) }
                                                 if a, b := len(c1.children), 0; a != b { t.Errorf("expecting %v but %v", b, a) } else {
                                                 }
-                                                if a, b := c2.str(), "part2"; a != b { t.Errorf("expecting %v but %v", b, a) }
+                                                if a, b := c2.str(), "."; a != b { t.Errorf("expecting %v but %v", b, a) }
                                                 if a, b := c2.kind, nodeCallNamePart; a != b { t.Errorf("expecting %v but %v", b, a) }
                                                 if a, b := len(c2.children), 0; a != b { t.Errorf("expecting %v but %v", b, a) } else {
-                                                }
-                                                if a, b := c3.str(), "part3"; a != b { t.Errorf("expecting %v but %v", b, a) }
-                                                if a, b := c3.kind, nodeCallNamePart; a != b { t.Errorf("expecting %v but %v", b, a) }
-                                                if a, b := len(c3.children), 0; a != b { t.Errorf("expecting %v but %v", b, a) } else {
                                                 }
                                         }
                                 }
@@ -1325,7 +1326,7 @@ foo = $(info a,  ndk  , \
 `);     if err != nil { t.Errorf("parse error:", err) }
         if s := ctx.Call("foo"); s != "" { t.Errorf("foo: '%s'", s) }
         // FIXIME: if s := info.String(); s != `a,  ndk  , PLATFORM=android-9, ABI=x86 armeabi, ` { t.Errorf("info: '%s'", s) }
-        if s := info.String(); s != `a,  ndk  ,    PLATFORM=android-9,    ABI=x86 armeabi,  `+"\n" { t.Errorf("info: '%s'", s) }
+        if a, b := info.String(), "a,  ndk  ,    PLATFORM=android-9,    ABI=x86 armeabi,  \n"; a != b { t.Errorf("expects '%s' but '%s'", b, a) }
 }
 
 func TestModuleVariables(t *testing.T) {
@@ -1339,6 +1340,7 @@ func TestModuleVariables(t *testing.T) {
         ctx, err := newTestContext("TestModuleVariables", `
 $(module test)
 $(info $(me) $(me.name) $(me.dir))
+$(info $(me.export.nothing))
 $(commit)
 
 #$(module test) ## error
@@ -1354,12 +1356,12 @@ $(commit)
                 }
                 ctx.With(m, func() {
                         if s := ctx.Call("me"); s != "test" { t.Errorf("me != test (%v)", s) }
-                        if s := ctx.Call("me.dir"); s != workdir { t.Errorf("me.dir != %v (%v)", workdir, s) }
                         if s := ctx.Call("me.name"); s != "test" { t.Errorf("me.name != test (%v)", s) }
+                        if s := ctx.Call("me.dir"); s != workdir { t.Errorf("me.dir != %v (%v)", workdir, s) }
                 })
         }
 
-        if s := info.String(); s != `test test `+workdir+"\n" { t.Errorf("info: '%s'", s) }
+        if a, b := info.String(), fmt.Sprintf("test test %s\n\n", workdir); a != b { t.Errorf("expects '%v' but '%v'", b, a) }
 }
 
 func TestModuleTargets(t *testing.T) {
@@ -1416,21 +1418,28 @@ func TestToolsetVariables(t *testing.T) {
         ndk = filepath.Dir(ndk)
         sdk = filepath.Dir(filepath.Dir(sdk))
 
+        toolsets["test-sdk"] = &toolsetStub{ name:"test-sdk", toolset:&testToolset{ tag:"sdk" } }
+        toolsets["test-ndk"] = &toolsetStub{ name:"test-ndk", toolset:&testToolset{ tag:"ndk" } }
+        toolsets["test-shell"] = &toolsetStub{ name:"test-shell", toolset:&testToolset{ tag:"shell" } }
+
         _, err := newTestContext("TestToolsetVariables", `
-$(info $(shell:name))
-$(info $(android-sdk:name))
-$(info $(android-sdk:root))
-$(info $(android-sdk:support))
-$(info $(ndk-build:name))
-$(info $(ndk-build:root))
+$(info $(test-shell:name))
+$(info $(test-sdk:name))
+$(info $(test-sdk:root))
+$(info $(test-sdk:support a,b,c))
+$(info $(test-ndk:name))
+$(info $(test-ndk:root))
 `);     if err != nil { t.Errorf("parse error:", err) }
-        if v, s := info.String(), fmt.Sprintf(`shell
-android-sdk
-%s
-%s/extras/android/support
-ndk-build
-%s
-`, sdk, sdk, ndk); v != s { t.Errorf("`%s` != `%s`", v, s) }
+        if v, s := info.String(), fmt.Sprintf(`shell:name:
+sdk:name:
+sdk:root:
+sdk:support:a,b,c
+ndk:name:
+ndk:root:
+`); v != s { t.Errorf("`%s` != `%s`", v, s) }
+        delete(toolsets, "test-sdk")
+        delete(toolsets, "test-ndk")
+        delete(toolsets, "test-shell")
 }
 
 func _TestDefineToolset(t *testing.T) {
