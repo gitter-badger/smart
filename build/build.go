@@ -32,14 +32,14 @@ var (
         }
 )
 
-type scope interface {
+type scoper interface {
         // Call toolset variable.
         Call(p *Context, ids []string, args ...string) string
 }
 
 // toolset represents a toolchain like gcc and related utilities.
 type toolset interface {
-        scope
+        scoper
 
         // ConfigModule setup the current module being processed.
         // `args' and `vars' is passed in on the `$(module)' invocation.
