@@ -121,6 +121,10 @@ func builtinModule(ctx *Context, loc location, args []string) (s string) {
 
         // Reset the current module pointer.
         upper := ctx.m
+        if upper != nil {
+                upper.Children = append(upper.Children, m)
+        }
+
         ctx.m = m
 
         // Reset the lex and location (because it could be created by $(use))
