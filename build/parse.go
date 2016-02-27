@@ -1126,7 +1126,9 @@ func (ctx *Context) callMultipart(loc location, parts []string, args ...string) 
                         }
                         return ""
                 }
-        } else if parts[0] == "me" {
+        } else {
+                /*
+                if parts[0] == "me" {
                 // TODO: leveled-module call: $(module1.child1.var)
                 if ctx.m == nil {
                         lineno, colno := ctx.l.caculateLocationLineColumn(loc)
@@ -1134,12 +1136,31 @@ func (ctx *Context) callMultipart(loc location, parts []string, args ...string) 
                 } else {
                         vars = ctx.m.defines
                         parts = parts[1:]
+                } */
+                var m *Module
+                for i, s := range parts[0:num-1] {
+                        if i == 0 {
+                                switch {
+                                case s == "me": m = ctx.m
+                                default:     m, _ = ctx.modules[s]
+                                }
+                        } else {
+                                m, _ = m.Children[s]
+                        }
+                        if m == nil {
+                                lineno, colno := ctx.l.caculateLocationLineColumn(loc)
+                                fmt.Printf("%v:%v:%v:warning: `%s.%s' undefined\n", ctx.l.scope, lineno, colno,
+                                        strings.Join(parts[0:i], "."), s)
+                                break
+                        }
+                }
+                if m != nil {
+                        vars = m.defines
                 }
         }
 
         if vars != nil {
                 if d, ok := vars[name]; ok && d != nil {
-                        //fmt.Printf("me: %v (%v)\n", name, ctx.getDefineValue(d))
                         return ctx.getDefineValue(d)
                 }
         }

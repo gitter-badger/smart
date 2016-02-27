@@ -1361,7 +1361,7 @@ $(info $(test.name) $(test.dir))
                 })
         }
 
-        if a, b := info.String(), fmt.Sprintf("test test %s\n\ntest %s\n", workdir); a != b { t.Errorf("expects '%v' but '%v'", b, a) }
+        if a, b := info.String(), fmt.Sprintf("test test %s\n\ntest %s\n", workdir, workdir); a != b { t.Errorf("expects '%v' but '%v'", b, a) }
 }
 
 func TestModuleTargets(t *testing.T) {
