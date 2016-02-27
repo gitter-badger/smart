@@ -1149,8 +1149,8 @@ func (ctx *Context) callMultipart(loc location, parts []string, args ...string) 
                         }
                         if m == nil {
                                 lineno, colno := ctx.l.caculateLocationLineColumn(loc)
-                                fmt.Printf("%v:%v:%v:warning: `%s.%s' undefined\n", ctx.l.scope, lineno, colno,
-                                        strings.Join(parts[0:i], "."), s)
+                                fmt.Printf("%v:%v:%v:warning: `%s' undefined\n", ctx.l.scope, lineno, colno,
+                                        strings.Join(parts[0:i+1], "."))
                                 break
                         }
                 }
