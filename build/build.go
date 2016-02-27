@@ -455,7 +455,7 @@ type Module struct {
         Action *Action // action for building this module
         Using, UsedBy []*Module
         Updated bool // marked as 'true' if module is updated
-        Children map[]*Module
+        Children map[string]*Module
         defines map[string]*define
         rules map[string]*rule
         declareLoc, commitLoc location // where does it defined and commit (could be nil)

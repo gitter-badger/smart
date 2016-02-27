@@ -103,6 +103,7 @@ func builtinModule(ctx *Context, loc location, args []string) (s string) {
                 m = &Module{
                         l: nil,
                         Toolset: toolset,
+                        Children: make(map[string]*Module, 2),
                         defines: make(map[string]*define, 8),
                         rules: make(map[string]*rule, 4),
                 }
@@ -122,7 +123,7 @@ func builtinModule(ctx *Context, loc location, args []string) (s string) {
         // Reset the current module pointer.
         upper := ctx.m
         if upper != nil {
-                upper.Children = append(upper.Children, m)
+                upper.Children[name] = m
         }
 
         ctx.m = m
@@ -201,6 +202,7 @@ func builtinUse(ctx *Context, loc location, args []string) string {
                                 // '$(use)' and not really declared yet.
                                 l: nil,
                                 UsedBy: []*Module{ ctx.m },
+                                Children: make(map[string]*Module, 2),
                                 defines: make(map[string]*define, 8),
                                 rules: make(map[string]*rule, 4),
                         }

@@ -1342,7 +1342,7 @@ $(module test)
 $(info $(me) $(me.name) $(me.dir))
 $(info $(me.export.nothing))
 $(commit)
-
+$(info $(test.name) $(test.dir))
 #$(module test) ## error
 `);     if err != nil { t.Errorf("parse error:", err) }
 
@@ -1361,7 +1361,7 @@ $(commit)
                 })
         }
 
-        if a, b := info.String(), fmt.Sprintf("test test %s\n\n", workdir); a != b { t.Errorf("expects '%v' but '%v'", b, a) }
+        if a, b := info.String(), fmt.Sprintf("test test %s\n\ntest %s\n", workdir); a != b { t.Errorf("expects '%v' but '%v'", b, a) }
 }
 
 func TestModuleTargets(t *testing.T) {
