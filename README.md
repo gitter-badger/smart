@@ -4,11 +4,9 @@
 
 ## Overview
 
-This `smart` utility is made to ease the build process of software development.
-It's inspired by [GNU make]() (having almost the same syntax as makefile, but not guaranteed
-to be compatible [GNU make]()). It's written in [Go]().
+This `smart` utility is made to ease the build process of software development. It's inspired by [GNU make]() (having almost the same syntax as makefile, but not guaranteed to be compatible [GNU make]()). It's written in [Go]().
 
-## Example
+## Quick Example
 
 ```makefile
 $(module foo, gcc, static)
