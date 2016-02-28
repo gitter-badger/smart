@@ -16,10 +16,18 @@ import (
 type testToolset struct {
         BasicToolset
         tag string
+        vars map[string]string
 }
 
 func (tt *testToolset) Call(p *Context, ids []string, args ...string) string {
         return fmt.Sprintf("%v:%v:%v", tt.tag, strings.Join(ids, "."), strings.Join(args, ","))
+}
+
+func (tt *testToolset) Set(p *Context, ids []string, items ...interface{}) {
+        if tt.vars == nil {
+                tt.vars = make(map[string]string, 4)
+        }
+        tt.vars[strings.Join(ids, ".")] = strings.Join(p.ItemsStrings(items...), ";")
 }
 
 func newTestLex(file, s string) (l *lex) {
@@ -116,10 +124,12 @@ empty2 :=
 empty3 = 
 empty4 =    
 empty5 =	
+
+foo.bar = hierarchy
 `)
         l.parse()
 
-        if ex := 19; len(l.nodes) != ex { t.Errorf("expecting %v nodes but got %v", ex, len(l.nodes)) }
+        if ex := 20; len(l.nodes) != ex { t.Errorf("expecting %v nodes but got %v", ex, len(l.nodes)) }
 
         var (
                 countDeferredDefines = 0
@@ -139,7 +149,7 @@ empty5 =
                 case nodeDefineNot:             countNotDefines++
                 }
         }
-        if ex := 11; countDeferredDefines != ex         { t.Errorf("expecting %v %v nodes, but got %v", ex, nodeDefineDeferred,      countDeferredDefines) }
+        if ex := 12; countDeferredDefines != ex         { t.Errorf("expecting %v %v nodes, but got %v", ex, nodeDefineDeferred,      countDeferredDefines) }
         if ex := 1; countQuestionedDefines != ex        { t.Errorf("expecting %v %v nodes, but got %v", ex, nodeDefineQuestioned,    countQuestionedDefines) }
         if ex := 3; countSingleColonedDefines != ex     { t.Errorf("expecting %v %v nodes, but got %v", ex, nodeDefineSingleColoned, countSingleColonedDefines) }
         if ex := 1; countDoubleColonedDefines != ex     { t.Errorf("expecting %v %v nodes, but got %v", ex, nodeDefineDoubleColoned, countDoubleColonedDefines) }
@@ -662,6 +672,26 @@ empty5 =
                         }
                         if a, b := c1.kind, nodeDeferredText; a != b { t.Errorf("expecting %v but %v", b, a) } else {
                                 if a, b := c1.str(), ""; a != b { t.Errorf("expecting %v but %v", b, a) }
+                        }
+                }
+        }
+
+        if c, x := l.nodes[19], nodeDefineDeferred; c.kind != x { t.Errorf("expecting %v but %v", x, c.kind) } else {
+                if a, b := c.str(), "="; a != b { t.Errorf("expecting %v but %v", b, a) }
+                if a, b := len(c.children), 2; a != b { t.Errorf("expecting %v but %v", b, a) } else {
+                        c0, c1 := c.children[0], c.children[1]
+                        if a, b := c0.kind, nodeImmediateText; a != b { t.Errorf("expecting %v but %v", b, a) } else {
+                                if a, b := c0.str(), "foo.bar"; a != b { t.Errorf("expecting %v but %v", b, a) }
+                                if a, b := len(c0.children), 1; a != b { t.Errorf("expecting %v but %v", b, a) } else {
+                                        c0 := c0.children[0]
+                                        if a, b := c0.kind, nodeCallNamePart; a != b { t.Errorf("expecting %v but %v", b, a) } else {
+                                                if a, b := c0.str(), "."; a != b { t.Errorf("expecting %v but %v", b, a) }
+                                                if a, b := len(c0.children), 0; a != b { t.Errorf("expecting %v but %v", b, a) }
+                                        }
+                                }
+                        }
+                        if a, b := c1.kind, nodeDeferredText; a != b { t.Errorf("expecting %v but %v", b, a) } else {
+                                if a, b := c1.str(), "hierarchy"; a != b { t.Errorf("expecting %v but %v", b, a) }
                         }
                 }
         }
@@ -1310,6 +1340,62 @@ foobaz := foo-baz
         if s := ctx.Call("bar"); s != "bar" { t.Errorf("bar: '%s'", s) }
         if s := ctx.Call("foobar"); s != "" { t.Errorf("foobar: '%s'", s) }
         if s := ctx.Call("foobaz"); s != "foo-baz" { t.Errorf("foobaz: '%s'", s) }
+}
+
+func TestMultipartNames(t *testing.T) {
+        info, f := new(bytes.Buffer), builtinInfoFunc; defer func(){ builtinInfoFunc = f }()
+        builtinInfoFunc = func(args ...string) {
+                fmt.Fprintf(info, "%v\n", strings.Join(args, ","))
+        }
+
+        ts := &testToolset{ tag:"test" }
+        toolsets["test"] = &toolsetStub{ name:"test", toolset:ts }
+
+        ctx, err := newTestContext("TestMultipartNames", `
+test:foo = f o o
+test:foo.bar = foo bar
+
+$(module test)
+me.foo = fooo
+$(info $(me.foo))
+
+$(module a)
+me.foo = foooo
+$(info $(me.foo))
+$(commit) # test.a
+
+$(commit) # test
+
+$(info $(test.foo))
+$(info $(test.a.foo))
+$(info $(test.a.name))
+
+test.foo = FOOO
+test.a.foo = FOOOO
+$(info $(test.foo))
+$(info $(test.a.foo))
+`);     if err != nil { t.Errorf("parse error:", err) }
+        if s, x := ctx.Call("test:foo"), "test:foo:"; s != x { t.Errorf("expects '%s' but '%s'", x, s) }
+        if s, x := ctx.Call("test:foo.bar"), "test:foo.bar:"; s != x { t.Errorf("expects '%s' but '%s'", x, s) }
+        if s, x := ctx.Call("test.foo"), "FOOO"; s != x { t.Errorf("expects '%s' but '%s'", x, s) }
+        if s, x := ctx.Call("test.a.foo"), "FOOOO"; s != x { t.Errorf("expects '%s' but '%s'", x, s) }
+        if s, b := ts.vars["foo"]; !b { t.Errorf("expects 'foo'") } else {
+                if x := "f o o"; s != x { t.Errorf("expects '%s' but '%s'", x, s) }
+        }
+        if s, b := ts.vars["foo.bar"]; !b { t.Errorf("expects 'foo.bar'") } else {
+                if x := "foo bar"; s != x { t.Errorf("expects '%s' but '%s'", x, s) }
+        }
+
+        if v, s := info.String(), fmt.Sprintf(`fooo
+foooo
+fooo
+foooo
+a
+FOOO
+FOOOO
+`); v != s { t.Errorf("`%s` != `%s`", v, s) }
+
+        delete(toolsets, "test")
 }
 
 func TestContinualInCall(t *testing.T) {

@@ -144,8 +144,8 @@ func builtinModule(ctx *Context, loc location, args []string) (s string) {
 
                 //fmt.Printf("%v: %v, %v\n", name, dir, ctx.l.scope)
 
-                ctx.set("me.name", name)
-                ctx.set("me.dir", dir)
+                ctx.Set("me.name", name)
+                ctx.Set("me.dir", dir)
         }
 
         if toolset != nil {

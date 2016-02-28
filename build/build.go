@@ -35,6 +35,8 @@ var (
 type scoper interface {
         // Call toolset variable.
         Call(p *Context, ids []string, args ...string) string
+        // Set toolset variable.        
+        Set(p *Context, ids []string, items ...interface{})
 }
 
 // toolset represents a toolchain like gcc and related utilities.
@@ -80,7 +82,10 @@ func (tt *BasicToolset) UseModule(ctx *Context, o *Module) bool {
 }
 
 func (tt *BasicToolset) Call(p *Context, ids []string, args ...string) string {
-        return "xx"
+        return ""
+}
+
+func (tt *BasicToolset) Set(p *Context, ids []string, items ...interface{}) {
 }
 
 func IsIA32Command(s string) bool {

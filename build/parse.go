@@ -442,6 +442,12 @@ state_loop:
                         }
                         break state_loop
 
+                case l.rune == '.':
+                        part := l.new(nodeCallNamePart)
+                        part.pos = l.pos - 1
+                        st := l.top()
+                        st.node.children = append(st.node.children, part)
+
                 case l.rune == '#': fallthrough
                 case l.rune == '\n':
                         st := l.pop() // pop out the node
@@ -1077,8 +1083,12 @@ func (ctx *Context) Call(name string, args ...string) string {
         return ctx.call(ctx.l.location(), name, args...)
 }
 
-func (ctx *Context) Set(name string, a ...interface{}) {
-        ctx.set(name, a...)
+func (ctx *Context) Set(name string, items ...interface{}) {
+        if i := strings.Index(name, ":"); 0 <= i {
+                ctx.setScoped(name[0:i], strings.Split(name[i+1:], "."), items...)
+        } else {
+                ctx.setMultipart(strings.Split(name, "."), items...)
+        }
 }
 
 func (ctx *Context) call(loc location, name string, args ...string) string {
@@ -1127,6 +1137,7 @@ func (ctx *Context) callMultipart(loc location, parts []string, args ...string) 
                         return ""
                 }
         } else {
+                /*
                 var m *Module
                 for i, s := range parts[0:num-1] {
                         if i == 0 {
@@ -1143,8 +1154,8 @@ func (ctx *Context) callMultipart(loc location, parts []string, args ...string) 
                                         strings.Join(parts[0:i+1], "."))
                                 break
                         }
-                }
-                if m != nil {
+                } */
+                if m := ctx.getModuleMultipartName(parts); m != nil {
                         vars = m.defines
                 }
         }
@@ -1158,19 +1169,65 @@ func (ctx *Context) callMultipart(loc location, parts []string, args ...string) 
         return ""
 }
 
+func (ctx *Context) getModuleMultipartName(parts []string) (m *Module) {
+        num := len(parts)
+        for i, s := range parts[0:num-1] {
+                if i == 0 {
+                        switch {
+                        case s == "me": m = ctx.m
+                        default:     m, _ = ctx.modules[s]
+                        }
+                } else {
+                        m, _ = m.Children[s]
+                }
+                if m == nil {
+                        lineno, colno := ctx.l.caculateLocationLineColumn(ctx.l.location())
+                        fmt.Printf("%v:%v:%v:warning: `%s' undefined\n", ctx.l.scope, lineno, colno,
+                                strings.Join(parts[0:i+1], "."))
+                        break
+                }
+        }
+        return
+}
+
 func (ctx *Context) getDefineValue(d *define) string {
         b, f0, fn := new(bytes.Buffer), "%s", " %s"
         for n, i := range d.node {
                 f := f0[0:]
                 if 0 < n { f = fn[0:] }
+                /*
                 switch t := i.(type) {
                 case string:   fmt.Fprintf(b, f, t)
                 case *flatstr: fmt.Fprintf(b, f, t.s)
                 case *node:    fmt.Fprintf(b, f, ctx.expandNode(t.children[1]))
-                default: errorf("unknown supported '%v'", t)
-                }
+                default: errorf("unsupported '%v'", t)
+                } */
+                fmt.Fprintf(b, f, ctx.ItemString(i))
         }
         return b.String()
+}
+
+func (ctx *Context) ItemString(i interface{}) (s string) {
+        switch t := i.(type) {
+        case string:   s = t
+        case *flatstr: s = t.s
+        case *node:
+                if nodeDefineDeferred <= t.kind && t.kind <= nodeDefineAppend {
+                        s = ctx.expandNode(t.children[1])
+                } else {
+                        s = ctx.expandNode(t)
+                }
+        default:
+                errorf("unsupported '%v'", t)
+        }
+        return
+}
+
+func (ctx *Context) ItemsStrings(a ...interface{}) (s []string) {
+        for _, i := range a {
+                s = append(s, ctx.ItemString(i))
+        }
+        return
 }
 
 func (ctx *Context) callWith(loc location, m *Module, name string, args ...string) (s string) {
@@ -1181,20 +1238,65 @@ func (ctx *Context) callWith(loc location, m *Module, name string, args ...strin
         return
 }
 
-func (ctx *Context) get(name string) *define {
-        vars := ctx.defines
-        if strings.HasPrefix(name, meDot) && ctx.m != nil {
-                vars = ctx.m.defines
+func (ctx *Context) getMultipart(parts []string) (v *define) {
+        num := len(parts)
+        vars, name := ctx.defines, parts[num-1]
+
+        if 1 < num {
+                if m := ctx.getModuleMultipartName(parts); m != nil {
+                        vars = m.defines
+                } else {
+                        vars = nil
+                }
         }
-        if vars == nil {
-                //fmt.Printf("%v:warning: no \"me\" module\n", &loc)
-                return nil
+
+        if vars != nil {
+                v, _ = vars[name]
         }
-        v, _ := vars[name]
-        return v
+        return
 }
 
-func (ctx *Context) set(name string, a ...interface{}) (v *define) {
+func (ctx *Context) setScoped(name string, parts []string, items...interface{}) {
+        if ts, ok := toolsets[name]; ok && ts != nil {
+                ts.toolset.Set(ctx, parts, items...)
+        } else {
+                errorf("'%v:%v' is undefined", name, strings.Join(parts, "."))
+        }
+}
+
+func (ctx *Context) setMultipart(parts []string, a ...interface{}) (v *define) {
+        loc, num := ctx.l.location(), len(parts)
+        vars, name := ctx.defines, parts[num-1]
+
+        if 1 < num {
+                if m := ctx.getModuleMultipartName(parts); m != nil {
+                        vars = m.defines
+                } else {
+                        vars = nil
+                }
+        }
+
+        if vars == nil {
+                fmt.Printf("%v:warning: undefined scope '%s'\n", strings.Join(parts, "."))
+                return
+        }
+
+        var ok bool
+        if v, ok = vars[name]; !ok {
+                v = &define{}
+                vars[name] = v
+        }
+
+        if v.readonly {
+                fmt.Printf("%v:warning: `%v' is readonly\n", &loc, name)
+                return
+        }
+        
+        v.name, v.node, v.loc = name, a, loc
+        return
+}
+
+func (ctx *Context) _set(name string, a ...interface{}) (v *define) {
         loc := ctx.l.location()
 
         //fmt.Printf("set: %v, %v\n", name, a)
@@ -1250,6 +1352,22 @@ func (ctx *Context) multipart(n *node) (*bytes.Buffer, []int) {
         return b, parts
 }
 
+func (ctx *Context) expandName(n *node) (parts []string, scoped bool, name string) {
+        pos := 0
+        b, i := ctx.multipart(n)
+        if 0 <= i[0] {
+                pos, scoped = i[0], true
+                name = string(b.Bytes()[0:pos-1])
+        }
+
+        for _, n := range i[1:] {
+                parts = append(parts, string(b.Bytes()[pos:n-1]))
+                pos = n
+        }
+        parts = append(parts, string(b.Bytes()[pos:]))
+        return
+}
+
 func (ctx *Context) expandNode(n *node) string {
         nc := len(n.children)
 
@@ -1267,6 +1385,7 @@ func (ctx *Context) expandNode(n *node) string {
                         args = append(args, ctx.expandNode(an))
                 }
 
+                /*
                 callScoped, pos := false, 0
                 b, i := ctx.multipart(n.children[0])
                 if 0 <= i[0] {
@@ -1277,10 +1396,10 @@ func (ctx *Context) expandNode(n *node) string {
                         parts = append(parts, string(b.Bytes()[pos:n-1]))
                         pos = n
                 }
-                parts = append(parts, string(b.Bytes()[pos:]))
-
+                parts = append(parts, string(b.Bytes()[pos:])) */
+                parts, callScoped, name := ctx.expandName(n.children[0])
                 if callScoped {
-                        name := string(b.Bytes()[0:i[0]-1])
+                        //name := string(b.Bytes()[0:i[0]-1])
                         return ctx.callScoped(n.loc(), name, parts, args...)
                 } else {
                         return ctx.callMultipart(n.loc(), parts, args...)
@@ -1326,20 +1445,35 @@ func (ctx *Context) processNode(n *node) (err error) {
                 }
 
         case nodeDefineQuestioned:
-                if name := ctx.expandNode(n.children[0]); ctx.call(n.loc(), name) == "" {
-                        ctx.set(name, n)
+                parts, scoped, name := ctx.expandName(n.children[0])
+                if scoped {
+                        if ctx.callScoped(n.loc(), name, parts) == "" {
+                                ctx.setScoped(name, parts, n)
+                        }
+                } else if ctx.callMultipart(n.loc(), parts) == "" {
+                        ctx.setMultipart(parts, n)
                 }
 
         case nodeDefineDeferred:
-                name := ctx.expandNode(n.children[0])
-                ctx.set(name, n)
+                parts, scoped, name := ctx.expandName(n.children[0])
+                if scoped {
+                        ctx.setScoped(name, parts, n)
+                } else {
+                        ctx.setMultipart(parts, n)
+                }
 
         case nodeDefineSingleColoned: fallthrough
         case nodeDefineDoubleColoned:
-                name := ctx.expandNode(n.children[0])
-                ctx.set(name, ctx.expandNode(n.children[1]))
+                parts, scoped, name := ctx.expandName(n.children[0])
+                str := ctx.expandNode(n.children[1])
+                if scoped {
+                        ctx.setScoped(name, parts, str)
+                } else {
+                        ctx.setMultipart(parts, str)
+                }
 
         case nodeDefineAppend:
+                /*
                 name := ctx.expandNode(n.children[0])
                 if d := ctx.get(name); d != nil {
                         deferred := true
@@ -1356,8 +1490,29 @@ func (ctx *Context) processNode(n *node) (err error) {
                         }
                 } else {
                         ctx.set(name, n)
+                } */
+                parts, scoped, name := ctx.expandName(n.children[0])
+                if scoped {
+                        if name == "" {}
+                        // TODO: append scoped
+                } else {
+                        if d := ctx.getMultipart(parts); d != nil {
+                                deferred := true
+                                if 0 < len(d.node) {
+                                        _, deferred = d.node[0].(*node)
+                                }
+
+                                if deferred {
+                                        d.node = append(d.node, n)
+                                } else {
+                                        vc := n.children[1]
+                                        v := ctx.expandNode(vc)
+                                        d.node = append(d.node, &flatstr{ v, vc.loc() })
+                                }
+                        } else {
+                                ctx.setMultipart(parts, n)
+                        }
                 }
-                
 
         case nodeDefineNot:
                 panic("'!=' not implemented")
@@ -1470,7 +1625,7 @@ func NewContext(scope string, s []byte, vars map[string]string) (ctx *Context, e
         }
 
         for k, v := range vars {
-                ctx.set(k, v)
+                ctx.Set(k, v)
         }
 
         err = ctx._parse()
