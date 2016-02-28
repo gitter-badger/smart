@@ -36,6 +36,10 @@ const (
         nodeEscape
         nodeDeferredText
         nodeImmediateText
+        nodeName
+        nodeNamePrefix          // :
+        nodeNamePart            // .
+        nodeArg
         nodeValueText           // value text for defines (TODO: use it)
         nodeDefineDeferred      //  =     deferred
         nodeDefineQuestioned    // ?=     deferred
@@ -50,10 +54,6 @@ const (
         nodeActions
         nodeAction
         nodeCall
-        nodeCallName
-        nodeCallNamePrefix      // :
-        nodeCallNamePart        // .
-        nodeCallArg
 )
 
 /*
@@ -101,6 +101,10 @@ var (
                 nodeEscape:                     "escape",
                 nodeDeferredText:               "deferred-text",
                 nodeImmediateText:              "immediate-text",
+                nodeName:                       "call-name",
+                nodeNamePrefix:                 "call-name-prefix",
+                nodeNamePart:                   "call-name-part",
+                nodeArg:                        "call-arg",
                 nodeValueText:                  "value-text",
                 nodeDefineDeferred:             "define-deferred",
                 nodeDefineQuestioned:           "define-questioned",
@@ -115,10 +119,6 @@ var (
                 nodeActions:                    "actions",
                 nodeAction:                     "action",
                 nodeCall:                       "call",
-                nodeCallName:                   "call-name",
-                nodeCallNamePrefix:             "call-name-prefix",
-                nodeCallNamePart:               "call-name-part",
-                nodeCallArg:                    "call-arg",
         }
 )
 
@@ -443,7 +443,7 @@ state_loop:
                         break state_loop
 
                 case l.rune == '.':
-                        part := l.new(nodeCallNamePart)
+                        part := l.new(nodeNamePart)
                         part.pos = l.pos - 1
                         st := l.top()
                         st.node.children = append(st.node.children, part)
@@ -751,10 +751,10 @@ state_loop:
 func (l *lex) stateDollar() {
         if l.get() {
                 switch {
-                case l.rune == '(': l.push(nodeCallName, l.stateCallName, 0).delm = ')'
-                case l.rune == '{': l.push(nodeCallName, l.stateCallName, 0).delm = '}'
+                case l.rune == '(': l.push(nodeName, l.stateCallName, 0).delm = ')'
+                case l.rune == '{': l.push(nodeName, l.stateCallName, 0).delm = '}'
                 default:
-                        name := l.new(nodeCallName)
+                        name := l.new(nodeName)
                         name.pos = l.pos - 1 // include the single char
                         st := l.top() // nodeCall
                         st.node.children = append(st.node.children, name)
@@ -764,7 +764,7 @@ func (l *lex) stateDollar() {
 }
 
 func (l *lex) stateCallName() {
-        st := l.top() // Must be a nodeCallName.
+        st := l.top() // Must be a nodeName.
         delm := st.delm
 state_loop:
         for l.get() {
@@ -773,12 +773,12 @@ state_loop:
                         l.push(nodeCall, l.stateDollar, 0).node.pos-- // 'pos--' for the '$'
                         break state_loop
                 case l.rune == ':' && st.code == 0:
-                        prefix := l.new(nodeCallNamePrefix)
+                        prefix := l.new(nodeNamePrefix)
                         prefix.pos = l.pos - 1
                         st.node.children = append(st.node.children, prefix)
                         st.code++
                 case l.rune == '.':
-                        part := l.new(nodeCallNamePart)
+                        part := l.new(nodeNamePart)
                         part.pos = l.pos - 1
                         st.node.children = append(st.node.children, part)
                 case l.rune == '\\':
@@ -795,7 +795,7 @@ state_loop:
                         case delm:
                                 l.endCall(st, 1)
                         case ' ':
-                                l.push(nodeCallArg, l.stateCallArg, 0).delm = delm
+                                l.push(nodeArg, l.stateCallArg, 0).delm = delm
                         }
                         break state_loop
                 }
@@ -803,7 +803,7 @@ state_loop:
 }
 
 func (l *lex) stateCallArg() {
-        st := l.top() // Must be a nodeCallArg.
+        st := l.top() // Must be a nodeArg.
         delm := st.delm
 state_loop:
         for l.get() {
@@ -824,7 +824,7 @@ state_loop:
                         if l.rune == delm {
                                 l.endCall(st, 1)
                         } else {
-                                l.push(nodeCallArg, l.stateCallArg, 0).delm = delm
+                                l.push(nodeArg, l.stateCallArg, 0).delm = delm
                         }
                         break state_loop
                 }
@@ -848,7 +848,7 @@ func (l *lex) endCall(st *lexStack, off int) {
 
 /*
 stateDollar:
-        st.node.children = []*node{ l.new(nodeCallName) }
+        st.node.children = []*node{ l.new(nodeName) }
         l.step = l.stateCallee 
 */
 func (l *lex) stateCallee() {
@@ -866,7 +866,7 @@ state_loop:
                 case l.rune == ' ' && st.code == name:
                         st.code = args; fallthrough
                 case l.rune == ',' && st.code == args:
-                        a := l.new(nodeCallArg)
+                        a := l.new(nodeArg)
                         i := len(st.node.children)-1
                         st.node.children[i].end = l.pos-1
                         st.node.children = append(st.node.children, a)
@@ -1341,8 +1341,8 @@ func (ctx *Context) multipart(n *node) (*bytes.Buffer, []int) {
         for _, c := range n.children {
                 if pos < c.pos { b.Write(l.s[pos:c.pos]) }; pos = c.end
                 switch c.kind {
-                case nodeCallNamePrefix: b.WriteString(":"); parts[0] = b.Len()
-                case nodeCallNamePart:   b.WriteString("."); parts = append(parts, b.Len())
+                case nodeNamePrefix: b.WriteString(":"); parts[0] = b.Len()
+                case nodeNamePart:   b.WriteString("."); parts = append(parts, b.Len())
                 default:   b.WriteString(ctx.expandNode(c))
                 }
         }
@@ -1405,8 +1405,8 @@ func (ctx *Context) expandNode(n *node) string {
                         return ctx.callMultipart(n.loc(), parts, args...)
                 }
 
-        case nodeCallName:      fallthrough
-        case nodeCallArg:       fallthrough
+        case nodeName:          fallthrough
+        case nodeArg:           fallthrough
         case nodeDeferredText:  fallthrough
         case nodeTargets:       fallthrough
         case nodePrerequisites: fallthrough
