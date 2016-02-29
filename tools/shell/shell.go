@@ -17,7 +17,7 @@ func init() {
 
 type toolset struct { BasicToolset }
 
-func (shell *toolset) ConfigModule(ctx *Context, args []string, vars map[string]string) bool {
+func (shell *toolset) ConfigModule(ctx *Context, args []string, vars map[string]string) {
         var (
                 m = ctx.CurrentModule()
                 commandPath string
@@ -34,8 +34,6 @@ func (shell *toolset) ConfigModule(ctx *Context, args []string, vars map[string]
                 s, l, c := m.GetDeclareLocation()
                 fmt.Fprintf(os.Stderr, "no commands", s, l, c)
         }
-
-        return false
 }
 
 func (shell *toolset) CreateActions(ctx *Context) bool {
@@ -45,7 +43,7 @@ func (shell *toolset) CreateActions(ctx *Context) bool {
         }
 
         m := ctx.CurrentModule()
-        d := m.GetDir()
+        d := m.GetDir(ctx)
 
         for _, s := range Split(ctx.Call("me.path")) {
                 c := NewExcmd(s)
@@ -53,7 +51,7 @@ func (shell *toolset) CreateActions(ctx *Context) bool {
                 ac.cmds = append(ac.cmds, c)
         }
 
-        m.Action = NewInterAction(m.Name, ac)
+        m.Action = NewInterAction(m.GetName(ctx), ac)
 
         for i, s := range ac.targets {
                 if !filepath.IsAbs(s) {
