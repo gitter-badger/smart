@@ -24,6 +24,11 @@ var (
                 "upper":        builtinUpper,
                 "lower":        builtinLower,
                 "title":        builtinTitle,
+
+                "=":           builtinSet,
+                //"!=":           builtinSetNot,
+                "?=":           builtinSetQuestioned,
+                "+=":           builtinSetAppend,
         }
 
         builtinInfoFunc = func(args ...string) {
@@ -65,6 +70,65 @@ func builtinTitle(ctx *Context, loc location, args []string) string {
                 args[i] = strings.ToTitle(s)
         }
         return strings.Join(args, " ")
+}
+
+func builtinSet(ctx *Context, loc location, args []string) (s string) {
+        if num := len(args); 1 < num {
+                var i []interface{}
+                for _, a := range args[1:] {
+                        i = append(i, strings.TrimSpace(a))
+                }
+                ctx.Set(strings.TrimSpace(args[0]), i...)
+        }
+        return
+}
+
+func builtinSetNot(ctx *Context, loc location, args []string) (s string) {
+        panic("todo: $(!= name, ...)")
+        return
+}
+
+func builtinSetQuestioned(ctx *Context, loc location, args []string) (s string) {
+        if num := len(args); 1 < num {
+                var items []interface{}
+                for _, a := range args[1:] { items = append(items, a) }
+
+                name := strings.TrimSpace(args[0])
+                if i := strings.Index(name, ":"); 0 <= i {
+                        prefix, parts := name[0:i], strings.Split(name[i+1:], ".")
+                        if ctx.callScoped(loc, prefix, parts) == "" {
+                                ctx.setScoped(prefix, parts, items...)
+                        }
+                } else {
+                        parts := strings.Split(name, ".")
+                        if ctx.getMultipart(parts) == nil {
+                                ctx.setMultipart(parts, items...)
+                        }
+                }
+        }
+        return
+}
+
+func builtinSetAppend(ctx *Context, loc location, args []string) (s string) {
+        if num := len(args); 1 < num {
+                var items []interface{}
+                for _, a := range args[1:] { items = append(items, a) }
+
+                name := strings.TrimSpace(args[0])
+                if i := strings.Index(name, ":"); 0 <= i {
+                        prefix, parts := name[0:i], strings.Split(name[i+1:], ".")
+                        if s := ctx.callScoped(loc, prefix, parts); s != "" {
+                                items = append([]interface{}{ s }, items...)
+                        }
+                        ctx.setScoped(prefix, parts, items...)
+                } else {
+                        parts := strings.Split(name, ".")
+                        if ctx.getMultipart(parts) == nil {
+                                ctx.setMultipart(parts, items...)
+                        }
+                }
+        }
+        return
 }
 
 func builtinToolset(ctx *Context, loc location, args []string) (s string) {
@@ -136,18 +200,6 @@ func builtinModule(ctx *Context, loc location, args []string) (s string) {
                 if upper != nil {
                         ctx.moduleStack = append(ctx.moduleStack, upper)
                 }
-
-                var dir string
-                if fi, e := os.Stat(ctx.l.scope); e == nil && fi != nil && !fi.IsDir() {
-                        dir = filepath.Dir(ctx.l.scope)
-                } else {
-                        dir = workdir
-                }
-
-                //fmt.Printf("%v: %v, %v\n", name, dir, ctx.l.scope)
-
-                ctx.Set("me.name", name)
-                ctx.Set("me.dir", dir)
         }
 
         if x, ok := m.Children[exportName]; !ok {
@@ -159,8 +211,6 @@ func builtinModule(ctx *Context, loc location, args []string) (s string) {
                         rules: make(map[string]*rule),
                 }
                 m.Children[exportName] = x
-
-                ctx.Set("me.export.name", exportName)
         }
 
         if toolset != nil {
@@ -170,6 +220,14 @@ func builtinModule(ctx *Context, loc location, args []string) (s string) {
                 vars, rest := splitVarArgs(a)
                 toolset.ConfigModule(ctx, rest, vars)
         }
+
+        if fi, e := os.Stat(ctx.l.scope); e == nil && fi != nil && !fi.IsDir() {
+                ctx.Set("me.dir", filepath.Dir(ctx.l.scope))
+        } else {
+                ctx.Set("me.dir", workdir)
+        }
+        ctx.Set("me.name", name)
+        ctx.Set("me.export.name", exportName)
         return
 }
 

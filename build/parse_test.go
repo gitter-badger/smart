@@ -19,8 +19,14 @@ type testToolset struct {
         vars map[string]string
 }
 
-func (tt *testToolset) Call(p *Context, ids []string, args ...string) string {
-        return fmt.Sprintf("%v:%v:%v", tt.tag, strings.Join(ids, "."), strings.Join(args, ","))
+func (tt *testToolset) Call(p *Context, ids []string, args ...string) (s string) {
+        s = fmt.Sprintf("%v:%v:%v", tt.tag, strings.Join(ids, "."), strings.Join(args, ","))
+        if tt.vars == nil {
+                // ...
+        } else if v, ok := tt.vars[strings.Join(ids, ".")]; ok {
+                s = fmt.Sprintf("%v (%v)", v, s)
+        }
+        return
 }
 
 func (tt *testToolset) Set(p *Context, ids []string, items ...interface{}) {
@@ -1342,6 +1348,19 @@ foobaz := foo-baz
         if s := ctx.Call("foobaz"); s != "foo-baz" { t.Errorf("foobaz: '%s'", s) }
 }
 
+func TestSetEmptyValue(t *testing.T) {
+        ctx, err := newTestContext("TestEmptyValue", `
+foo =
+bar = bar
+foobar := 
+foobaz := foo-baz
+`);     if err != nil { t.Errorf("parse error:", err) }
+        if s := ctx.Call("foo"); s != "" { t.Errorf("foo: '%s'", s) }
+        if s := ctx.Call("bar"); s != "bar" { t.Errorf("bar: '%s'", s) }
+        if s := ctx.Call("foobar"); s != "" { t.Errorf("foobar: '%s'", s) }
+        if s := ctx.Call("foobaz"); s != "foo-baz" { t.Errorf("foobaz: '%s'", s) }
+}
+
 func TestMultipartNames(t *testing.T) {
         info, f := new(bytes.Buffer), builtinInfoFunc; defer func(){ builtinInfoFunc = f }()
         builtinInfoFunc = func(args ...string) {
@@ -1352,8 +1371,11 @@ func TestMultipartNames(t *testing.T) {
         toolsets["test"] = &toolsetStub{ name:"test", toolset:ts }
 
         ctx, err := newTestContext("TestMultipartNames", `
-#test:foo = f o o
-#test:foo.bar = foo bar
+$(= test:foo, f o o)
+$(= test:foo.bar, foo bar)
+
+$(= test:foobar, f)     $(info [$(test:foobar 1,2,3)])
+$(+= test:foobar, o, o) $(info [$(test:foobar 1,2,3)])
 
 $(module test)
 me.foo = fooo
@@ -1375,20 +1397,21 @@ test.a.foo = FOOOO
 $(info $(test.foo))
 $(info $(test.a.foo))
 `);     if err != nil { t.Errorf("parse error:", err) }
-        if s, x := ctx.Call("test:foo"), "test:foo:"; s != x { t.Errorf("expects '%s' but '%s'", x, s) }
-        if s, x := ctx.Call("test:foo.bar"), "test:foo.bar:"; s != x { t.Errorf("expects '%s' but '%s'", x, s) }
+        if s, x := ctx.Call("test:foo"), "f o o (test:foo:)"; s != x { t.Errorf("expects '%s' but '%s'", x, s) }
+        if s, x := ctx.Call("test:foo.bar"), "foo bar (test:foo.bar:)"; s != x { t.Errorf("expects '%s' but '%s'", x, s) }
         if s, x := ctx.Call("test.foo"), "FOOO"; s != x { t.Errorf("expects '%s' but '%s'", x, s) }
         if s, x := ctx.Call("test.a.foo"), "FOOOO"; s != x { t.Errorf("expects '%s' but '%s'", x, s) }
         if s, x := ctx.Call("test.a.bar"), "bar"; s != x { t.Errorf("expects '%s' but '%s'", x, s) }
-        /*
         if s, b := ts.vars["foo"]; !b { t.Errorf("expects 'foo'") } else {
                 if x := "f o o"; s != x { t.Errorf("expects '%s' but '%s'", x, s) }
         }
         if s, b := ts.vars["foo.bar"]; !b { t.Errorf("expects 'foo.bar'") } else {
                 if x := "foo bar"; s != x { t.Errorf("expects '%s' but '%s'", x, s) }
-        } */
+        }
 
-        if v, s := info.String(), fmt.Sprintf(`fooo
+        if v, s := info.String(), fmt.Sprintf(`[f (test:foobar:1,2,3)]
+[f (test:foobar:); o; o (test:foobar:1,2,3)]
+fooo
 foooo
 fooo
 foooo

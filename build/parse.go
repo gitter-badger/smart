@@ -1258,7 +1258,6 @@ func (ctx *Context) getMultipart(parts []string) (v *define) {
 
 func (ctx *Context) setScoped(name string, parts []string, items...interface{}) {
         if ts, ok := toolsets[name]; ok && ts != nil {
-                fmt.Printf("scoped: %v %v\n", name, parts)
                 ts.toolset.Set(ctx, parts, items...)
         } else {
                 errorf("'%v:%v' is undefined", name, strings.Join(parts, "."))
