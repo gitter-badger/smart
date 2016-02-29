@@ -668,7 +668,7 @@ state_loop:
 
                         /*
                         lineno, colno := l.caculateLocationLineColumn(st.node.loc())
-                        fmt.Fprintf(os.Stderr, "%v:%v:%v:todo: stateInlineAction: %v\n", l.scope, lineno, colno, st.node.str()) //*/
+                        fmt.Fprintf(os.Stderr, "%v:%v:%v: stateInlineAction: %v\n", l.scope, lineno, colno, st.node.str()) //*/
 
                         st = l.pop() // pop out the node
                         st = l.top() // the rule node
@@ -742,7 +742,7 @@ state_loop:
 
                         /*
                         lineno, colno := l.caculateLocationLineColumn(a.loc())
-                        fmt.Fprintf(os.Stderr, "%v:%v:%v:todo: stateAction: %v (of %v)\n", l.scope, lineno, colno, a.str(), st.node.kind) //*/
+                        fmt.Fprintf(os.Stderr, "%v:%v:%v: stateAction: %v (of %v)\n", l.scope, lineno, colno, a.str(), st.node.kind) //*/
                         break state_loop
                 }
         }
@@ -1473,24 +1473,6 @@ func (ctx *Context) processNode(n *node) (err error) {
                 }
 
         case nodeDefineAppend:
-                /*
-                name := ctx.expandNode(n.children[0])
-                if d := ctx.get(name); d != nil {
-                        deferred := true
-                        if 0 < len(d.node) {
-                                _, deferred = d.node[0].(*node)
-                        }
-
-                        if deferred {
-                                d.node = append(d.node, n)
-                        } else {
-                                vc := n.children[1]
-                                v := ctx.expandNode(vc)
-                                d.node = append(d.node, &flatstr{ v, vc.loc() })
-                        }
-                } else {
-                        ctx.set(name, n)
-                } */
                 parts, scoped, name := ctx.expandName(n.children[0])
                 if scoped {
                         if name == "" {}
