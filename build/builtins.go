@@ -73,7 +73,7 @@ func builtinToolset(ctx *Context, loc location, args []string) (s string) {
 }
 
 func builtinModule(ctx *Context, loc location, args []string) (s string) {
-        var name, toolsetName string
+        var name, exportName, toolsetName string
         if 0 < len(args) { name = strings.TrimSpace(args[0]) }
         if 1 < len(args) { toolsetName = strings.TrimSpace(args[1]) }
         if name == "" {
@@ -84,6 +84,8 @@ func builtinModule(ctx *Context, loc location, args []string) (s string) {
                 errorf("module name 'me' is reserved")
                 return
         }
+
+        exportName = "export"
 
         var toolset toolset
         if toolsetName == "" {
@@ -146,6 +148,19 @@ func builtinModule(ctx *Context, loc location, args []string) (s string) {
 
                 ctx.Set("me.name", name)
                 ctx.Set("me.dir", dir)
+        }
+
+        if x, ok := m.Children[exportName]; !ok {
+                x = &Module{
+                        l: m.l,
+                        Parent: m,
+                        Children: make(map[string]*Module),
+                        defines: make(map[string]*define, 4),
+                        rules: make(map[string]*rule),
+                }
+                m.Children[exportName] = x
+
+                ctx.Set("me.export.name", exportName)
         }
 
         if toolset != nil {

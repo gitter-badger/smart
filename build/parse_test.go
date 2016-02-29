@@ -1352,8 +1352,8 @@ func TestMultipartNames(t *testing.T) {
         toolsets["test"] = &toolsetStub{ name:"test", toolset:ts }
 
         ctx, err := newTestContext("TestMultipartNames", `
-test:foo = f o o
-test:foo.bar = foo bar
+#test:foo = f o o
+#test:foo.bar = foo bar
 
 $(module test)
 me.foo = fooo
@@ -1363,7 +1363,7 @@ $(module a)
 me.foo = foooo
 $(info $(me.foo))
 $(commit) # test.a
-
+me.a.bar = bar
 $(commit) # test
 
 $(info $(test.foo))
@@ -1379,12 +1379,14 @@ $(info $(test.a.foo))
         if s, x := ctx.Call("test:foo.bar"), "test:foo.bar:"; s != x { t.Errorf("expects '%s' but '%s'", x, s) }
         if s, x := ctx.Call("test.foo"), "FOOO"; s != x { t.Errorf("expects '%s' but '%s'", x, s) }
         if s, x := ctx.Call("test.a.foo"), "FOOOO"; s != x { t.Errorf("expects '%s' but '%s'", x, s) }
+        if s, x := ctx.Call("test.a.bar"), "bar"; s != x { t.Errorf("expects '%s' but '%s'", x, s) }
+        /*
         if s, b := ts.vars["foo"]; !b { t.Errorf("expects 'foo'") } else {
                 if x := "f o o"; s != x { t.Errorf("expects '%s' but '%s'", x, s) }
         }
         if s, b := ts.vars["foo.bar"]; !b { t.Errorf("expects 'foo.bar'") } else {
                 if x := "foo bar"; s != x { t.Errorf("expects '%s' but '%s'", x, s) }
-        }
+        } */
 
         if v, s := info.String(), fmt.Sprintf(`fooo
 foooo
@@ -1434,10 +1436,15 @@ $(info $(test.name) $(test.dir))
 
         if ctx.modules == nil { t.Errorf("nil modules") }
         if m, ok := ctx.modules["test"]; !ok || m == nil { t.Errorf("nil 'test' module") } else {
-                if d, _ := m.defines["name"]; !ok || d == nil { t.Errorf("no 'name' defined") } else {
+                if c, ok := m.Children["export"]; !ok || c == nil { t.Errorf("'me.export' is undefined") } else {
+                        if d, ok := c.defines["name"]; !ok || d == nil { t.Errorf("no 'name' defined") } else {
+                                if s := ctx.getDefineValue(d); s != "export" { t.Errorf("name != 'export' (%v)", s) }
+                        }
+                }
+                if d, ok := m.defines["name"]; !ok || d == nil { t.Errorf("no 'name' defined") } else {
                         if s := ctx.getDefineValue(d); s != "test" { t.Errorf("name != 'test' (%v)", s) }
                 }
-                if d, _ := m.defines["dir"]; !ok || d == nil { t.Errorf("no 'dir' defined") } else {
+                if d, ok := m.defines["dir"]; !ok || d == nil { t.Errorf("no 'dir' defined") } else {
                         if s := ctx.getDefineValue(d); s != workdir { t.Errorf("dir != '%v' (%v)", workdir, s) }
                 }
                 ctx.With(m, func() {

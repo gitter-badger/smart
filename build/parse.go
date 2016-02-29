@@ -1258,6 +1258,7 @@ func (ctx *Context) getMultipart(parts []string) (v *define) {
 
 func (ctx *Context) setScoped(name string, parts []string, items...interface{}) {
         if ts, ok := toolsets[name]; ok && ts != nil {
+                fmt.Printf("scoped: %v %v\n", name, parts)
                 ts.toolset.Set(ctx, parts, items...)
         } else {
                 errorf("'%v:%v' is undefined", name, strings.Join(parts, "."))
@@ -1475,8 +1476,7 @@ func (ctx *Context) processNode(n *node) (err error) {
         case nodeDefineAppend:
                 parts, scoped, name := ctx.expandName(n.children[0])
                 if scoped {
-                        if name == "" {}
-                        // TODO: append scoped
+                        ctx.setScoped(name, parts, n) // FIXME: append instead of replace
                 } else {
                         if d := ctx.getMultipart(parts); d != nil {
                                 deferred := true
