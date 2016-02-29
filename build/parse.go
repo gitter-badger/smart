@@ -1277,7 +1277,8 @@ func (ctx *Context) setMultipart(parts []string, a ...interface{}) (v *define) {
         }
 
         if vars == nil {
-                fmt.Printf("%v:warning: undefined scope '%s'\n", strings.Join(parts, "."))
+                lineno, colno := ctx.l.caculateLocationLineColumn(loc)
+                fmt.Printf("%v:%v:%v:warning: undefined scope '%s'\n", ctx.l.scope, lineno, colno, strings.Join(parts, "."))
                 return
         }
 
@@ -1288,7 +1289,8 @@ func (ctx *Context) setMultipart(parts []string, a ...interface{}) (v *define) {
         }
 
         if v.readonly {
-                fmt.Printf("%v:warning: `%v' is readonly\n", &loc, name)
+                lineno, colno := ctx.l.caculateLocationLineColumn(loc)
+                fmt.Printf("%v:%v:%v:warning: readonly '%s'\n", ctx.l.scope, lineno, colno, strings.Join(parts, "."))
                 return
         }
         

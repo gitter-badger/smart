@@ -252,15 +252,15 @@ func (n *delegate) dumpAll(abi string, scripts []string) (res *dump) {
                 res.modules = strings.Fields(ctx.Call("MODULES"))
                 for _, s := range res.modules {
                         m := &moduleInfo{}
-                        m.name = ctx.Call(s+".NAME")
-                        m.filename = ctx.Call(s+".FILENAME")
-                        m.path = ctx.Call(s+".PATH")
-                        m.sources = strings.Fields(ctx.Call(s+".SOURCES"))
-                        m.script = ctx.Call(s+".SCRIPT")
-                        m.objsDir = ctx.Call(s+".OBJS_DIR")
-                        m.built = ctx.Call(s+".BUILT")
-                        m.installed = ctx.Call(s+".INSTALLED")
-                        m.class = ctx.Call(s+".CLASS")
+                        m.name = ctx.Call(s+"_NAME")
+                        m.filename = ctx.Call(s+"_FILENAME")
+                        m.path = ctx.Call(s+"_PATH")
+                        m.sources = strings.Fields(ctx.Call(s+"_SOURCES"))
+                        m.script = ctx.Call(s+"_SCRIPT")
+                        m.objsDir = ctx.Call(s+"_OBJS_DIR")
+                        m.built = ctx.Call(s+"_BUILT")
+                        m.installed = ctx.Call(s+"_INSTALLED")
+                        m.class = ctx.Call(s+"_CLASS")
                         res.m[s] = *m
                 }
         }

@@ -136,7 +136,7 @@ func (sdk *toolset) CreateActions(ctx *Context) bool {
                                 })
                         }
 
-                        staticLibs = append(staticLibs, strings.Fields(ctx.Call("me.libs.static"))...)
+                        staticLibs = append(staticLibs, strings.Fields(ctx.Call("me.static_libs"))...)
                         classpath = append(classpath, strings.Fields(ctx.Call("me.classpath"))...)
                         classpath = append(classpath, staticLibs...)
 
@@ -553,7 +553,7 @@ func extractStaticLibsClasses(outclasses string, libs []string) (classes []strin
 func (ic *genAPK) Execute(targets []string, prerequisites []string) bool {
         outclasses := filepath.Join(ic.out, "classes")
 
-        // extract classes from static libraries (me.libs.static)
+        // extract classes from static libraries (me.static_libs)
 
         embclasses := extractStaticLibsClasses(outclasses, ic.staticlibs)
         //fmt.Printf("staticlibs: %v\n", embclasses)
