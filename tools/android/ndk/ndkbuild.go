@@ -380,15 +380,15 @@ $~:
 	@echo "TARGET_GDB_SERVER :=$(DUMMY_TARGET_GDB_SERVER)"
 	@echo "MODULES :=$(DUMMY_MODULES)"
 	@$(foreach s,$(DUMMY_MODULES),\
-echo "$s.NAME := $(__ndk_modules.$s.MODULE)" &&\
-echo "$s.FILENAME := $(__ndk_modules.$s.MODULE_FILENAME)" &&\
-echo "$s.PATH := $(__ndk_modules.$s.PATH)" &&\
-echo "$s.SOURCES := $(__ndk_modules.$s.SRC_FILES)" &&\
-echo "$s.SCRIPT := $(__ndk_modules.$s.MAKEFILE)" &&\
-echo "$s.OBJS_DIR := $(__ndk_modules.$s.OBJS_DIR)" &&\
-echo "$s.BUILT := $(__ndk_modules.$s.BUILT_MODULE)" &&\
-echo "$s.INSTALLED := $(__ndk_modules.$s.INSTALLED)" &&\
-echo "$s.CLASS := $(__ndk_modules.$s.MODULE_CLASS)" &&\
+echo "$(s)_NAME := $(__ndk_modules.$s.MODULE)" &&\
+echo "$(s)_FILENAME := $(__ndk_modules.$s.MODULE_FILENAME)" &&\
+echo "$(s)_PATH := $(__ndk_modules.$s.PATH)" &&\
+echo "$(s)_SOURCES := $(__ndk_modules.$s.SRC_FILES)" &&\
+echo "$(s)_SCRIPT := $(__ndk_modules.$s.MAKEFILE)" &&\
+echo "$(s)_OBJS_DIR := $(__ndk_modules.$s.OBJS_DIR)" &&\
+echo "$(s)_BUILT := $(__ndk_modules.$s.BUILT_MODULE)" &&\
+echo "$(s)_INSTALLED := $(__ndk_modules.$s.INSTALLED)" &&\
+echo "$(s)_CLASS := $(__ndk_modules.$s.MODULE_CLASS)" &&\
 ) true
 	@echo
 `, filepath.Base(tf.Name()))
