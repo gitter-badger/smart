@@ -1298,46 +1298,6 @@ func (ctx *Context) setMultipart(parts []string, a ...interface{}) (v *define) {
         return
 }
 
-func (ctx *Context) _set(name string, a ...interface{}) (v *define) {
-        loc := ctx.l.location()
-
-        //fmt.Printf("set: %v, %v\n", name, a)
-
-        if name == "me" {
-                errorf("%v: `me' is readonly", loc)
-                return
-        }
-
-        vars := ctx.defines
-        if strings.HasPrefix(name, meDot) {
-                if ctx.m == nil {
-                        /* lineno, colno := ctx.l.getLineColumn()
-                        fmt.Printf("%v:%v:%v:warning: no module defined for '%v'\n",
-                                ctx.l.scope, lineno, colno, name) */
-                        return
-                }
-                vars, name = ctx.m.defines, strings.TrimPrefix(name, meDot)
-        }
-        if vars == nil {
-                fmt.Printf("%v:warning: no \"me\" module\n", &loc)
-                return
-        }
-
-        var has = false
-        if v, has = vars[name]; !has {
-                v = &define{}
-                vars[name] = v
-        }
-
-        if v.readonly {
-                fmt.Printf("%v:warning: `%v' is readonly\n", &loc, name)
-                return
-        }
-        
-        v.name, v.node, v.loc = name, a, ctx.l.location()
-        return
-}
-
 func (ctx *Context) multipart(n *node) (*bytes.Buffer, []int) {
         b, l, pos, parts := new(bytes.Buffer), n.l, n.pos, []int{ -1 }
         for _, c := range n.children {
