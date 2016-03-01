@@ -1195,13 +1195,6 @@ func (ctx *Context) getDefineValue(d *define) string {
         for n, i := range d.node {
                 f := f0[0:]
                 if 0 < n { f = fn[0:] }
-                /*
-                switch t := i.(type) {
-                case string:   fmt.Fprintf(b, f, t)
-                case *flatstr: fmt.Fprintf(b, f, t.s)
-                case *node:    fmt.Fprintf(b, f, ctx.expandNode(t.children[1]))
-                default: errorf("unsupported '%v'", t)
-                } */
                 fmt.Fprintf(b, f, ctx.ItemString(i))
         }
         return b.String()
