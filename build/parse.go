@@ -1347,18 +1347,6 @@ func (ctx *Context) expandNode(n *node) string {
                         args = append(args, ctx.expandNode(an))
                 }
 
-                /*
-                callScoped, pos := false, 0
-                b, i := ctx.multipart(n.children[0])
-                if 0 <= i[0] {
-                        pos, callScoped = i[0], true
-                }
-
-                for _, n := range i[1:] {
-                        parts = append(parts, string(b.Bytes()[pos:n-1]))
-                        pos = n
-                }
-                parts = append(parts, string(b.Bytes()[pos:])) */
                 parts, callScoped, name := ctx.expandName(n.children[0])
                 if callScoped {
                         //name := string(b.Bytes()[0:i[0]-1])
