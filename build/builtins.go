@@ -10,7 +10,7 @@ import (
         "os"
 )
 
-type builtin func(ctx *Context, loc location, args []string) string
+type builtin func(ctx *Context, loc location, args Items) Items
 
 var (
         builtins = map[string]builtin {
@@ -31,115 +31,109 @@ var (
                 "+=":           builtinSetAppend,
         }
 
-        builtinInfoFunc = func(args ...string) {
-                fmt.Printf("%v\n", strings.Join(args, ","))
+        builtinInfoFunc = func(ctx *Context, args Items) {
+                var as []string
+                for _, a := range args {
+                        as = append(as, a.String(ctx))
+                }
+                fmt.Printf("%v\n", strings.Join(as, ","))
         }
 )
 
-func builtinDir(ctx *Context, loc location, args []string) string {
-        var ds []string
+func builtinDir(ctx *Context, loc location, args Items) (is Items) {
         for _, a := range args {
-                ds = append(ds, filepath.Dir(a))
+                is = append(is, stringitem(filepath.Dir(ctx.ItemString(a))))
         }
-        return strings.Join(ds, " ")
+        return
 }
 
-func builtinInfo(ctx *Context, loc location, args []string) (s string) {
+func builtinInfo(ctx *Context, loc location, args Items) (is Items) {
         if builtinInfoFunc != nil {
-                builtinInfoFunc(args...)
+                builtinInfoFunc(ctx, args)
         }
         return
 }
 
-func builtinUpper(ctx *Context, loc location, args []string) string {
-        for i, s := range args {
-                args[i] = strings.ToUpper(s)
+func builtinUpper(ctx *Context, loc location, args Items) (is Items) {
+        for _, a := range args {
+                is = append(is, stringitem(strings.ToUpper(ctx.ItemString(a))))
         }
-        return strings.Join(args, " ")
+        return
 }
 
-func builtinLower(ctx *Context, loc location, args []string) string {
-        for i, s := range args {
-                args[i] = strings.ToLower(s)
+func builtinLower(ctx *Context, loc location, args Items) (is Items) {
+        for _, a := range args {
+                is = append(is, stringitem(strings.ToLower(ctx.ItemString(a))))
         }
-        return strings.Join(args, " ")
+        return
 }
 
-func builtinTitle(ctx *Context, loc location, args []string) string {
-        for i, s := range args {
-                args[i] = strings.ToTitle(s)
+func builtinTitle(ctx *Context, loc location, args Items) (is Items) {
+        for _, a := range args {
+                is = append(is, stringitem(strings.ToTitle(ctx.ItemString(a))))
         }
-        return strings.Join(args, " ")
+        return
 }
 
-func builtinSet(ctx *Context, loc location, args []string) (s string) {
+func builtinSet(ctx *Context, loc location, args Items) (is Items) {
         if num := len(args); 1 < num {
-                var i []interface{}
-                for _, a := range args[1:] {
-                        i = append(i, strings.TrimSpace(a))
-                }
-                ctx.Set(strings.TrimSpace(args[0]), i...)
+                ctx.Set(strings.TrimSpace(args[0].String(ctx)), args[1:]...)
         }
         return
 }
 
-func builtinSetNot(ctx *Context, loc location, args []string) (s string) {
+func builtinSetNot(ctx *Context, loc location, args Items) (is Items) {
         panic("todo: $(!= name, ...)")
         return
 }
 
-func builtinSetQuestioned(ctx *Context, loc location, args []string) (s string) {
+func builtinSetQuestioned(ctx *Context, loc location, args Items) (is Items) {
         if num := len(args); 1 < num {
-                var items []interface{}
-                for _, a := range args[1:] { items = append(items, a) }
-
-                name := strings.TrimSpace(args[0])
+                name := strings.TrimSpace(args[0].String(ctx))
                 if i := strings.Index(name, ":"); 0 <= i {
                         prefix, parts := name[0:i], strings.Split(name[i+1:], ".")
-                        if ctx.callScoped(loc, prefix, parts) == "" {
-                                ctx.setScoped(prefix, parts, items...)
+                        if ii := ctx.callScoped(loc, prefix, parts); ii.IsEmpty(ctx) {
+                                ctx.setScoped(prefix, parts, args[1:]...)
                         }
                 } else {
                         parts := strings.Split(name, ".")
                         if ctx.getMultipart(parts) == nil {
-                                ctx.setMultipart(parts, items...)
+                                ctx.setMultipart(parts, args[1:]...)
                         }
                 }
         }
         return
 }
 
-func builtinSetAppend(ctx *Context, loc location, args []string) (s string) {
+func builtinSetAppend(ctx *Context, loc location, args Items) (is Items) {
         if num := len(args); 1 < num {
-                var items []interface{}
-                for _, a := range args[1:] { items = append(items, a) }
-
-                name := strings.TrimSpace(args[0])
+                name := strings.TrimSpace(args[0].String(ctx))
                 if i := strings.Index(name, ":"); 0 <= i {
                         prefix, parts := name[0:i], strings.Split(name[i+1:], ".")
-                        if s := ctx.callScoped(loc, prefix, parts); s != "" {
-                                items = append([]interface{}{ s }, items...)
+                        if ii := ctx.callScoped(loc, prefix, parts); !ii.IsEmpty(ctx) {
+                                is = ii
                         }
-                        ctx.setScoped(prefix, parts, items...)
+                        is = is.Concat(ctx, args[1:]...)
+                        ctx.setScoped(prefix, parts, is...)
                 } else {
                         parts := strings.Split(name, ".")
                         if ctx.getMultipart(parts) == nil {
-                                ctx.setMultipart(parts, items...)
+                                ctx.setMultipart(parts, args[1:]...)
                         }
                 }
         }
         return
 }
 
-func builtinToolset(ctx *Context, loc location, args []string) (s string) {
+func builtinToolset(ctx *Context, loc location, args Items) (is Items) {
         errorf("todo: %v", args)
         return
 }
 
-func builtinModule(ctx *Context, loc location, args []string) (s string) {
+func builtinModule(ctx *Context, loc location, args Items) (is Items) {
         var name, exportName, toolsetName string
-        if 0 < len(args) { name = strings.TrimSpace(args[0]) }
-        if 1 < len(args) { toolsetName = strings.TrimSpace(args[1]) }
+        if 0 < len(args) { name = strings.TrimSpace(args[0].String(ctx)) }
+        if 1 < len(args) { toolsetName = strings.TrimSpace(args[1].String(ctx)) }
         if name == "" {
                 errorf("module name is required")
                 return
@@ -215,23 +209,34 @@ func builtinModule(ctx *Context, loc location, args []string) (s string) {
 
         if toolset != nil {
                 // parsed arguments in forms like "PLATFORM=android-9"
+                /*
                 var a []string
                 if 2 < len(args) { a = args[2:] }
-                vars, rest := splitVarArgs(a)
+                vars, rest := splitVarArgs(a) */
+                var rest Items
+                vars := make(map[string]string, 4)
+                for _, a := range args[2:] {
+                        s := a.String(ctx)
+                        if i := strings.Index(s, "="); 0 < i /* false if '=foo' */ {
+                                vars[strings.TrimSpace(s[0:i])] = strings.TrimSpace(s[i+1:])
+                        } else {
+                                rest = append(rest, a)
+                        }
+                }
                 toolset.ConfigModule(ctx, rest, vars)
         }
 
         if fi, e := os.Stat(ctx.l.scope); e == nil && fi != nil && !fi.IsDir() {
-                ctx.Set("me.dir", filepath.Dir(ctx.l.scope))
+                ctx.Set("me.dir", stringitem(filepath.Dir(ctx.l.scope)))
         } else {
-                ctx.Set("me.dir", workdir)
+                ctx.Set("me.dir", stringitem(workdir))
         }
-        ctx.Set("me.name", name)
-        ctx.Set("me.export.name", exportName)
+        ctx.Set("me.name", stringitem(name))
+        ctx.Set("me.export.name", stringitem(exportName))
         return
 }
 
-func builtinCommit(ctx *Context, loc location, args []string) (s string) {
+func builtinCommit(ctx *Context, loc location, args Items) (is Items) {
         if ctx.m == nil {
                 errorf("no module defined")
                 return
@@ -258,12 +263,12 @@ func builtinCommit(ctx *Context, loc location, args []string) (s string) {
         return
 }
 
-func builtinUse(ctx *Context, loc location, args []string) string {
+func builtinUse(ctx *Context, loc location, args Items) (is Items) {
         if ctx.m == nil { errorf("no module defined") }
 
         for _, a := range args {
-                a = strings.TrimSpace(a)
-                if m, ok := ctx.modules[a]; ok {
+                s := strings.TrimSpace(a.String(ctx))
+                if m, ok := ctx.modules[s]; ok {
                         ctx.m.Using = append(ctx.m.Using, m)
                         m.UsedBy = append(m.UsedBy, ctx.m)
                         if ctx.m.Toolset != nil {
@@ -280,11 +285,11 @@ func builtinUse(ctx *Context, loc location, args []string) string {
                                 rules: make(map[string]*rule, 4),
                         }
                         ctx.m.Using = append(ctx.m.Using, m)
-                        ctx.modules[a] = m
+                        ctx.modules[s] = m
                         if ctx.m.Toolset != nil {
                                 ctx.m.Toolset.UseModule(ctx, m)
                         }
                 }
         }
-        return ""
+        return
 }

@@ -18,7 +18,7 @@ import (
 
 type define struct {
         name string
-        node []interface{} // *node, *flatstr, string
+        value Items
         readonly bool
         loc location
 }
@@ -130,17 +130,40 @@ type location struct {
         offset, end int // (node.pos, node.end)
 }
 
-// flatstr is a expanded string with a location
-type flatstr struct {
+type stringitem string
+
+func (si stringitem) String(ctx *Context) string { return string(si) }
+func (si stringitem) IsEmpty(ctx *Context) bool { return string(si) == "" }
+
+// flatitem is a expanded string with a location
+type flatitem struct {
         s string
         l location
 }
+
+func (fi *flatitem) String(ctx *Context) string { return fi.s }
+func (fi *flatitem) IsEmpty(ctx *Context) bool { return fi.s == "" }
 
 type node struct {
         l *lex
         kind nodeType
         children []*node
         pos, end int
+}
+
+func (n *node) String(ctx *Context) (s string) {
+        var is Items
+        if nodeDefineDeferred <= n.kind && n.kind <= nodeDefineAppend {
+                is = ctx.expandNode(n.children[1])
+        } else {
+                is = ctx.expandNode(n)
+        }
+        return is.String(ctx)
+}
+
+func (n *node) IsEmpty(ctx *Context) bool {
+        if len(n.children) == 0 { return true }
+        return n.String(ctx) == ""
 }
 
 func (n *node) len() int {
@@ -927,7 +950,7 @@ func (l *lex) parse() bool {
 type pendedBuild struct {
         m *Module
         p *Context
-        args []string
+        args Items
 }
 
 // Context hold a parse context and the current module being processed.
@@ -1002,11 +1025,11 @@ func (ctx *Context) expand(loc location, str string) string {
                 }
 
                 var name string
-                var args []string
+                var args Items
                 var t bytes.Buffer
                 if rr == 0 {
                         t.WriteRune(r)
-                        out = ctx.call(loc, t.String(), args...)
+                        out = ctx.call(loc, t.String(), args...).String(ctx)
                         return
                 }
 
@@ -1023,7 +1046,7 @@ func (ctx *Context) expand(loc location, str string) string {
                                         t.WriteRune(r); break
                                 }
                         case ',':
-                                args = append(args, t.String()); t.Reset()
+                                args = append(args, stringitem(t.String())); t.Reset()
                         case '$':
                                 if ss, ll := exp(s[rs:]); 0 < ll {
                                         t.WriteString(ss)
@@ -1041,13 +1064,13 @@ func (ctx *Context) expand(loc location, str string) string {
                                 }
                                 if 0 < t.Len() {
                                         if 0 < len(name) { // 0 < len(args)
-                                                args = append(args, t.String())
+                                                args = append(args, stringitem(t.String()))
                                         } else {
                                                 name = t.String()
                                         }
                                         t.Reset()
                                 }
-                                out, l = ctx.call(loc, name, args...), l + rs
+                                out, l = ctx.call(loc, name, args...).String(ctx), l + rs
                                 return // do not "break"
                         }
 
@@ -1075,15 +1098,15 @@ func (ctx *Context) expand(loc location, str string) string {
         return buf.String()
 }
 
-func (ctx *Context) CallWith(m *Module, name string, args ...string) string {
+func (ctx *Context) CallWith(m *Module, name string, args ...Item) (is Items) {
         return ctx.callWith(ctx.l.location(), m, name, args...)
 }
 
-func (ctx *Context) Call(name string, args ...string) string {
+func (ctx *Context) Call(name string, args ...Item) (is Items) {
         return ctx.call(ctx.l.location(), name, args...)
 }
 
-func (ctx *Context) Set(name string, items ...interface{}) {
+func (ctx *Context) Set(name string, items ...Item) {
         if i := strings.Index(name, ":"); 0 <= i {
                 ctx.setScoped(name[0:i], strings.Split(name[i+1:], "."), items...)
         } else {
@@ -1091,23 +1114,23 @@ func (ctx *Context) Set(name string, items ...interface{}) {
         }
 }
 
-func (ctx *Context) call(loc location, name string, args ...string) string {
+func (ctx *Context) call(loc location, name string, args ...Item) (is Items) {
         if i := strings.Index(name, ":"); 0 <= i {
                 return ctx.callScoped(loc, name[0:i], strings.Split(name[i+1:], "."), args...)
         }
         return ctx.callMultipart(loc, strings.Split(name, "."), args...)
 }
 
-func (ctx *Context) callScoped(loc location, name string, parts []string, args ...string) (s string) {
+func (ctx *Context) callScoped(loc location, name string, parts []string, args ...Item) (is Items) {
         if ts, ok := toolsets[name]; ok && ts != nil {
-                s = ts.toolset.Call(ctx, parts, args...)
+                is = ts.toolset.Call(ctx, parts, args...)
         } else {
                 errorf("'%v:%v' is undefined", name, strings.Join(parts, "."))
         }
         return
 }
 
-func (ctx *Context) callMultipart(loc location, parts []string, args ...string) string {
+func (ctx *Context) callMultipart(loc location, parts []string, args ...Item) (is Items) {
         num := len(parts)
         vars, name := ctx.defines, parts[num-1]
 
@@ -1124,17 +1147,18 @@ func (ctx *Context) callMultipart(loc location, parts []string, args ...string) 
                                 lineno, colno := ctx.l.caculateLocationLineColumn(loc)
                                 fmt.Printf("%v:%v:%v:warning: `%v' undefined\n", ctx.l.scope, lineno, colno, name)
                         }
-                case name == "$": return "$";
+                case name == "$": return Items{ stringitem("$") };
                 case name == "call":
                         if 0 < len(args) {
-                                return ctx.call(loc, args[0], args[1:]...)
+                                return ctx.call(loc, args[0].String(ctx), args[1:]...)
                         }
-                        return ""
+                        return
                 case name == "me":
                         if ctx.m != nil {
-                                return ctx.m.GetName(ctx) //return ctx.m.Get(ctx, "dir")
+                                s := ctx.m.GetName(ctx) //ctx.m.Get(ctx, "dir")
+                                return Items{ stringitem(s) }
                         }
-                        return ""
+                        return
                 }
         } else {
                 /*
@@ -1162,11 +1186,11 @@ func (ctx *Context) callMultipart(loc location, parts []string, args ...string) 
 
         if vars != nil {
                 if d, ok := vars[name]; ok && d != nil {
-                        return ctx.getDefineValue(d)
+                        is = ctx.getDefineValue(d)
                 }
         }
 
-        return ""
+        return
 }
 
 func (ctx *Context) getModuleMultipartName(parts []string) (m *Module) {
@@ -1190,20 +1214,24 @@ func (ctx *Context) getModuleMultipartName(parts []string) (m *Module) {
         return
 }
 
-func (ctx *Context) getDefineValue(d *define) string {
+// DEPRECATED
+func (ctx *Context) getDefineValue(d *define) (is Items) {
+        /*
         b, f0, fn := new(bytes.Buffer), "%s", " %s"
-        for n, i := range d.node {
+        for n, i := range d.value {
                 f := f0[0:]
                 if 0 < n { f = fn[0:] }
                 fmt.Fprintf(b, f, ctx.ItemString(i))
         }
-        return b.String()
+        return b.String() */
+        return d.value
 }
 
-func (ctx *Context) ItemString(i interface{}) (s string) {
+func (ctx *Context) ItemString(i Item) (s string) {
+        /*
         switch t := i.(type) {
-        case string:   s = t
-        case *flatstr: s = t.s
+        case stringitem:  s = t
+        case *flatitem: s = t.s
         case *node:
                 if nodeDefineDeferred <= t.kind && t.kind <= nodeDefineAppend {
                         s = ctx.expandNode(t.children[1])
@@ -1212,21 +1240,22 @@ func (ctx *Context) ItemString(i interface{}) (s string) {
                 }
         default:
                 errorf("unsupported '%v'", t)
-        }
+        } */
+        s = i.String(ctx)
         return
 }
 
-func (ctx *Context) ItemsStrings(a ...interface{}) (s []string) {
+func (ctx *Context) ItemsStrings(a ...Item) (s []string) {
         for _, i := range a {
                 s = append(s, ctx.ItemString(i))
         }
         return
 }
 
-func (ctx *Context) callWith(loc location, m *Module, name string, args ...string) (s string) {
+func (ctx *Context) callWith(loc location, m *Module, name string, args ...Item) (is Items) {
         o := ctx.m
         ctx.m = m
-        s = ctx.call(loc, meDot+name, args...)
+        is = ctx.call(loc, meDot+name, args...)
         ctx.m = o
         return
 }
@@ -1249,7 +1278,7 @@ func (ctx *Context) getMultipart(parts []string) (v *define) {
         return
 }
 
-func (ctx *Context) setScoped(name string, parts []string, items...interface{}) {
+func (ctx *Context) setScoped(name string, parts []string, items...Item) {
         if ts, ok := toolsets[name]; ok && ts != nil {
                 ts.toolset.Set(ctx, parts, items...)
         } else {
@@ -1257,7 +1286,7 @@ func (ctx *Context) setScoped(name string, parts []string, items...interface{}) 
         }
 }
 
-func (ctx *Context) setMultipart(parts []string, a ...interface{}) (v *define) {
+func (ctx *Context) setMultipart(parts []string, items...Item) (v *define) {
         loc, num := ctx.l.location(), len(parts)
         vars, name := ctx.defines, parts[num-1]
 
@@ -1287,7 +1316,7 @@ func (ctx *Context) setMultipart(parts []string, a ...interface{}) (v *define) {
                 return
         }
         
-        v.name, v.node, v.loc = name, a, loc
+        v.name, v.value, v.loc = name, items, loc
         return
 }
 
@@ -1298,7 +1327,7 @@ func (ctx *Context) multipart(n *node) (*bytes.Buffer, []int) {
                 switch c.kind {
                 case nodeNamePrefix: b.WriteString(":"); parts[0] = b.Len()
                 case nodeNamePart:   b.WriteString("."); parts = append(parts, b.Len())
-                default:   b.WriteString(ctx.expandNode(c))
+                default:   b.WriteString(ctx.expandNode(c).String(ctx))
                 }
         }
         if pos < n.end {
@@ -1323,21 +1352,24 @@ func (ctx *Context) expandName(n *node) (parts []string, scoped bool, name strin
         return
 }
 
-func (ctx *Context) expandNode(n *node) string {
+func (ctx *Context) expandNode(n *node) (is Items) {
         nc := len(n.children)
 
         switch n.kind {
         case nodeEscape:
                 switch ctx.l.s[n.pos + 1] {
-                case '\n': return " "
-                case '#':  return "#"
+                case '\n': return Items{ stringitem(" ") }
+                case '#':  return Items{ stringitem("#") }
                 }
-                return ""
+                return
 
         case nodeCall:
-                var parts, args []string
+                var (
+                        parts []string
+                        args Items
+                )
                 for _, an := range n.children[1:] {
-                        args = append(args, ctx.expandNode(an))
+                        args = args.Concat(ctx, ctx.expandNode(an)...)
                 }
 
                 parts, callScoped, name := ctx.expandName(n.children[0])
@@ -1354,17 +1386,19 @@ func (ctx *Context) expandNode(n *node) string {
         case nodeTargets:       fallthrough
         case nodePrerequisites: fallthrough
         case nodeImmediateText:
+                var s string
                 if 0 < nc {
                         b, _ := ctx.multipart(n)
-                        return b.String()
+                        s = b.String()
                 } else {
-                        return n.str()
+                        s = n.str()
                 }
+                return Items{ stringitem(s) }
         default:
                 panic(fmt.Sprintf("fixme: %v: %v (%v)\n", n.kind, n.str(), nc))
         }
 
-        return ""
+        return
 }
 
 func (ctx *Context) processNode(n *node) (err error) {
@@ -1374,26 +1408,26 @@ func (ctx *Context) processNode(n *node) (err error) {
 
         switch n.kind {
         case nodeCall:
-                if s := strings.TrimSpace(ctx.expandNode(n)); s != "" {
+                if is := ctx.expandNode(n); !is.IsEmpty(ctx) {
                         lineno, colno := ctx.l.caculateLocationLineColumn(n.loc())
                         fmt.Fprintf(os.Stderr, "%v:%v:%v: illigal: '%v'\n",
-                                ctx.l.scope, lineno, colno, s)
+                                ctx.l.scope, lineno, colno, is.String(ctx))
                 }
 
         case nodeImmediateText:
-                if s := strings.TrimSpace(ctx.expandNode(n)); s != "" {
+                if is := ctx.expandNode(n); !is.IsEmpty(ctx) {
                         lineno, colno := ctx.l.caculateLocationLineColumn(n.loc())
                         fmt.Fprintf(os.Stderr, "%v:%v:%v: syntax error: '%v'\n",
-                                ctx.l.scope, lineno, colno, s)
+                                ctx.l.scope, lineno, colno, is.String(ctx))
                 }
 
         case nodeDefineQuestioned:
                 parts, scoped, name := ctx.expandName(n.children[0])
                 if scoped {
-                        if ctx.callScoped(n.loc(), name, parts) == "" {
+                        if is := ctx.callScoped(n.loc(), name, parts); is.IsEmpty(ctx) {
                                 ctx.setScoped(name, parts, n)
                         }
-                } else if ctx.callMultipart(n.loc(), parts) == "" {
+                } else if is := ctx.callMultipart(n.loc(), parts); is.IsEmpty(ctx) {
                         ctx.setMultipart(parts, n)
                 }
 
@@ -1422,16 +1456,17 @@ func (ctx *Context) processNode(n *node) (err error) {
                 } else {
                         if d := ctx.getMultipart(parts); d != nil {
                                 deferred := true
-                                if 0 < len(d.node) {
-                                        _, deferred = d.node[0].(*node)
+                                if 0 < len(d.value) {
+                                        _, deferred = d.value[0].(*node)
                                 }
 
                                 if deferred {
-                                        d.node = append(d.node, n)
+                                        d.value = append(d.value, n)
                                 } else {
-                                        vc := n.children[1]
-                                        v := ctx.expandNode(vc)
-                                        d.node = append(d.node, &flatstr{ v, vc.loc() })
+                                        //vc := n.children[1]
+                                        //v := ctx.expandNode(vc)
+                                        //d.value = append(d.value, &flatitem{ v, vc.loc() })
+                                        d.value = ctx.expandNode(n.children[1])
                                 }
                         } else {
                                 ctx.setMultipart(parts, n)
@@ -1444,8 +1479,8 @@ func (ctx *Context) processNode(n *node) (err error) {
         case nodeRuleSingleColoned: fallthrough
         case nodeRuleDoubleColoned:
                 r := &rule{
-                        targets:Split(ctx.expandNode(n.children[0])),
-                        prerequisites:Split(ctx.expandNode(n.children[1])),
+                        targets:Split(ctx.expandNode(n.children[0]).String(ctx)),
+                        prerequisites:Split(ctx.expandNode(n.children[1]).String(ctx)),
                         node:n,
                 }
                 if 2 < len(n.children) {
@@ -1549,7 +1584,7 @@ func NewContext(scope string, s []byte, vars map[string]string) (ctx *Context, e
         }
 
         for k, v := range vars {
-                ctx.Set(k, v)
+                ctx.Set(k, stringitem(v))
         }
 
         err = ctx._parse()

@@ -32,11 +32,54 @@ var (
         }
 )
 
+type Item interface{
+        String(ctx *Context) string
+        IsEmpty(ctx *Context) bool
+}
+
+type Items []Item
+
+func (is Items) Len() int { return len(is) }
+func (is Items) IsEmpty(ctx *Context) bool {
+        for _, i := range is {
+                if !i.IsEmpty(ctx) { return false }
+        }
+        return len(is) == 0
+}
+
+func (is Items) String(ctx *Context) string {
+        b := new(bytes.Buffer)
+        for i, a := range is {
+                if !a.IsEmpty(ctx) {
+                        if i == 0 {
+                                fmt.Fprint(b, a.String(ctx))
+                        } else {
+                                fmt.Fprintf(b, " %s", a.String(ctx))
+                        }
+                }
+        }
+        return b.String()
+}
+
+func (is Items) Concat(ctx *Context, args ...Item) (res Items) {
+        for _, a := range is {
+                if !a.IsEmpty(ctx) {
+                        res = append(res, a)
+                }
+        }
+        for _, a := range args {
+                if !a.IsEmpty(ctx) {
+                        res = append(res, a)
+                }
+        }
+        return
+}
+
 type scoper interface {
         // Call toolset variable.
-        Call(p *Context, ids []string, args ...string) string
+        Call(p *Context, ids []string, args ...Item) Items
         // Set toolset variable.        
-        Set(p *Context, ids []string, items ...interface{})
+        Set(p *Context, ids []string, items ...Item)
 }
 
 // toolset represents a toolchain like gcc and related utilities.
@@ -45,7 +88,7 @@ type toolset interface {
 
         // ConfigModule setup the current module being processed.
         // `args' and `vars' is passed in on the `$(module)' invocation.
-        ConfigModule(p *Context, args []string, vars map[string]string)
+        ConfigModule(p *Context, args Items, vars map[string]string)
 
         // CreateActions creates the current module's action graph
         CreateActions(p *Context) bool
@@ -70,7 +113,7 @@ func RegisterToolset(name string, ts toolset) {
 type BasicToolset struct {        
 }
 
-func (tt *BasicToolset) ConfigModule(ctx *Context, args []string, vars map[string]string) {
+func (tt *BasicToolset) ConfigModule(ctx *Context, args Items, vars map[string]string) {
 }
 
 func (tt *BasicToolset) CreateActions(ctx *Context) bool {
@@ -81,11 +124,11 @@ func (tt *BasicToolset) UseModule(ctx *Context, o *Module) bool {
         return false
 }
 
-func (tt *BasicToolset) Call(p *Context, ids []string, args ...string) string {
-        return ""
+func (tt *BasicToolset) Call(p *Context, ids []string, args ...Item) (is Items) {
+        return
 }
 
-func (tt *BasicToolset) Set(p *Context, ids []string, items ...interface{}) {
+func (tt *BasicToolset) Set(p *Context, ids []string, items ...Item) {
 }
 
 func IsIA32Command(s string) bool {
@@ -486,7 +529,7 @@ func (m *Module) GetCommitLocation() (s string, lineno, colno int) {
 
 func (m *Module) Get(ctx *Context, name string) (s string) {
         if d, ok := m.defines[name]; ok && d != nil {
-                s = ctx.getDefineValue(d)
+                s = d.value.String(ctx)
         }
         return
 }
