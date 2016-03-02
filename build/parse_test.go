@@ -20,7 +20,7 @@ type testToolset struct {
 }
 
 func (tt *testToolset) Call(p *Context, ids []string, args ...Item) Items {
-        s := fmt.Sprintf("%v:%v:%v", tt.tag, strings.Join(ids, "."), Items(args).String(p))
+        s := fmt.Sprintf("%v:%v:%v", tt.tag, strings.Join(ids, "."), Items(args).Expand(p))
         if tt.vars == nil {
                 // ...
         } else if v, ok := tt.vars[strings.Join(ids, ".")]; ok {
@@ -1274,7 +1274,7 @@ blah : blah.c
 func TestParse(t *testing.T) {
         info, f := new(bytes.Buffer), builtinInfoFunc; defer func(){ builtinInfoFunc = f }()
         builtinInfoFunc = func(ctx *Context, args Items) {
-                fmt.Fprintf(info, "%v\n", args.String(ctx))
+                fmt.Fprintf(info, "%v\n", args.Expand(ctx))
         }
 
         p, err := newTestContext("TestParse#1", `
@@ -1292,11 +1292,11 @@ i2 = $a$($i)-$($i$i)
 
         if l1, l2 := len(p.defines), 5;                 l1 != l2 { t.Errorf("expects '%v' defines but got '%v'", l2, l1) }
 
-        if s, ex := p.Call("a").String(p), "a";                   s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
-        if s, ex := p.Call("i").String(p), "i";                   s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
-        if s, ex := p.Call("ii").String(p), "x x a i x x";        s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
-        if s, ex := p.Call("i1").String(p), "ai-x x a i x x";     s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
-        if s, ex := p.Call("i2").String(p), "ai-x x a i x x";     s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
+        if s, ex := p.Call("a").Expand(p), "a";                   s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
+        if s, ex := p.Call("i").Expand(p), "i";                   s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
+        if s, ex := p.Call("ii").Expand(p), "x x a i x x";        s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
+        if s, ex := p.Call("i1").Expand(p), "ai-x x a i x x";     s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
+        if s, ex := p.Call("i2").Expand(p), "ai-x x a i x x";     s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
 
         //////////////////////////////////////////////////
         p, err = newTestContext("TestParse#2", `
@@ -1318,18 +1318,18 @@ dddd := xxx-$(sh$ared)-$(stat$ic)-$(a$$a)-xxx
                 if _, ok := p.defines[s]; !ok { t.Errorf("missing '%v'", s) }
         }
 
-        if s, ex := p.Call("a").String(p), "a";                   s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
-        if s, ex := p.Call("i").String(p), "i";                   s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
-        if s, ex := p.Call("ii").String(p), "i a i a   a i";      s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
-        if s, ex := p.Call("shared").String(p), "shared";         s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
-        if s, ex := p.Call("static").String(p), "static";         s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
-        if s, ex := p.Call("a").String(p), "a";                   s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
-        if s, ex := p.Call("a$a").String(p), "foo";               s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
-        if s, ex := p.Call("a$$a").String(p), "";                 s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
-        if s, ex := p.Call("aaaa").String(p), "xxx-foo-xxx";      s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
-        if s, ex := p.Call("bbbb").String(p), "xxx-foo-xxx";      s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
-        if s, ex := p.Call("cccc").String(p), "xxx-shared-static-foo-xxx";       s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
-        if s, ex := p.Call("dddd").String(p), "xxx-shared-static-foo-xxx";       s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
+        if s, ex := p.Call("a").Expand(p), "a";                   s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
+        if s, ex := p.Call("i").Expand(p), "i";                   s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
+        if s, ex := p.Call("ii").Expand(p), "i a i a   a i";      s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
+        if s, ex := p.Call("shared").Expand(p), "shared";         s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
+        if s, ex := p.Call("static").Expand(p), "static";         s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
+        if s, ex := p.Call("a").Expand(p), "a";                   s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
+        if s, ex := p.Call("a$a").Expand(p), "foo";               s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
+        if s, ex := p.Call("a$$a").Expand(p), "";                 s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
+        if s, ex := p.Call("aaaa").Expand(p), "xxx-foo-xxx";      s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
+        if s, ex := p.Call("bbbb").Expand(p), "xxx-foo-xxx";      s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
+        if s, ex := p.Call("cccc").Expand(p), "xxx-shared-static-foo-xxx";       s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
+        if s, ex := p.Call("dddd").Expand(p), "xxx-shared-static-foo-xxx";       s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
         if s, ex := info.String(), "2:shared static\n1:shared static\n"; s != ex {
                 t.Errorf("expects '%v' but got '%v'", ex, s)
         }
@@ -1342,10 +1342,10 @@ bar = bar
 foobar := 
 foobaz := foo-baz
 `);     if err != nil { t.Errorf("parse error:", err) }
-        if s := ctx.Call("foo").String(ctx); s != "" { t.Errorf("foo: '%s'", s) }
-        if s := ctx.Call("bar").String(ctx); s != "bar" { t.Errorf("bar: '%s'", s) }
-        if s := ctx.Call("foobar").String(ctx); s != "" { t.Errorf("foobar: '%s'", s) }
-        if s := ctx.Call("foobaz").String(ctx); s != "foo-baz" { t.Errorf("foobaz: '%s'", s) }
+        if s := ctx.Call("foo").Expand(ctx); s != "" { t.Errorf("foo: '%s'", s) }
+        if s := ctx.Call("bar").Expand(ctx); s != "bar" { t.Errorf("bar: '%s'", s) }
+        if s := ctx.Call("foobar").Expand(ctx); s != "" { t.Errorf("foobar: '%s'", s) }
+        if s := ctx.Call("foobaz").Expand(ctx); s != "foo-baz" { t.Errorf("foobaz: '%s'", s) }
 }
 
 func TestSetEmptyValue(t *testing.T) {
@@ -1355,16 +1355,16 @@ bar = bar
 foobar := 
 foobaz := foo-baz
 `);     if err != nil { t.Errorf("parse error:", err) }
-        if s := ctx.Call("foo").String(ctx); s != "" { t.Errorf("foo: '%s'", s) }
-        if s := ctx.Call("bar").String(ctx); s != "bar" { t.Errorf("bar: '%s'", s) }
-        if s := ctx.Call("foobar").String(ctx); s != "" { t.Errorf("foobar: '%s'", s) }
-        if s := ctx.Call("foobaz").String(ctx); s != "foo-baz" { t.Errorf("foobaz: '%s'", s) }
+        if s := ctx.Call("foo").Expand(ctx); s != "" { t.Errorf("foo: '%s'", s) }
+        if s := ctx.Call("bar").Expand(ctx); s != "bar" { t.Errorf("bar: '%s'", s) }
+        if s := ctx.Call("foobar").Expand(ctx); s != "" { t.Errorf("foobar: '%s'", s) }
+        if s := ctx.Call("foobaz").Expand(ctx); s != "foo-baz" { t.Errorf("foobaz: '%s'", s) }
 }
 
 func TestMultipartNames(t *testing.T) {
         info, f := new(bytes.Buffer), builtinInfoFunc; defer func(){ builtinInfoFunc = f }()
         builtinInfoFunc = func(ctx *Context, args Items) {
-                fmt.Fprintf(info, "%v\n", args.String(ctx))
+                fmt.Fprintf(info, "%v\n", args.Expand(ctx))
         }
 
         ts := &testToolset{ tag:"test" }
@@ -1372,7 +1372,7 @@ func TestMultipartNames(t *testing.T) {
 
         ctx, err := newTestContext("TestMultipartNames", `
 $(= test:foo, f o o)
-$(= test:foo.bar, foo bar)
+$(= test:foo.bar,  foo bar)
 
 $(= test:foobar, f)     $(info [$(test:foobar 1,2,3)])
 $(+= test:foobar, o, o) $(info [$(test:foobar 1,2,3)])
@@ -1397,20 +1397,20 @@ test.a.foo = FOOOO
 $(info $(test.foo))
 $(info $(test.a.foo))
 `);     if err != nil { t.Errorf("parse error:", err) }
-        if s, x := ctx.Call("test:foo").String(ctx), "f o o (test:foo:)"; s != x { t.Errorf("expects '%s' but '%s'", x, s) }
-        if s, x := ctx.Call("test:foo.bar").String(ctx), "foo bar (test:foo.bar:)"; s != x { t.Errorf("expects '%s' but '%s'", x, s) }
-        if s, x := ctx.Call("test.foo").String(ctx), "FOOO"; s != x { t.Errorf("expects '%s' but '%s'", x, s) }
-        if s, x := ctx.Call("test.a.foo").String(ctx), "FOOOO"; s != x { t.Errorf("expects '%s' but '%s'", x, s) }
-        if s, x := ctx.Call("test.a.bar").String(ctx), "bar"; s != x { t.Errorf("expects '%s' but '%s'", x, s) }
+        if s, x := ctx.Call("test:foo").Expand(ctx), " f o o (test:foo:)"; s != x { t.Errorf("expects '%s' but '%s'", x, s) }
+        if s, x := ctx.Call("test:foo.bar").Expand(ctx), "  foo bar (test:foo.bar:)"; s != x { t.Errorf("expects '%s' but '%s'", x, s) }
+        if s, x := ctx.Call("test.foo").Expand(ctx), "FOOO"; s != x { t.Errorf("expects '%s' but '%s'", x, s) }
+        if s, x := ctx.Call("test.a.foo").Expand(ctx), "FOOOO"; s != x { t.Errorf("expects '%s' but '%s'", x, s) }
+        if s, x := ctx.Call("test.a.bar").Expand(ctx), "bar"; s != x { t.Errorf("expects '%s' but '%s'", x, s) }
         if s, b := ts.vars["foo"]; !b { t.Errorf("expects 'foo'") } else {
-                if x := "f o o"; s != x { t.Errorf("expects '%s' but '%s'", x, s) }
+                if x := " f o o"; s != x { t.Errorf("expects '%s' but '%s'", x, s) }
         }
         if s, b := ts.vars["foo.bar"]; !b { t.Errorf("expects 'foo.bar'") } else {
-                if x := "foo bar"; s != x { t.Errorf("expects '%s' but '%s'", x, s) }
+                if x := "  foo bar"; s != x { t.Errorf("expects '%s' but '%s'", x, s) }
         }
 
-        if v, s := info.String(), fmt.Sprintf(`[f (test:foobar:1,2,3)]
-[f (test:foobar:); o; o (test:foobar:1,2,3)]
+        if v, s := info.String(), fmt.Sprintf(`[ f (test:foobar:1 2 3)]
+[ f (test:foobar:); o; o (test:foobar:1 2 3)]
 fooo
 foooo
 fooo
@@ -1426,7 +1426,15 @@ FOOOO
 func TestContinualInCall(t *testing.T) {
         info, f := new(bytes.Buffer), builtinInfoFunc; defer func(){ builtinInfoFunc = f }()
         builtinInfoFunc = func(ctx *Context, args Items) {
-                fmt.Fprintf(info, "%v\n", args.String(ctx))
+                //fmt.Fprintf(info, "%v\n", args.Expand(ctx))
+                for n, a := range args {
+                        if n == 0 {
+                                fmt.Fprint(info, a.Expand(ctx))
+                        } else {
+                                fmt.Fprintf(info, ",%v", a.Expand(ctx))
+                        }
+                }
+                fmt.Fprintf(info, "\n")
         }
 
         ctx, err := newTestContext("TestContinualInCall", `
@@ -1435,7 +1443,7 @@ foo = $(info a,  ndk  , \
   ABI=x86 armeabi, \
 )
 `);     if err != nil { t.Errorf("parse error:", err) }
-        if s := ctx.Call("foo").String(ctx); s != "" { t.Errorf("foo: '%s'", s) }
+        if s := ctx.Call("foo").Expand(ctx); s != "" { t.Errorf("foo: '%s'", s) }
         // FIXIME: if s := info.String(); s != `a,  ndk  , PLATFORM=android-9, ABI=x86 armeabi, ` { t.Errorf("info: '%s'", s) }
         if a, b := info.String(), "a,  ndk  ,    PLATFORM=android-9,    ABI=x86 armeabi,  \n"; a != b { t.Errorf("expects '%s' but '%s'", b, a) }
 }
@@ -1445,7 +1453,7 @@ func TestModuleVariables(t *testing.T) {
 
         info, f := new(bytes.Buffer), builtinInfoFunc; defer func(){ builtinInfoFunc = f }()
         builtinInfoFunc = func(ctx *Context, args Items) {
-                fmt.Fprintf(info, "%v\n", args.String(ctx))
+                fmt.Fprintf(info, "%v\n", args.Expand(ctx))
         }
 
         ctx, err := newTestContext("TestModuleVariables", `
@@ -1461,19 +1469,19 @@ $(info $(test.name) $(test.dir))
         if m, ok := ctx.modules["test"]; !ok || m == nil { t.Errorf("nil 'test' module") } else {
                 if c, ok := m.Children["export"]; !ok || c == nil { t.Errorf("'me.export' is undefined") } else {
                         if d, ok := c.defines["name"]; !ok || d == nil { t.Errorf("no 'name' defined") } else {
-                                if s := ctx.getDefineValue(d).String(ctx); s != "export" { t.Errorf("name != 'export' (%v)", s) }
+                                if s := ctx.getDefineValue(d).Expand(ctx); s != "export" { t.Errorf("name != 'export' (%v)", s) }
                         }
                 }
                 if d, ok := m.defines["name"]; !ok || d == nil { t.Errorf("no 'name' defined") } else {
-                        if s := ctx.getDefineValue(d).String(ctx); s != "test" { t.Errorf("name != 'test' (%v)", s) }
+                        if s := ctx.getDefineValue(d).Expand(ctx); s != "test" { t.Errorf("name != 'test' (%v)", s) }
                 }
                 if d, ok := m.defines["dir"]; !ok || d == nil { t.Errorf("no 'dir' defined") } else {
-                        if s := ctx.getDefineValue(d).String(ctx); s != workdir { t.Errorf("dir != '%v' (%v)", workdir, s) }
+                        if s := ctx.getDefineValue(d).Expand(ctx); s != workdir { t.Errorf("dir != '%v' (%v)", workdir, s) }
                 }
                 ctx.With(m, func() {
-                        if s := ctx.Call("me").String(ctx); s != "test" { t.Errorf("me != test (%v)", s) }
-                        if s := ctx.Call("me.name").String(ctx); s != "test" { t.Errorf("me.name != test (%v)", s) }
-                        if s := ctx.Call("me.dir").String(ctx); s != workdir { t.Errorf("me.dir != %v (%v)", workdir, s) }
+                        if s := ctx.Call("me").Expand(ctx); s != "test" { t.Errorf("me != test (%v)", s) }
+                        if s := ctx.Call("me.name").Expand(ctx); s != "test" { t.Errorf("me.name != test (%v)", s) }
+                        if s := ctx.Call("me.dir").Expand(ctx); s != workdir { t.Errorf("me.dir != %v (%v)", workdir, s) }
                 })
         }
 
@@ -1485,7 +1493,7 @@ func TestModuleTargets(t *testing.T) {
 
         info, f := new(bytes.Buffer), builtinInfoFunc; defer func(){ builtinInfoFunc = f }()
         builtinInfoFunc = func(ctx *Context, args Items) {
-                fmt.Fprintf(info, "%v\n", args.String(ctx))
+                fmt.Fprintf(info, "%v\n", args.Expand(ctx))
         }
 
         ctx, err := newTestContext("TestModuleTargets", `
@@ -1523,7 +1531,7 @@ func TestToolsetVariables(t *testing.T) {
 
         info, f := new(bytes.Buffer), builtinInfoFunc; defer func(){ builtinInfoFunc = f }()
         builtinInfoFunc = func(ctx *Context, args Items) {
-                fmt.Fprintf(info, "%v\n", args.String(ctx))
+                fmt.Fprintf(info, "%v\n", args.Expand(ctx))
         }
 
         ndk, _ := exec.LookPath("ndk-build")
@@ -1549,7 +1557,7 @@ $(info $(test-ndk:root))
         if v, s := info.String(), fmt.Sprintf(`shell:name:
 sdk:name:
 sdk:root:
-sdk:support:a,b,c
+sdk:support:a b c
 ndk:name:
 ndk:root:
 `); v != s { t.Errorf("`%s` != `%s`", v, s) }
@@ -1563,7 +1571,7 @@ func _TestDefineToolset(t *testing.T) {
 
         info, f := new(bytes.Buffer), builtinInfoFunc; defer func(){ builtinInfoFunc = f }()
         builtinInfoFunc = func(ctx *Context, args Items) {
-                fmt.Fprintf(info, "%v\n", args.String(ctx))
+                fmt.Fprintf(info, "%v\n", args.Expand(ctx))
         }
 
         ctx, err := newTestContext("TestDefineToolset", `

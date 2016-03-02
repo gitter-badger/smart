@@ -132,7 +132,7 @@ type location struct {
 
 type stringitem string
 
-func (si stringitem) String(ctx *Context) string { return string(si) }
+func (si stringitem) Expand(ctx *Context) string { return string(si) }
 func (si stringitem) IsEmpty(ctx *Context) bool { return string(si) == "" }
 
 // flatitem is a expanded string with a location
@@ -141,7 +141,7 @@ type flatitem struct {
         l location
 }
 
-func (fi *flatitem) String(ctx *Context) string { return fi.s }
+func (fi *flatitem) Expand(ctx *Context) string { return fi.s }
 func (fi *flatitem) IsEmpty(ctx *Context) bool { return fi.s == "" }
 
 type node struct {
@@ -151,19 +151,19 @@ type node struct {
         pos, end int
 }
 
-func (n *node) String(ctx *Context) (s string) {
+func (n *node) Expand(ctx *Context) (s string) {
         var is Items
         if nodeDefineDeferred <= n.kind && n.kind <= nodeDefineAppend {
                 is = ctx.expandNode(n.children[1])
         } else {
                 is = ctx.expandNode(n)
         }
-        return is.String(ctx)
+        return is.Expand(ctx)
 }
 
 func (n *node) IsEmpty(ctx *Context) bool {
         if len(n.children) == 0 { return true }
-        return n.String(ctx) == ""
+        return n.Expand(ctx) == ""
 }
 
 func (n *node) len() int {
@@ -1029,7 +1029,7 @@ func (ctx *Context) expand(loc location, str string) string {
                 var t bytes.Buffer
                 if rr == 0 {
                         t.WriteRune(r)
-                        out = ctx.call(loc, t.String(), args...).String(ctx)
+                        out = ctx.call(loc, t.String(), args...).Expand(ctx)
                         return
                 }
 
@@ -1070,7 +1070,7 @@ func (ctx *Context) expand(loc location, str string) string {
                                         }
                                         t.Reset()
                                 }
-                                out, l = ctx.call(loc, name, args...).String(ctx), l + rs
+                                out, l = ctx.call(loc, name, args...).Expand(ctx), l + rs
                                 return // do not "break"
                         }
 
@@ -1150,7 +1150,7 @@ func (ctx *Context) callMultipart(loc location, parts []string, args ...Item) (i
                 case name == "$": return Items{ stringitem("$") };
                 case name == "call":
                         if 0 < len(args) {
-                                return ctx.call(loc, args[0].String(ctx), args[1:]...)
+                                return ctx.call(loc, args[0].Expand(ctx), args[1:]...)
                         }
                         return
                 case name == "me":
@@ -1241,7 +1241,7 @@ func (ctx *Context) ItemString(i Item) (s string) {
         default:
                 errorf("unsupported '%v'", t)
         } */
-        s = i.String(ctx)
+        s = i.Expand(ctx)
         return
 }
 
@@ -1327,7 +1327,7 @@ func (ctx *Context) multipart(n *node) (*bytes.Buffer, []int) {
                 switch c.kind {
                 case nodeNamePrefix: b.WriteString(":"); parts[0] = b.Len()
                 case nodeNamePart:   b.WriteString("."); parts = append(parts, b.Len())
-                default:   b.WriteString(ctx.expandNode(c).String(ctx))
+                default:   b.WriteString(ctx.expandNode(c).Expand(ctx))
                 }
         }
         if pos < n.end {
@@ -1408,17 +1408,15 @@ func (ctx *Context) processNode(n *node) (err error) {
 
         switch n.kind {
         case nodeCall:
-                if is := ctx.expandNode(n); !is.IsEmpty(ctx) {
+                if s := strings.TrimSpace(ctx.expandNode(n).Expand(ctx)); s != "" {
                         lineno, colno := ctx.l.caculateLocationLineColumn(n.loc())
-                        fmt.Fprintf(os.Stderr, "%v:%v:%v: illigal: '%v'\n",
-                                ctx.l.scope, lineno, colno, is.String(ctx))
+                        fmt.Fprintf(os.Stderr, "%v:%v:%v: illigal: '%v'\n", ctx.l.scope, lineno, colno, s)
                 }
 
         case nodeImmediateText:
-                if is := ctx.expandNode(n); !is.IsEmpty(ctx) {
+                if s := strings.TrimSpace(ctx.expandNode(n).Expand(ctx)); s != "" {
                         lineno, colno := ctx.l.caculateLocationLineColumn(n.loc())
-                        fmt.Fprintf(os.Stderr, "%v:%v:%v: syntax error: '%v'\n",
-                                ctx.l.scope, lineno, colno, is.String(ctx))
+                        fmt.Fprintf(os.Stderr, "%v:%v:%v: syntax error: '%v'\n", ctx.l.scope, lineno, colno, s)
                 }
 
         case nodeDefineQuestioned:
@@ -1479,8 +1477,8 @@ func (ctx *Context) processNode(n *node) (err error) {
         case nodeRuleSingleColoned: fallthrough
         case nodeRuleDoubleColoned:
                 r := &rule{
-                        targets:Split(ctx.expandNode(n.children[0]).String(ctx)),
-                        prerequisites:Split(ctx.expandNode(n.children[1]).String(ctx)),
+                        targets:Split(ctx.expandNode(n.children[0]).Expand(ctx)),
+                        prerequisites:Split(ctx.expandNode(n.children[1]).Expand(ctx)),
                         node:n,
                 }
                 if 2 < len(n.children) {

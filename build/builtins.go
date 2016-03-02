@@ -34,7 +34,7 @@ var (
         builtinInfoFunc = func(ctx *Context, args Items) {
                 var as []string
                 for _, a := range args {
-                        as = append(as, a.String(ctx))
+                        as = append(as, a.Expand(ctx))
                 }
                 fmt.Printf("%v\n", strings.Join(as, ","))
         }
@@ -77,7 +77,7 @@ func builtinTitle(ctx *Context, loc location, args Items) (is Items) {
 
 func builtinSet(ctx *Context, loc location, args Items) (is Items) {
         if num := len(args); 1 < num {
-                ctx.Set(strings.TrimSpace(args[0].String(ctx)), args[1:]...)
+                ctx.Set(strings.TrimSpace(args[0].Expand(ctx)), args[1:]...)
         }
         return
 }
@@ -89,7 +89,7 @@ func builtinSetNot(ctx *Context, loc location, args Items) (is Items) {
 
 func builtinSetQuestioned(ctx *Context, loc location, args Items) (is Items) {
         if num := len(args); 1 < num {
-                name := strings.TrimSpace(args[0].String(ctx))
+                name := strings.TrimSpace(args[0].Expand(ctx))
                 if i := strings.Index(name, ":"); 0 <= i {
                         prefix, parts := name[0:i], strings.Split(name[i+1:], ".")
                         if ii := ctx.callScoped(loc, prefix, parts); ii.IsEmpty(ctx) {
@@ -107,14 +107,10 @@ func builtinSetQuestioned(ctx *Context, loc location, args Items) (is Items) {
 
 func builtinSetAppend(ctx *Context, loc location, args Items) (is Items) {
         if num := len(args); 1 < num {
-                name := strings.TrimSpace(args[0].String(ctx))
+                name := strings.TrimSpace(args[0].Expand(ctx))
                 if i := strings.Index(name, ":"); 0 <= i {
                         prefix, parts := name[0:i], strings.Split(name[i+1:], ".")
-                        if ii := ctx.callScoped(loc, prefix, parts); !ii.IsEmpty(ctx) {
-                                is = ii
-                        }
-                        is = is.Concat(ctx, args[1:]...)
-                        ctx.setScoped(prefix, parts, is...)
+                        ctx.setScoped(prefix, parts, ctx.callScoped(loc, prefix, parts).Concat(ctx, args[1:]...)...)
                 } else {
                         parts := strings.Split(name, ".")
                         if ctx.getMultipart(parts) == nil {
@@ -132,8 +128,8 @@ func builtinToolset(ctx *Context, loc location, args Items) (is Items) {
 
 func builtinModule(ctx *Context, loc location, args Items) (is Items) {
         var name, exportName, toolsetName string
-        if 0 < len(args) { name = strings.TrimSpace(args[0].String(ctx)) }
-        if 1 < len(args) { toolsetName = strings.TrimSpace(args[1].String(ctx)) }
+        if 0 < len(args) { name = strings.TrimSpace(args[0].Expand(ctx)) }
+        if 1 < len(args) { toolsetName = strings.TrimSpace(args[1].Expand(ctx)) }
         if name == "" {
                 errorf("module name is required")
                 return
@@ -216,7 +212,7 @@ func builtinModule(ctx *Context, loc location, args Items) (is Items) {
                 var rest Items
                 vars := make(map[string]string, 4)
                 for _, a := range args[2:] {
-                        s := a.String(ctx)
+                        s := a.Expand(ctx)
                         if i := strings.Index(s, "="); 0 < i /* false if '=foo' */ {
                                 vars[strings.TrimSpace(s[0:i])] = strings.TrimSpace(s[i+1:])
                         } else {
@@ -267,7 +263,7 @@ func builtinUse(ctx *Context, loc location, args Items) (is Items) {
         if ctx.m == nil { errorf("no module defined") }
 
         for _, a := range args {
-                s := strings.TrimSpace(a.String(ctx))
+                s := strings.TrimSpace(a.Expand(ctx))
                 if m, ok := ctx.modules[s]; ok {
                         ctx.m.Using = append(ctx.m.Using, m)
                         m.UsedBy = append(m.UsedBy, ctx.m)

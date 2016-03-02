@@ -33,7 +33,10 @@ var (
 )
 
 type Item interface{
-        String(ctx *Context) string
+        // Expand the item to string
+        Expand(ctx *Context) string
+
+        // Check if the item is empty (including all spaces)
         IsEmpty(ctx *Context) bool
 }
 
@@ -41,20 +44,22 @@ type Items []Item
 
 func (is Items) Len() int { return len(is) }
 func (is Items) IsEmpty(ctx *Context) bool {
+        if 0 < len(is) { return false }
         for _, i := range is {
                 if !i.IsEmpty(ctx) { return false }
         }
-        return len(is) == 0
+        return true
 }
 
-func (is Items) String(ctx *Context) string {
+func (is Items) Expand(ctx *Context) string { return is.Join(ctx, " ") }
+func (is Items) Join(ctx *Context, sep string) string {
         b := new(bytes.Buffer)
         for i, a := range is {
-                if !a.IsEmpty(ctx) {
+                if s := a.Expand(ctx); s != "" {
                         if i == 0 {
-                                fmt.Fprint(b, a.String(ctx))
+                                fmt.Fprint(b, s)
                         } else {
-                                fmt.Fprintf(b, " %s", a.String(ctx))
+                                fmt.Fprintf(b, "%s%s", sep, s)
                         }
                 }
         }
@@ -529,7 +534,7 @@ func (m *Module) GetCommitLocation() (s string, lineno, colno int) {
 
 func (m *Module) Get(ctx *Context, name string) (s string) {
         if d, ok := m.defines[name]; ok && d != nil {
-                s = d.value.String(ctx)
+                s = d.value.Expand(ctx)
         }
         return
 }
