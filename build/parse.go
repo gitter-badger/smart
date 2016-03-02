@@ -135,6 +135,8 @@ type stringitem string
 func (si stringitem) Expand(ctx *Context) string { return string(si) }
 func (si stringitem) IsEmpty(ctx *Context) bool { return string(si) == "" }
 
+func StringItem(s string) stringitem { return stringitem(s) }
+
 // flatitem is a expanded string with a location
 type flatitem struct {
         s string

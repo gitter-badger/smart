@@ -66,13 +66,13 @@ func (sdk *toolset) getResourceFiles(ds ...string) (as []*Action) {
         return
 }
 
-func (sdk *toolset) ConfigModule(ctx *Context, args []string, vars map[string]string) {
+func (sdk *toolset) ConfigModule(ctx *Context, args Items, vars map[string]string) {
         var (
                 kind, platform string
                 sources []string
                 err error
         )
-        if 0 < len(args) { kind = strings.TrimSpace(args[0]) }
+        if 0 < len(args) { kind = strings.TrimSpace(args[0].Expand(ctx)) }
         if s, ok := vars["PLATFORM"]; ok { platform = s } else { platform = sdkDefaultPlatform }
         if kind == "external" {
                 // ...
@@ -92,14 +92,14 @@ func (sdk *toolset) ConfigModule(ctx *Context, args []string, vars map[string]st
                         Fatal(fmt.Sprintf("no Java sources in `%v'", d))
                 }
 
-                ctx.Set("me.sources", strings.Join(sources, " "))
+                ctx.Set("me.sources", StringItem(strings.Join(sources, " ")))
         }
-        ctx.Set("me.platform", platform)
-        ctx.Set("me.kind", kind)
+        ctx.Set("me.platform", StringItem(platform))
+        ctx.Set("me.kind", StringItem(kind))
 }
 
 func (sdk *toolset) CreateActions(ctx *Context) bool {
-        m, platform := ctx.CurrentModule(), strings.TrimSpace(ctx.Call("me.platform"))
+        m, platform := ctx.CurrentModule(), strings.TrimSpace(ctx.Call("me.platform").Expand(ctx))
         if platform == "" { Fatal("no platform selected (%v)", m.GetName(ctx)) }
 
         //fmt.Printf("platform: %v\n", platform)
@@ -131,13 +131,13 @@ func (sdk *toolset) CreateActions(ctx *Context) bool {
                         for _, u := range m.Using {
                                 if strings.ToLower(u.Get(ctx, "kind")) != "jar" { Fatal("using `%v' module", u.Get(ctx, "kind")) }
                                 ctx.With(u, func() {
-                                        classpath = append(classpath, strings.Fields(ctx.Call("me.export.jar"))...)
-                                        classpath = append(classpath, strings.Fields(ctx.Call("me.export.libs.static"))...)
+                                        classpath = append(classpath, strings.Fields(ctx.Call("me.export.jar").Expand(ctx))...)
+                                        classpath = append(classpath, strings.Fields(ctx.Call("me.export.libs.static").Expand(ctx))...)
                                 })
                         }
 
-                        staticLibs = append(staticLibs, strings.Fields(ctx.Call("me.static_libs"))...)
-                        classpath = append(classpath, strings.Fields(ctx.Call("me.classpath"))...)
+                        staticLibs = append(staticLibs, strings.Fields(ctx.Call("me.static_libs").Expand(ctx))...)
+                        classpath = append(classpath, strings.Fields(ctx.Call("me.classpath").Expand(ctx))...)
                         classpath = append(classpath, staticLibs...)
 
                         for _, src := range sources { ps = append(ps, NewAction(src, nil)) }
@@ -160,7 +160,7 @@ func (sdk *toolset) CreateActions(ctx *Context) bool {
                 m.Action = NewInterAction(m.GetName(ctx)+".apk", c, prerequisites...)
         case "jar":
                 c := &genJAR{genTar{ basicGen:gen, target:filepath.Join(gen.out, m.GetName(ctx)+".jar"), staticlibs:staticLibs, }}
-                ctx.Set("me.export.jar", c.target)
+                ctx.Set("me.export.jar", StringItem(c.target))
                 m.Action = NewInterAction(m.GetName(ctx)+".jar", c, prerequisites...)
         case "external":
                 Fatal("TODO: `%v' of `%v'", m.GetName(ctx), m.Get(ctx, "kind"))

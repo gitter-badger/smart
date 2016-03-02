@@ -17,19 +17,19 @@ func init() {
 
 type toolset struct { BasicToolset }
 
-func (shell *toolset) ConfigModule(ctx *Context, args []string, vars map[string]string) {
+func (shell *toolset) ConfigModule(ctx *Context, args Items, vars map[string]string) {
         var (
                 m = ctx.CurrentModule()
                 commandPath string
         )
 
         if num := len(args); 1 == num {
-                commandPath = strings.TrimSpace(args[0])
-                ctx.Set("me.path", commandPath)
+                commandPath = strings.TrimSpace(args[0].Expand(ctx))
+                ctx.Set("me.path", StringItem(commandPath))
         } else if 1 < num {
-                commandPath = strings.Join(args, " ")
+                commandPath = args.Expand(ctx) //strings.Join(args, " ")
                 commandPath = strings.Join(Split(commandPath), " ")
-                ctx.Set("me.path", commandPath)
+                ctx.Set("me.path", StringItem(commandPath))
         } else {
                 s, l, c := m.GetDeclareLocation()
                 fmt.Fprintf(os.Stderr, "no commands", s, l, c)
@@ -38,14 +38,14 @@ func (shell *toolset) ConfigModule(ctx *Context, args []string, vars map[string]
 
 func (shell *toolset) CreateActions(ctx *Context) bool {
         ac := &command{
-                args: Split(ctx.Call("me.args")),
-                targets: Split(ctx.Call("me.targets")),
+                args: Split(ctx.Call("me.args").Expand(ctx)),
+                targets: Split(ctx.Call("me.targets").Expand(ctx)),
         }
 
         m := ctx.CurrentModule()
         d := m.GetDir(ctx)
 
-        for _, s := range Split(ctx.Call("me.path")) {
+        for _, s := range Split(ctx.Call("me.path").Expand(ctx)) {
                 c := NewExcmd(s)
                 c.SetDir(d)
                 ac.cmds = append(ac.cmds, c)
@@ -59,7 +59,7 @@ func (shell *toolset) CreateActions(ctx *Context) bool {
                 }
         }
 
-        for _, s := range Split(ctx.Call("me.depends")) {
+        for _, s := range Split(ctx.Call("me.depends").Expand(ctx)) {
                 if !filepath.IsAbs(s) {
                         s = filepath.Join(d, s)
                 }

@@ -48,16 +48,16 @@ type imported struct {
 }
 
 func (im *imported) load(ctx *Context) {
-        im.includes = append(im.includes, splitFieldsWithPrefix(ctx.Call("me.includes"), "-I")...)
-        im.libdirs = append(im.libdirs, splitFieldsWithPrefix(ctx.Call("me.libdirs"), "-L")...)
-        im.libs = append(im.libs, splitFieldsWithPrefix(ctx.Call("me.libs"), "-l")...)
+        im.includes = append(im.includes, splitFieldsWithPrefix(ctx.Call("me.includes").Expand(ctx), "-I")...)
+        im.libdirs = append(im.libdirs, splitFieldsWithPrefix(ctx.Call("me.libdirs").Expand(ctx), "-L")...)
+        im.libs = append(im.libs, splitFieldsWithPrefix(ctx.Call("me.libs").Expand(ctx), "-l")...)
 }
 
 func (im *imported) importUsedModule(ctx *Context, m *Module) {
         importVars := func() {
-                im.includes = append(im.includes, splitFieldsWithPrefix(ctx.Call("me.export.includes"), "-I")...)
-                im.libdirs = append(im.libdirs, splitFieldsWithPrefix(ctx.Call("me.export.libdirs"), "-L")...)
-                im.libs = append(im.libs, splitFieldsWithPrefix(ctx.Call("me.export.libs"), "-l")...)
+                im.includes = append(im.includes, splitFieldsWithPrefix(ctx.Call("me.export.includes").Expand(ctx), "-I")...)
+                im.libdirs = append(im.libdirs, splitFieldsWithPrefix(ctx.Call("me.export.libdirs").Expand(ctx), "-L")...)
+                im.libs = append(im.libs, splitFieldsWithPrefix(ctx.Call("me.export.libs").Expand(ctx), "-l")...)
         }
         for _, u := range m.Using {
                 ctx.With(u, importVars)
@@ -95,14 +95,14 @@ func createCompileActions(includes, sources []string) (actions []*Action, numAsm
 
 type toolset struct { BasicToolset }
 
-func (gcc *toolset) ConfigModule(ctx *Context, args []string, vars map[string]string) {
+func (gcc *toolset) ConfigModule(ctx *Context, args Items, vars map[string]string) {
         var (
                 kind string
         )
         if 0 < len(args) {
-                kind = strings.TrimSpace(args[0])
+                kind = strings.TrimSpace(args[0].Expand(ctx))
         }
-        ctx.Set("me.kind", kind) // ctx.m.Set("kind", kind)
+        ctx.Set("me.kind", StringItem(kind)) // ctx.m.Set("kind", kind)
 }
 
 func (gcc *toolset) createLinkAction(ctx *Context, out, ext string, im *imported) *Link {

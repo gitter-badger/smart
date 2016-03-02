@@ -39,7 +39,7 @@ type toolset struct {
         root string
 }
 
-func (ndk *toolset) ConfigModule(ctx *Context, args []string, vars map[string]string) {
+func (ndk *toolset) ConfigModule(ctx *Context, args Items, vars map[string]string) {
         var (
                 abi = "armeabi" // all
                 optim = "debug" // release|debug
@@ -49,17 +49,17 @@ func (ndk *toolset) ConfigModule(ctx *Context, args []string, vars map[string]st
         )
 
         // APP_BUILD_SCRIPT, APP_PLATFORM, APP_STL, APP_ABI, APP_OPTIM
-        if s, ok := vars["BUILD_SCRIPT"]; ok { script = s; ctx.Set("me.is_custom_script", "yes") }
+        if s, ok := vars["BUILD_SCRIPT"]; ok { script = s; ctx.Set("me.is_custom_script", StringItem("yes")) }
         if s, ok := vars["PLATFORM"];     ok { platform = s }
         if s, ok := vars["STL"];          ok { stl = s }
         if s, ok := vars["ABI"];          ok { abi = s }
         if s, ok := vars["OPTIM"];        ok { optim = s }
 
-        ctx.Set("me.abi",      strings.TrimSpace(abi))
-        ctx.Set("me.optim",    strings.TrimSpace(optim))
-        ctx.Set("me.platform", strings.TrimSpace(platform))
-        ctx.Set("me.script",   strings.TrimSpace(script))
-        ctx.Set("me.stl",      strings.TrimSpace(stl))
+        ctx.Set("me.abi",      StringItem(strings.TrimSpace(abi)))
+        ctx.Set("me.optim",    StringItem(strings.TrimSpace(optim)))
+        ctx.Set("me.platform", StringItem(strings.TrimSpace(platform)))
+        ctx.Set("me.script",   StringItem(strings.TrimSpace(script)))
+        ctx.Set("me.stl",      StringItem(strings.TrimSpace(stl)))
 
         //m := ctx.CurrentModule()
         //Message("ndk-build: config: name=%v, dir=%v, args=%v, vars=%v", m.Name, m.GetDir(), args, vars)
@@ -70,12 +70,12 @@ func (ndk *toolset) CreateActions(ctx *Context) bool {
         m := ctx.CurrentModule()
 
         cmd := &delegate{
-                abis:     strings.Fields(ctx.Call("me.abi")),
-                abi:      ctx.Call("me.abi"),
-                script:   ctx.Call("me.script"),
-                platform: ctx.Call("me.platform"),
-                stl:      ctx.Call("me.stl"),
-                optim:    ctx.Call("me.optim"),
+                abis:     strings.Fields(ctx.Call("me.abi").Expand(ctx)),
+                abi:      ctx.Call("me.abi").Expand(ctx),
+                script:   ctx.Call("me.script").Expand(ctx),
+                platform: ctx.Call("me.platform").Expand(ctx),
+                stl:      ctx.Call("me.stl").Expand(ctx),
+                optim:    ctx.Call("me.optim").Expand(ctx),
         }
         if !filepath.IsAbs(cmd.script) {
                 s, _, _ := m.GetDeclareLocation()
@@ -90,7 +90,7 @@ func (ndk *toolset) CreateActions(ctx *Context) bool {
         prerequisites[cmd.script]++
 
         var scripts []string
-        if ctx.Call("me.is_custom_script") == "yes" {
+        if ctx.Call("me.is_custom_script").Expand(ctx) == "yes" {
                 scripts = append(scripts, cmd.script)
         } else {
                 pa := m.Action.Prerequisites[0]
@@ -244,23 +244,23 @@ func (n *delegate) dumpAll(abi string, scripts []string) (res *dump) {
                 //fmt.Printf("%v", c.GetStdout().String())
                 ctx, e := NewContext("DummyDump", c.GetStdout().Bytes(), nil)
                 if e != nil { Fatal("DummyDump: %v", e) }
-                res.ndkRoot = ctx.Call("NDK_ROOT")
-                res.targetOut = ctx.Call("TARGET_OUT")
-                res.targetObjs = ctx.Call("TARGET_OBJS")
-                res.targetGdbSetup = ctx.Call("TARGET_GDB_SETUP")
-                res.targetGdbServer = ctx.Call("TARGET_GDB_SERVER")
-                res.modules = strings.Fields(ctx.Call("MODULES"))
+                res.ndkRoot = ctx.Call("NDK_ROOT").Expand(ctx)
+                res.targetOut = ctx.Call("TARGET_OUT").Expand(ctx)
+                res.targetObjs = ctx.Call("TARGET_OBJS").Expand(ctx)
+                res.targetGdbSetup = ctx.Call("TARGET_GDB_SETUP").Expand(ctx)
+                res.targetGdbServer = ctx.Call("TARGET_GDB_SERVER").Expand(ctx)
+                res.modules = strings.Fields(ctx.Call("MODULES").Expand(ctx))
                 for _, s := range res.modules {
                         m := &moduleInfo{}
-                        m.name = ctx.Call(s+"_NAME")
-                        m.filename = ctx.Call(s+"_FILENAME")
-                        m.path = ctx.Call(s+"_PATH")
-                        m.sources = strings.Fields(ctx.Call(s+"_SOURCES"))
-                        m.script = ctx.Call(s+"_SCRIPT")
-                        m.objsDir = ctx.Call(s+"_OBJS_DIR")
-                        m.built = ctx.Call(s+"_BUILT")
-                        m.installed = ctx.Call(s+"_INSTALLED")
-                        m.class = ctx.Call(s+"_CLASS")
+                        m.name = ctx.Call(s+"_NAME").Expand(ctx)
+                        m.filename = ctx.Call(s+"_FILENAME").Expand(ctx)
+                        m.path = ctx.Call(s+"_PATH").Expand(ctx)
+                        m.sources = strings.Fields(ctx.Call(s+"_SOURCES").Expand(ctx))
+                        m.script = ctx.Call(s+"_SCRIPT").Expand(ctx)
+                        m.objsDir = ctx.Call(s+"_OBJS_DIR").Expand(ctx)
+                        m.built = ctx.Call(s+"_BUILT").Expand(ctx)
+                        m.installed = ctx.Call(s+"_INSTALLED").Expand(ctx)
+                        m.class = ctx.Call(s+"_CLASS").Expand(ctx)
                         res.m[s] = *m
                 }
         }
@@ -297,10 +297,10 @@ func (n *delegate) dumpSingle(abi string) (res *dump) {
                 //res.moduleClass = ctx.Call("LOCAL_MODULE_CLASS")
                 //res.srcFiles = ctx.Call("LOCAL_SRC_FILES")
                 //res.builtModule = ctx.Call("LOCAL_BUILT_MODULE")
-                res.targetOut = ctx.Call("TARGET_OUT")
-                res.targetObjs = ctx.Call("TARGET_OBJS")
-                res.targetGdbSetup = ctx.Call("TARGET_GDB_SETUP")
-                res.targetGdbServer = ctx.Call("TARGET_GDB_SERVER")
+                res.targetOut = ctx.Call("TARGET_OUT").Expand(ctx)
+                res.targetObjs = ctx.Call("TARGET_OBJS").Expand(ctx)
+                res.targetGdbSetup = ctx.Call("TARGET_GDB_SETUP").Expand(ctx)
+                res.targetGdbServer = ctx.Call("TARGET_GDB_SERVER").Expand(ctx)
                 //fmt.Printf( "%v\n", ctx.variables )
                 //fmt.Printf( "%v\n", ctx.Call("LOCAL_OBJECTS") )
         }
