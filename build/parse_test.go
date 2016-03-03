@@ -1566,7 +1566,7 @@ ndk:root:
         delete(toolsets, "test-shell")
 }
 
-func _TestDefineToolset(t *testing.T) {
+func TestDefineToolset(t *testing.T) {
         if wd, e := os.Getwd(); e != nil || workdir != wd { t.Errorf("%v != %v (%v)", workdir, wd, e) }
 
         info, f := new(bytes.Buffer), builtinInfoFunc; defer func(){ builtinInfoFunc = f }()
@@ -1583,6 +1583,13 @@ $(toolset test)
 #    - need to reference to the building module
 #    - define rules for building the module
 #
+
+~.out := $(~.dir)/out
+
+$(info $(tool.name))
+$(info module:$(~.name) $(~.dir))
+
+$(~.name)/test:; @echo $@
 
 $(commit)
 `);     if err != nil { t.Errorf("parse error:", err) }
