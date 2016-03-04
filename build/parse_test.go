@@ -1584,12 +1584,20 @@ $(toolset test)
 #    - define rules for building the module
 #
 
-~.out := $(~.dir)/out
+~.out = $(~.dir)/out
 
 $(info $(tool.name))
 $(info module:$(~.name) $(~.dir))
 
-$(~.name)/test:; @echo $@
+$(~.name)/test:; @echo $@ $(~.source)
+
+$(commit)
+
+$(module a, test)
+
+$(info $(me.out))
+
+me.source := a.cpp
 
 $(commit)
 `);     if err != nil { t.Errorf("parse error:", err) }
@@ -1597,5 +1605,6 @@ $(commit)
 
         /// ...
 
-        if s := info.String(); s != `` { t.Errorf("info: '%s'", s) }
+        d := ""
+        if s := info.String(); s != fmt.Sprintf("test\ntest %s\n%s/out\n", d) { t.Errorf("info: '%s'", s) }
 }
