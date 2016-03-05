@@ -1577,13 +1577,7 @@ func TestDefineToolset(t *testing.T) {
         ctx, err := newTestContext("TestDefineToolset", `
 $(toolset test)
 
-#
-#  Define a new toolset 'test'
-#
-#    - need to reference to the building module
-#    - define rules for building the module
-#
-
+## Defered assignment.
 ~.out = $(~.dir)/out
 
 $(info $(tool.name))
