@@ -14,7 +14,7 @@ type builtin func(ctx *Context, loc location, args Items) Items
 
 var (
         builtins = map[string]builtin {
-                "toolset":      builtinToolset,
+                "template":     builtinTemplate,
                 "module":       builtinModule,
                 "commit":       builtinCommit,
                 "dir":          builtinDir,
@@ -25,8 +25,12 @@ var (
                 "lower":        builtinLower,
                 "title":        builtinTitle,
 
-                "=":           builtinSet,
-                //"!=":           builtinSetNot,
+                "when":         builtinWhen,
+                "unless":       builtinUnless,
+                "let":          builtinLet,
+
+                "=":            builtinSet,
+                //"!=":         builtinSetNot,
                 "?=":           builtinSetQuestioned,
                 "+=":           builtinSetAppend,
         }
@@ -121,7 +125,22 @@ func builtinSetAppend(ctx *Context, loc location, args Items) (is Items) {
         return
 }
 
-func builtinToolset(ctx *Context, loc location, args Items) (is Items) {
+func builtinWhen(ctx *Context, loc location, args Items) (is Items) {
+        errorf("todo: %v", args)
+        return
+}
+
+func builtinUnless(ctx *Context, loc location, args Items) (is Items) {
+        errorf("todo: %v", args)
+        return
+}
+
+func builtinLet(ctx *Context, loc location, args Items) (is Items) {
+        errorf("todo: %v", args)
+        return
+}
+
+func builtinTemplate(ctx *Context, loc location, args Items) (is Items) {
         errorf("todo: %v", args)
         return
 }

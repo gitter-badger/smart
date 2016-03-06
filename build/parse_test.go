@@ -1567,7 +1567,8 @@ ndk:root:
 }
 
 func TestDefineToolset(t *testing.T) {
-        if wd, e := os.Getwd(); e != nil || workdir != wd { t.Errorf("%v != %v (%v)", workdir, wd, e) }
+        wd, e := os.Getwd()
+        if e != nil || workdir != wd { t.Errorf("%v != %v (%v)", workdir, wd, e) }
 
         info, f := new(bytes.Buffer), builtinInfoFunc; defer func(){ builtinInfoFunc = f }()
         builtinInfoFunc = func(ctx *Context, args Items) {
@@ -1575,30 +1576,42 @@ func TestDefineToolset(t *testing.T) {
         }
 
         ctx, err := newTestContext("TestDefineToolset", `
-$(toolset test)
+### Defining the toolset template
+$(template test)
 
-## Defered assignment.
-~.out = $(~.dir)/out
+~.modules += $(me.name)
 
-$(info $(tool.name))
-$(info module:$(~.name) $(~.dir))
+# Defered assignment.
+me.out = $(me.dir)/out
 
-$(~.name)/test:; @echo $@ $(~.source)
+$(info $(~.name): modules: $(~.modules))
+$(info module: $(me.name) $(me.dir))
+
+$(info source: "$(me.source)")
+$(post) # 'post' is a declaration that we're going to intersect the module 
+$(info source: "$(me.source)")
+
+$(me.name)/test:; @echo $@ $(me.source)
 
 $(commit)
 
-$(module a, test)
-
-$(info $(me.out))
-
+### Using the new toolset template
+$(module a, test)    $(info $(me.out))
 me.source := a.cpp
+$(commit)
 
+$(module b, test)    $(info $(me.out))
+me.source := b.cpp
+$(info $(me.out))
 $(commit)
 `);     if err != nil { t.Errorf("parse error:", err) }
         if ctx.modules == nil { t.Errorf("nil modules") }
 
         /// ...
 
-        d := ""
-        if s := info.String(); s != fmt.Sprintf("test\ntest %s\n%s/out\n", d) { t.Errorf("info: '%s'", s) }
+        if s := info.String(); s != fmt.Sprintf(`test: modules: a
+test: 
+test %s
+%s/out
+`, wd, wd) { t.Errorf("info: '%s'", s) }
 }

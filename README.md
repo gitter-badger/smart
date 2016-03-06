@@ -1,10 +1,15 @@
-# Build smartly (in Go)
+# Smart (Drafting)
+
+**Smart** is a [Semi-Functional Scripting Language]() designed for building hierachical tasks easily.
+It's written in [Go](http://golang.org) programming language.
 
 [![GoDoc](https://godoc.org/github.com/duzy/smart/build?status.svg)](http://godoc.org/github.com/duzy/smart/build)
 
 ## Overview
 
-This `smart` utility is made to ease the build process of software development. It's inspired by [GNU make]() (having almost the same syntax as makefile, but not guaranteed to be compatible [GNU make]()). It's written in [Go]().
+The language is inspired by [GNU make]() (having almost the same syntax as makefile), it could do the same
+job as [GNU make]() but not the same as it. **Smart** is supposed to be used more in a programming manner of a
+[semi-functional]() paradigm.
 
 ## Quick Example
 
