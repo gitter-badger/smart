@@ -962,12 +962,15 @@ type Context struct {
 
         l *lex // the current lexer
         m *Module // the current module being processed
+        t *template // the current template being processed
 
         // variables in the context
         defines map[string]*define
 
         // rules in the context
         rules map[string]*rule
+
+        templates map[string]*template
 
         modules map[string]*Module
         moduleOrderList []*Module
@@ -1355,31 +1358,22 @@ func (ctx *Context) expandName(n *node) (parts []string, scoped bool, name strin
 }
 
 func (ctx *Context) expandNode(n *node) (is Items) {
-        nc := len(n.children)
-
         switch n.kind {
         case nodeEscape:
                 switch ctx.l.s[n.pos + 1] {
-                case '\n': return Items{ stringitem(" ") }
-                case '#':  return Items{ stringitem("#") }
+                case '\n': is = Items{ stringitem(" ") }
+                case '#':  is = Items{ stringitem("#") }
                 }
-                return
 
         case nodeCall:
-                var (
-                        parts []string
-                        args Items
-                )
+                var args Items
                 for _, an := range n.children[1:] {
                         args = args.Concat(ctx, ctx.expandNode(an)...)
                 }
-
-                parts, callScoped, name := ctx.expandName(n.children[0])
-                if callScoped {
-                        //name := string(b.Bytes()[0:i[0]-1])
-                        return ctx.callScoped(n.loc(), name, parts, args...)
+                if parts, callScoped, name := ctx.expandName(n.children[0]); callScoped {
+                        is = ctx.callScoped(n.loc(), name, parts, args...)
                 } else {
-                        return ctx.callMultipart(n.loc(), parts, args...)
+                        is = ctx.callMultipart(n.loc(), parts, args...)
                 }
 
         case nodeName:          fallthrough
@@ -1388,25 +1382,73 @@ func (ctx *Context) expandNode(n *node) (is Items) {
         case nodeTargets:       fallthrough
         case nodePrerequisites: fallthrough
         case nodeImmediateText:
-                var s string
+                var (
+                        s string
+                        nc = len(n.children)
+                )
                 if 0 < nc {
                         b, _ := ctx.multipart(n)
                         s = b.String()
                 } else {
                         s = n.str()
                 }
-                return Items{ stringitem(s) }
-        default:
-                panic(fmt.Sprintf("fixme: %v: %v (%v)\n", n.kind, n.str(), nc))
-        }
+                is = Items{ stringitem(s) }
 
+        default:
+                panic(fmt.Sprintf("fixme: %v: %v (%v)\n", n.kind, n.str(), len(n.children)))
+        }
+        return
+}
+
+func (ctx *Context) processTempNode(n *node) (ignore bool) {
+        ignore = true
+        if n.kind == nodeImmediateText {
+                for i, c := range n.children {
+                        if c.kind == nodeCall {
+                                switch s := c.children[0].str(); s {
+                                case "post":
+                                        if ctx.t.post != nil {
+                                                errorf("already posted")
+                                                return
+                                        }
+                                        ctx.t.post = c
+                                        fallthrough
+                                        
+                                case "commit":
+                                        ctx.t.declNodes = append(ctx.t.declNodes, &node{
+                                                l:n.l, kind:n.kind, pos:n.pos,
+                                                end:c.pos-1, children: n.children[0:i],
+                                        })
+
+                                        n.pos = c.end
+
+                                        if s == "commit" {
+                                                n.children, n.pos = n.children[i:], c.end
+                                                ctx.t.commit = c
+                                                return false
+                                        }
+
+                                        n.children = n.children[i+1:]
+                                        ctx.processTempNode(n)
+                                        return
+                                }
+                        }
+                }
+        }
+        if ctx.t.post != nil {
+                ctx.t.postNodes = append(ctx.t.postNodes, n)
+        } else {
+                ctx.t.declNodes = append(ctx.t.declNodes, n)
+        }
         return
 }
 
 func (ctx *Context) processNode(n *node) (err error) {
-        /*
-        lineno, colno := ctx.l.caculateLocationLineColumn(n.loc())
-        fmt.Fprintf(os.Stderr, "%v:%v:%v: '%v'\n", ctx.l.scope, lineno, colno, n.kind) //*/
+        if ctx.t != nil {
+                if ctx.processTempNode(n) {
+                        return
+                }
+        }
 
         switch n.kind {
         case nodeCall:
@@ -1578,6 +1620,7 @@ func (ctx *Context) include(fn string) (err error) {
 func NewContext(scope string, s []byte, vars map[string]string) (ctx *Context, err error) {
         ctx = &Context{
                 l: &lex{ parseBuffer:&parseBuffer{ scope:scope, s: s }, pos: 0 },
+                templates: make(map[string]*template, 8),
                 defines: make(map[string]*define, len(vars) + 16),
                 modules: make(map[string]*Module, 8),
                 rules: make(map[string]*rule, 8),

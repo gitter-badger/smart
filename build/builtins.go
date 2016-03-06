@@ -29,6 +29,8 @@ var (
                 "unless":       builtinUnless,
                 "let":          builtinLet,
 
+                "expr":         builtinExpr,
+
                 "=":            builtinSet,
                 //"!=":         builtinSetNot,
                 "?=":           builtinSetQuestioned,
@@ -140,8 +142,46 @@ func builtinLet(ctx *Context, loc location, args Items) (is Items) {
         return
 }
 
-func builtinTemplate(ctx *Context, loc location, args Items) (is Items) {
+// builtinExpr evaluates a math expression.
+func builtinExpr(ctx *Context, loc location, args Items) (is Items) {
         errorf("todo: %v", args)
+        return
+}
+
+func builtinTemplate(ctx *Context, loc location, args Items) (is Items) {
+        if ctx.t != nil {
+                errorf("template already defined (%v)", args)
+        } else {
+                if ctx.m != nil {
+                        s, lineno, colno := ctx.m.GetDeclareLocation()
+                        fmt.Printf("%v:%v:%v:warning: declare template in module\n", s, lineno, colno)
+
+                        lineno, colno = ctx.l.caculateLocationLineColumn(loc)
+                        fmt.Fprintf(os.Stderr, "%v:%v:%v: ", ctx.l.scope, lineno, colno)
+
+                        errorf("declare template inside module")
+                        return
+                }
+
+                name := strings.TrimSpace(args[0].Expand(ctx))
+                if name == "" {
+                        lineno, colno := ctx.l.caculateLocationLineColumn(loc)
+                        fmt.Fprintf(os.Stderr, "%v:%v:%v: empty template name", ctx.l.scope, lineno, colno)
+                        errorf("empty template name")
+                        return
+                }
+
+                if t, ok := ctx.templates[name]; ok && t != nil {
+                        //lineno, colno := ctx.l.caculateLocationLineColumn(t.loc)
+                        //fmt.Fprintf(os.Stderr, "%v:%v:%v: %s already declared", ctx.l.scope, lineno, colno, ctx.t.name)
+                        errorf("template '%s' already declared", name)
+                        return
+                }
+
+                ctx.t = &template{
+                        name:name,
+                }
+        }
         return
 }
 
@@ -252,6 +292,22 @@ func builtinModule(ctx *Context, loc location, args Items) (is Items) {
 }
 
 func builtinCommit(ctx *Context, loc location, args Items) (is Items) {
+        if ctx.t != nil {
+                if ctx.m != nil {
+                        errorf("declared template inside module")
+                        return
+                }
+                if t, ok := ctx.templates[ctx.t.name]; ok && t != nil {
+                        errorf("template '%s' already declared", ctx.t.name)
+                        return
+                }
+
+                t := ctx.t
+                ctx.templates[t.name] = t
+                ctx.t = nil
+                return
+        }
+
         if ctx.m == nil {
                 errorf("no module defined")
                 return

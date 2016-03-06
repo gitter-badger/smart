@@ -501,6 +501,13 @@ func CreateSourceTransformActions(sources []string, namecommand func(src string)
         return inters
 }
 
+type template struct {
+        name string
+        declNodes []*node
+        postNodes []*node
+        post, commit *node
+}
+
 // Module is defined by a $(module) invocation in .smart script.
 type Module struct {
         Parent *Module // upper module

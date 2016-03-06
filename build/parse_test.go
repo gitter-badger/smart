@@ -1588,12 +1588,12 @@ $(info $(~.name): modules: $(~.modules))
 $(info module: $(me.name) $(me.dir))
 
 $(info source: "$(me.source)")
-$(post) # 'post' is a declaration that we're going to intersect the module 
+$(info before-post) $(post) $(info after-post) # 'post' is a declaration that we're going to intersect the module 
 $(info source: "$(me.source)")
 
 $(me.name)/test:; @echo $@ $(me.source)
 
-$(commit)
+$(info before-commit) $(commit) $(info after-commit)
 
 ### Using the new toolset template
 $(module a, test)    $(info $(me.out))
@@ -1606,12 +1606,14 @@ $(info $(me.out))
 $(commit)
 `);     if err != nil { t.Errorf("parse error:", err) }
         if ctx.modules == nil { t.Errorf("nil modules") }
-
-        /// ...
-
-        if s := info.String(); s != fmt.Sprintf(`test: modules: a
+        if ctx.templates == nil { t.Errorf("nil templates") }
+        if temp, ok := ctx.templates["test"]; !ok || temp == nil { t.Errorf("no test template") } else {
+                if s, x := temp.name, "test"; s != x { t.Errorf("expects %v but %v", s, x) }
+                if n, x := len(temp.declNodes), 7; n != x { t.Errorf("expects %v but %v", n, x) }
+        }
+        if s, x := info.String(), fmt.Sprintf(`test: modules: a
 test: 
 test %s
 %s/out
-`, wd, wd) { t.Errorf("info: '%s'", s) }
+`, wd, wd); s != x { t.Errorf("'%s' != '%s'", s, x) }
 }
