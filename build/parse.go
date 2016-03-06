@@ -1411,25 +1411,26 @@ func (ctx *Context) processTempNode(n *node) (ignore bool) {
                                                 errorf("already posted")
                                                 return
                                         }
-                                        ctx.t.post = c
-                                        fallthrough
-                                        
-                                case "commit":
-                                        ctx.t.declNodes = append(ctx.t.declNodes, &node{
+                                        nn := &node{
                                                 l:n.l, kind:n.kind, pos:n.pos,
                                                 end:c.pos-1, children: n.children[0:i],
-                                        })
-
-                                        n.pos = c.end
-
-                                        if s == "commit" {
-                                                n.children, n.pos = n.children[i:], c.end
-                                                ctx.t.commit = c
-                                                return false
                                         }
-
-                                        n.children = n.children[i+1:]
-                                        ctx.processTempNode(n)
+                                        ctx.t.post = c
+                                        ctx.t.declNodes = append(ctx.t.declNodes, nn)
+                                        if i+1 < len(n.children) {
+                                                n.pos, n.children = c.end, n.children[i+1:]
+                                                ctx.processTempNode(n)
+                                        }
+                                        return
+                                        
+                                case "commit":
+                                        nn := &node{
+                                                l:n.l, kind:n.kind, pos:n.pos,
+                                                end:c.pos-1, children: n.children[0:i],
+                                        }
+                                        ctx.t.postNodes = append(ctx.t.postNodes, nn)
+                                        ctx.t.commit, ignore = c, false
+                                        n.children, n.pos = n.children[i:], c.end
                                         return
                                 }
                         }

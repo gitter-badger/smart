@@ -203,6 +203,8 @@ func builtinModule(ctx *Context, loc location, args Items) (is Items) {
         var toolset toolset
         if toolsetName == "" {
                 // Discard empty toolset.
+        } else if t, ok := ctx.templates[toolsetName]; ok && t != nil {
+                toolset = &templateToolset{ template:t }
         } else if ts, ok := toolsets[toolsetName]; !ok {
                 lineno, colno := ctx.l.caculateLocationLineColumn(loc)
                 fmt.Printf("%v:%v:%v: unknown toolset '%v'\n", ctx.l.scope, lineno, colno, toolsetName)

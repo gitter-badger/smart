@@ -508,6 +508,29 @@ type template struct {
         post, commit *node
 }
 
+type templateToolset struct {
+        *template
+        BasicToolset
+}
+
+func (tt *templateToolset) ConfigModule(ctx *Context, args Items, vars map[string]string) {
+        fmt.Printf("todo: TemplateToolset.ConfigModule %v\n", args.Join(ctx, ","))
+}
+
+func (tt *templateToolset) CreateActions(ctx *Context) bool {
+        fmt.Printf("todo: TemplateToolset.CreateActions\n")
+        return false
+}
+
+func (tt *templateToolset) Call(p *Context, ids []string, args ...Item) (is Items) {
+        fmt.Printf("todo: TemplateToolset.Call %v\n", ids)
+        return
+}
+
+func (tt *templateToolset) Set(p *Context, ids []string, items ...Item) {
+        fmt.Printf("todo: TemplateToolset.Set %v\n", ids)
+}
+
 // Module is defined by a $(module) invocation in .smart script.
 type Module struct {
         Parent *Module // upper module

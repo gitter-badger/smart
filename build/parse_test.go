@@ -1596,20 +1596,52 @@ $(me.name)/test:; @echo $@ $(me.source)
 $(info before-commit) $(commit) $(info after-commit)
 
 ### Using the new toolset template
-$(module a, test)    $(info $(me.out))
+$(module a, test, a, b, c)    $(info a: $(me.dir),$(me.out))
 me.source := a.cpp
 $(commit)
 
-$(module b, test)    $(info $(me.out))
+$(module b, test, a, b, c)    $(info b: $(me.dir),$(me.out))
 me.source := b.cpp
-$(info $(me.out))
 $(commit)
 `);     if err != nil { t.Errorf("parse error:", err) }
         if ctx.modules == nil { t.Errorf("nil modules") }
         if ctx.templates == nil { t.Errorf("nil templates") }
         if temp, ok := ctx.templates["test"]; !ok || temp == nil { t.Errorf("no test template") } else {
                 if s, x := temp.name, "test"; s != x { t.Errorf("expects %v but %v", s, x) }
-                if n, x := len(temp.declNodes), 7; n != x { t.Errorf("expects %v but %v", n, x) }
+                if n, x := len(temp.declNodes), 6; n != x { t.Errorf("expects %v but %v", x, n) } else {
+                        if c, x := temp.declNodes[0], nodeDefineAppend; c.kind != x { t.Errorf("expects %v but %v", x, c.kind) } else {
+                                if s, x := c.str(), "+="; s != x { t.Errorf("expects %v but %v", x, s) }
+                        }
+                        if c, x := temp.declNodes[1], nodeDefineDeferred; c.kind != x { t.Errorf("expects %v but %v", x, c.kind) } else {
+                                if s, x := c.str(), "="; s != x { t.Errorf("expects %v but %v", x, s) }
+                        }
+                        if c, x := temp.declNodes[2], nodeImmediateText; c.kind != x { t.Errorf("expects %v but %v", x, c.kind) } else {
+                                if s, x := c.str(), "$(info $(~.name): modules: $(~.modules))"; s != x { t.Errorf("expects %v but %v", x, s) }
+                        }
+                        if c, x := temp.declNodes[3], nodeImmediateText; c.kind != x { t.Errorf("expects %v but %v", x, c.kind) } else {
+                                if s, x := c.str(), "$(info module: $(me.name) $(me.dir))"; s != x { t.Errorf("expects %v but %v", x, s) }
+                        }
+                        if c, x := temp.declNodes[4], nodeImmediateText; c.kind != x { t.Errorf("expects %v but %v", x, c.kind) } else {
+                                if s, x := c.str(), "$(info source: \"$(me.source)\")"; s != x { t.Errorf("expects %v but %v", x, s) }
+                        }
+                        if c, x := temp.declNodes[5], nodeImmediateText; c.kind != x { t.Errorf("expects %v but %v", x, c.kind) } else {
+                                if s, x := c.str(), "$(info before-post)"; s != x { t.Errorf("expects %v but %v", x, s) }
+                        }
+                }
+                if n, x := len(temp.postNodes), 4; n != x { t.Errorf("expects %v but %v", x, n) } else {
+                        if c, x := temp.postNodes[0], nodeImmediateText; c.kind != x { t.Errorf("expects %v but %v", x, c.kind) } else {
+                                if s, x := c.str(), " $(info after-post) "; s != x { t.Errorf("expects %v but %v", x, s) }
+                        }
+                        if c, x := temp.postNodes[1], nodeImmediateText; c.kind != x { t.Errorf("expects %v but %v", x, c.kind) } else {
+                                if s, x := c.str(), "$(info source: \"$(me.source)\")"; s != x { t.Errorf("expects %v but %v", x, s) }
+                        }
+                        if c, x := temp.postNodes[2], nodeRuleSingleColoned; c.kind != x { t.Errorf("expects %v but %v", x, c.kind) } else {
+                                if s, x := c.str(), ":"; s != x { t.Errorf("expects %v but %v", x, s) }
+                        }
+                        if c, x := temp.postNodes[3], nodeImmediateText; c.kind != x { t.Errorf("expects %v but %v", x, c.kind) } else {
+                                if s, x := c.str(), "$(info before-commit)"; s != x { t.Errorf("expects %v but %v", x, s) }
+                        }
+                }
         }
         if s, x := info.String(), fmt.Sprintf(`test: modules: a
 test: 
