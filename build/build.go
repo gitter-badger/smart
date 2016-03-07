@@ -81,10 +81,12 @@ func (is Items) Concat(ctx *Context, args ...Item) (res Items) {
 }
 
 type scoper interface {
-        // Call toolset variable.
-        Call(p *Context, ids []string, args ...Item) Items
-        // Set toolset variable.        
-        Set(p *Context, ids []string, items ...Item)
+        // Call variable.
+        Call(ctx *Context, ids []string, args ...Item) Items
+        // Set variable.        
+        Set(ctx *Context, ids []string, items ...Item)
+        // Check if a variable exists.        
+        //Has(ctx *Context, ids []string) bool
 }
 
 // toolset represents a toolchain like gcc and related utilities.
@@ -100,6 +102,9 @@ type toolset interface {
 
         // UseModule lets a toolset decides how to use a module.
         UseModule(p *Context, o *Module) bool
+
+        // getNamespace returns toolset namespace (internal)
+        getNamespace() *namespace
 }
 
 type toolsetStub struct {
@@ -129,6 +134,8 @@ func (tt *BasicToolset) UseModule(ctx *Context, o *Module) bool {
         return false
 }
 
+func (tt *BasicToolset) getNamespace() *namespace { return nil }
+
 func (tt *BasicToolset) Call(p *Context, ids []string, args ...Item) (is Items) {
         return
 }
@@ -143,7 +150,6 @@ func IsIA32Command(s string) bool {
         if err := cmd.Run(); err != nil {
                 message("error: %v", err)
         }
-        //message("%v", buf.String())
         //return strings.HasPrefix(buf.String(), "ELF 32-bit")
         return strings.Contains(buf.String(), "ELF 32-bit")
 }
@@ -502,6 +508,7 @@ func CreateSourceTransformActions(sources []string, namecommand func(src string)
 }
 
 type template struct {
+        *namespace
         name string
         declNodes []*node
         postNodes []*node
@@ -514,7 +521,14 @@ type templateToolset struct {
 }
 
 func (tt *templateToolset) ConfigModule(ctx *Context, args Items, vars map[string]string) {
-        fmt.Printf("todo: TemplateToolset.ConfigModule %v\n", args.Join(ctx, ","))
+        //fmt.Printf("todo: TemplateToolset.ConfigModule %v\n", args.Join(ctx, ","))
+        //fmt.Printf("TemplateToolset.ConfigModule '%v'\n", ctx.m.GetName(ctx))
+        for _, n := range tt.declNodes {
+                if e := ctx.processNode(n); e != nil {
+                        //errorf("%v", e)
+                        break
+                }
+        }
 }
 
 func (tt *templateToolset) CreateActions(ctx *Context) bool {
@@ -533,14 +547,15 @@ func (tt *templateToolset) Set(p *Context, ids []string, items ...Item) {
 
 // Module is defined by a $(module) invocation in .smart script.
 type Module struct {
+        *namespace
         Parent *Module // upper module
         Toolset toolset
         Action *Action // action for building this module
         Using, UsedBy []*Module
         Updated bool // marked as 'true' if module is updated
         Children map[string]*Module
-        defines map[string]*define
-        rules map[string]*rule
+        //defines map[string]*define
+        //rules map[string]*rule
         declareLoc, commitLoc location // where does it defined and commit (could be nil)
         //x *Context // the context of the module
         l *lex // the lex scope where does it defined (could be nil)

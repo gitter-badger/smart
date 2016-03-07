@@ -29,6 +29,12 @@ type rule struct {
         node *node
 }
 
+type namespace struct {
+        //scoper
+        defines map[string]*define
+        rules map[string]*rule
+}
+
 type nodeType int
 
 const (
@@ -156,9 +162,9 @@ type node struct {
 func (n *node) Expand(ctx *Context) (s string) {
         var is Items
         if nodeDefineDeferred <= n.kind && n.kind <= nodeDefineAppend {
-                is = ctx.expandNode(n.children[1])
+                is = ctx.nodeItems(n.children[1])
         } else {
-                is = ctx.expandNode(n)
+                is = ctx.nodeItems(n)
         }
         return is.Expand(ctx)
 }
@@ -1150,7 +1156,7 @@ func (ctx *Context) callMultipart(loc location, parts []string, args ...Item) (i
                                 return f(ctx, loc, args)
                         } else if *flagW {
                                 lineno, colno := ctx.l.caculateLocationLineColumn(loc)
-                                fmt.Printf("%v:%v:%v:warning: `%v' undefined\n", ctx.l.scope, lineno, colno, name)
+                                fmt.Printf("%v:%v:%v:warning: `%v' is undefined\n", ctx.l.scope, lineno, colno, name)
                         }
                 case name == "$": return Items{ stringitem("$") };
                 case name == "call":
@@ -1166,94 +1172,17 @@ func (ctx *Context) callMultipart(loc location, parts []string, args ...Item) (i
                         return
                 }
         } else {
-                /*
-                var m *Module
-                for i, s := range parts[0:num-1] {
-                        if i == 0 {
-                                switch {
-                                case s == "me": m = ctx.m
-                                default:     m, _ = ctx.modules[s]
-                                }
-                        } else {
-                                m, _ = m.Children[s]
-                        }
-                        if m == nil {
-                                lineno, colno := ctx.l.caculateLocationLineColumn(loc)
-                                fmt.Printf("%v:%v:%v:warning: `%s' undefined\n", ctx.l.scope, lineno, colno,
-                                        strings.Join(parts[0:i+1], "."))
-                                break
-                        }
-                } */
-                if m := ctx.getModuleMultipartName(parts); m != nil {
+                if m := ctx.getNamespaceForMultipartName(parts); m != nil {
                         vars = m.defines
                 }
         }
 
         if vars != nil {
                 if d, ok := vars[name]; ok && d != nil {
-                        is = ctx.getDefineValue(d)
+                        is = d.value
                 }
         }
 
-        return
-}
-
-func (ctx *Context) getModuleMultipartName(parts []string) (m *Module) {
-        num := len(parts)
-        for i, s := range parts[0:num-1] {
-                if i == 0 {
-                        switch {
-                        case s == "me": m = ctx.m
-                        default:     m, _ = ctx.modules[s]
-                        }
-                } else {
-                        m, _ = m.Children[s]
-                }
-                if m == nil {
-                        lineno, colno := ctx.l.caculateLocationLineColumn(ctx.l.location())
-                        fmt.Printf("%v:%v:%v:warning: `%s' undefined\n", ctx.l.scope, lineno, colno,
-                                strings.Join(parts[0:i+1], "."))
-                        break
-                }
-        }
-        return
-}
-
-// DEPRECATED
-func (ctx *Context) getDefineValue(d *define) (is Items) {
-        /*
-        b, f0, fn := new(bytes.Buffer), "%s", " %s"
-        for n, i := range d.value {
-                f := f0[0:]
-                if 0 < n { f = fn[0:] }
-                fmt.Fprintf(b, f, ctx.ItemString(i))
-        }
-        return b.String() */
-        return d.value
-}
-
-func (ctx *Context) ItemString(i Item) (s string) {
-        /*
-        switch t := i.(type) {
-        case stringitem:  s = t
-        case *flatitem: s = t.s
-        case *node:
-                if nodeDefineDeferred <= t.kind && t.kind <= nodeDefineAppend {
-                        s = ctx.expandNode(t.children[1])
-                } else {
-                        s = ctx.expandNode(t)
-                }
-        default:
-                errorf("unsupported '%v'", t)
-        } */
-        s = i.Expand(ctx)
-        return
-}
-
-func (ctx *Context) ItemsStrings(a ...Item) (s []string) {
-        for _, i := range a {
-                s = append(s, ctx.ItemString(i))
-        }
         return
 }
 
@@ -1270,7 +1199,7 @@ func (ctx *Context) getMultipart(parts []string) (v *define) {
         vars, name := ctx.defines, parts[num-1]
 
         if 1 < num {
-                if m := ctx.getModuleMultipartName(parts); m != nil {
+                if m := ctx.getNamespaceForMultipartName(parts); m != nil {
                         vars = m.defines
                 } else {
                         vars = nil
@@ -1296,7 +1225,7 @@ func (ctx *Context) setMultipart(parts []string, items...Item) (v *define) {
         vars, name := ctx.defines, parts[num-1]
 
         if 1 < num {
-                if m := ctx.getModuleMultipartName(parts); m != nil {
+                if m := ctx.getNamespaceForMultipartName(parts); m != nil {
                         vars = m.defines
                 } else {
                         vars = nil
@@ -1325,6 +1254,40 @@ func (ctx *Context) setMultipart(parts []string, items...Item) (v *define) {
         return
 }
 
+func (ctx *Context) getNamespaceForMultipartName(parts []string) (ns *namespace) {
+        var (
+                num = len(parts)
+                m *Module
+        )
+        for i, s := range parts[0:num-1] {
+                if i == 0 {
+                        switch s {
+                        case "me": m, ns = ctx.m, ctx.m.namespace
+                        case "~":
+                                if ctx.m.Toolset == nil {
+                                        lineno, colno := ctx.l.caculateLocationLineColumn(ctx.l.location())
+                                        fmt.Fprintf(os.Stderr, "%v:%v:%v:warning: no valid toolset\n", ctx.l.scope, lineno, colno)
+                                } else {
+                                        ns = ctx.m.Toolset.getNamespace()
+                                }
+                        default:
+                                if m, _ = ctx.modules[s]; m != nil {
+                                        ns = m.namespace
+                                }
+                        }
+                } else if m, _ = m.Children[s]; m != nil {
+                        ns = m.namespace
+                }
+                if m == nil {
+                        lineno, colno := ctx.l.caculateLocationLineColumn(ctx.l.location())
+                        fmt.Fprintf(os.Stderr, "%v:%v:%v:warning: `%s' is undefined scope\n",
+                                ctx.l.scope, lineno, colno, strings.Join(parts[0:i+1], "."))
+                        break
+                }
+        }
+        return
+}
+
 func (ctx *Context) multipart(n *node) (*bytes.Buffer, []int) {
         b, l, pos, parts := new(bytes.Buffer), n.l, n.pos, []int{ -1 }
         for _, c := range n.children {
@@ -1332,7 +1295,7 @@ func (ctx *Context) multipart(n *node) (*bytes.Buffer, []int) {
                 switch c.kind {
                 case nodeNamePrefix: b.WriteString(":"); parts[0] = b.Len()
                 case nodeNamePart:   b.WriteString("."); parts = append(parts, b.Len())
-                default:   b.WriteString(ctx.expandNode(c).Expand(ctx))
+                default:   b.WriteString(ctx.nodeItems(c).Expand(ctx))
                 }
         }
         if pos < n.end {
@@ -1357,7 +1320,7 @@ func (ctx *Context) expandName(n *node) (parts []string, scoped bool, name strin
         return
 }
 
-func (ctx *Context) expandNode(n *node) (is Items) {
+func (ctx *Context) nodeItems(n *node) (is Items) {
         switch n.kind {
         case nodeEscape:
                 switch ctx.l.s[n.pos + 1] {
@@ -1368,7 +1331,7 @@ func (ctx *Context) expandNode(n *node) (is Items) {
         case nodeCall:
                 var args Items
                 for _, an := range n.children[1:] {
-                        args = args.Concat(ctx, ctx.expandNode(an)...)
+                        args = args.Concat(ctx, ctx.nodeItems(an)...)
                 }
                 if parts, callScoped, name := ctx.expandName(n.children[0]); callScoped {
                         is = ctx.callScoped(n.loc(), name, parts, args...)
@@ -1400,8 +1363,14 @@ func (ctx *Context) expandNode(n *node) (is Items) {
         return
 }
 
-func (ctx *Context) processTempNode(n *node) (ignore bool) {
-        ignore = true
+func (ctx *Context) ItemsStrings(a ...Item) (s []string) {
+        for _, i := range a {
+                s = append(s, i.Expand(ctx))
+        }
+        return
+}
+
+func (ctx *Context) processTempNode(n *node) bool {
         if n.kind == nodeImmediateText {
                 for i, c := range n.children {
                         if c.kind == nodeCall {
@@ -1409,7 +1378,7 @@ func (ctx *Context) processTempNode(n *node) (ignore bool) {
                                 case "post":
                                         if ctx.t.post != nil {
                                                 errorf("already posted")
-                                                return
+                                                return true
                                         }
                                         nn := &node{
                                                 l:n.l, kind:n.kind, pos:n.pos,
@@ -1421,17 +1390,16 @@ func (ctx *Context) processTempNode(n *node) (ignore bool) {
                                                 n.pos, n.children = c.end, n.children[i+1:]
                                                 ctx.processTempNode(n)
                                         }
-                                        return
+                                        return true
                                         
                                 case "commit":
                                         nn := &node{
                                                 l:n.l, kind:n.kind, pos:n.pos,
                                                 end:c.pos-1, children: n.children[0:i],
                                         }
-                                        ctx.t.postNodes = append(ctx.t.postNodes, nn)
-                                        ctx.t.commit, ignore = c, false
+                                        ctx.t.postNodes, ctx.t.commit = append(ctx.t.postNodes, nn), c
                                         n.children, n.pos = n.children[i:], c.end
-                                        return
+                                        return false
                                 }
                         }
                 }
@@ -1441,7 +1409,7 @@ func (ctx *Context) processTempNode(n *node) (ignore bool) {
         } else {
                 ctx.t.declNodes = append(ctx.t.declNodes, n)
         }
-        return
+        return true
 }
 
 func (ctx *Context) processNode(n *node) (err error) {
@@ -1453,20 +1421,19 @@ func (ctx *Context) processNode(n *node) (err error) {
 
         switch n.kind {
         case nodeCall:
-                if s := strings.TrimSpace(ctx.expandNode(n).Expand(ctx)); s != "" {
+                if s := strings.TrimSpace(ctx.nodeItems(n).Expand(ctx)); s != "" {
                         lineno, colno := ctx.l.caculateLocationLineColumn(n.loc())
                         fmt.Fprintf(os.Stderr, "%v:%v:%v: illigal: '%v'\n", ctx.l.scope, lineno, colno, s)
                 }
 
         case nodeImmediateText:
-                if s := strings.TrimSpace(ctx.expandNode(n).Expand(ctx)); s != "" {
+                if s := strings.TrimSpace(ctx.nodeItems(n).Expand(ctx)); s != "" {
                         lineno, colno := ctx.l.caculateLocationLineColumn(n.loc())
                         fmt.Fprintf(os.Stderr, "%v:%v:%v: syntax error: '%v'\n", ctx.l.scope, lineno, colno, s)
                 }
 
         case nodeDefineQuestioned:
-                parts, scoped, name := ctx.expandName(n.children[0])
-                if scoped {
+                if parts, scoped, name := ctx.expandName(n.children[0]); scoped {
                         if is := ctx.callScoped(n.loc(), name, parts); is.IsEmpty(ctx) {
                                 ctx.setScoped(name, parts, n)
                         }
@@ -1475,8 +1442,7 @@ func (ctx *Context) processNode(n *node) (err error) {
                 }
 
         case nodeDefineDeferred:
-                parts, scoped, name := ctx.expandName(n.children[0])
-                if scoped {
+                if parts, scoped, name := ctx.expandName(n.children[0]); scoped {
                         ctx.setScoped(name, parts, n)
                 } else {
                         ctx.setMultipart(parts, n)
@@ -1485,16 +1451,14 @@ func (ctx *Context) processNode(n *node) (err error) {
         case nodeDefineSingleColoned: fallthrough
         case nodeDefineDoubleColoned:
                 parts, scoped, name := ctx.expandName(n.children[0])
-                str := ctx.expandNode(n.children[1])
-                if scoped {
-                        ctx.setScoped(name, parts, str)
+                if is := ctx.nodeItems(n.children[1]); scoped {
+                        ctx.setScoped(name, parts, is)
                 } else {
-                        ctx.setMultipart(parts, str)
+                        ctx.setMultipart(parts, is)
                 }
 
         case nodeDefineAppend:
-                parts, scoped, name := ctx.expandName(n.children[0])
-                if scoped {
+                if parts, scoped, name := ctx.expandName(n.children[0]); scoped {
                         ctx.setScoped(name, parts, n) // FIXME: append instead of replace
                 } else {
                         if d := ctx.getMultipart(parts); d != nil {
@@ -1506,10 +1470,7 @@ func (ctx *Context) processNode(n *node) (err error) {
                                 if deferred {
                                         d.value = append(d.value, n)
                                 } else {
-                                        //vc := n.children[1]
-                                        //v := ctx.expandNode(vc)
-                                        //d.value = append(d.value, &flatitem{ v, vc.loc() })
-                                        d.value = ctx.expandNode(n.children[1])
+                                        d.value = ctx.nodeItems(n.children[1])
                                 }
                         } else {
                                 ctx.setMultipart(parts, n)
@@ -1522,8 +1483,8 @@ func (ctx *Context) processNode(n *node) (err error) {
         case nodeRuleSingleColoned: fallthrough
         case nodeRuleDoubleColoned:
                 r := &rule{
-                        targets:Split(ctx.expandNode(n.children[0]).Expand(ctx)),
-                        prerequisites:Split(ctx.expandNode(n.children[1]).Expand(ctx)),
+                        targets:Split(ctx.nodeItems(n.children[0]).Expand(ctx)),
+                        prerequisites:Split(ctx.nodeItems(n.children[1]).Expand(ctx)),
                         node:n,
                 }
                 if 2 < len(n.children) {
@@ -1566,8 +1527,6 @@ func (ctx *Context) _parse() (err error) {
                 }
         }
 
-        //fmt.Printf("_parse: %v, %v, %v\n", len(ctx.lexingStack), len(ctx.l.nodes), len(ctx.defines))
-
         return
 }
 
@@ -1601,20 +1560,15 @@ func (ctx *Context) include(fn string) (err error) {
                 s []byte
         )
 
-        f, err = os.Open(fn)
-        if err != nil {
+        if f, err = os.Open(fn); err != nil {
                 return
         }
 
         defer f.Close()
 
-        //fmt.Printf("include: %v\n", fn)
-
-        s, err = ioutil.ReadAll(f)
-        if err == nil {
+        if s, err = ioutil.ReadAll(f); err == nil {
                 err = ctx.append(fn, s)
         }
-
         return
 }
 

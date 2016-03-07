@@ -1469,14 +1469,14 @@ $(info $(test.name) $(test.dir))
         if m, ok := ctx.modules["test"]; !ok || m == nil { t.Errorf("nil 'test' module") } else {
                 if c, ok := m.Children["export"]; !ok || c == nil { t.Errorf("'me.export' is undefined") } else {
                         if d, ok := c.defines["name"]; !ok || d == nil { t.Errorf("no 'name' defined") } else {
-                                if s := ctx.getDefineValue(d).Expand(ctx); s != "export" { t.Errorf("name != 'export' (%v)", s) }
+                                if s := d.value.Expand(ctx); s != "export" { t.Errorf("name != 'export' (%v)", s) }
                         }
                 }
                 if d, ok := m.defines["name"]; !ok || d == nil { t.Errorf("no 'name' defined") } else {
-                        if s := ctx.getDefineValue(d).Expand(ctx); s != "test" { t.Errorf("name != 'test' (%v)", s) }
+                        if s := d.value.Expand(ctx); s != "test" { t.Errorf("name != 'test' (%v)", s) }
                 }
                 if d, ok := m.defines["dir"]; !ok || d == nil { t.Errorf("no 'dir' defined") } else {
-                        if s := ctx.getDefineValue(d).Expand(ctx); s != workdir { t.Errorf("dir != '%v' (%v)", workdir, s) }
+                        if s := d.value.Expand(ctx); s != workdir { t.Errorf("dir != '%v' (%v)", workdir, s) }
                 }
                 ctx.With(m, func() {
                         if s := ctx.Call("me").Expand(ctx); s != "test" { t.Errorf("me != test (%v)", s) }
@@ -1584,25 +1584,24 @@ $(template test)
 # Defered assignment.
 me.out = $(me.dir)/out
 
-$(info $(~.name): modules: $(~.modules))
-$(info module: $(me.name) $(me.dir))
-
-$(info source: "$(me.source)")
-$(info before-post) $(post) $(info after-post) # 'post' is a declaration that we're going to intersect the module 
-$(info source: "$(me.source)")
+$(info $(me.name): $(~.name) - "$(~.modules)")
+$(info $(me.name): dir = "$(me.dir)")
+$(info $(me.name): source = "$(me.source)")
+$(info $(me.name): before-post) $(post) $(info $(me.name): after-post) # 'post' is a declaration that we're going to intersect the module 
+$(info $(me.name): source = "$(me.source)")
 
 $(me.name)/test:; @echo $@ $(me.source)
 
-$(info before-commit) $(commit) $(info after-commit)
+$(info $(me.name): before-commit) $(commit) $(info after-commit)
 
 ### Using the new toolset template
-$(module a, test, a, b, c)    $(info a: $(me.dir),$(me.out))
+$(module a, test, a, b, c)    $(info a - $(me.dir),$(me.out))
 me.source := a.cpp
-$(commit)
+$(commit)$(info a commited)
 
-$(module b, test, a, b, c)    $(info b: $(me.dir),$(me.out))
+$(module b, test, a, b, c)    $(info b - $(me.dir),$(me.out))
 me.source := b.cpp
-$(commit)
+$(commit)$(info b commited)
 `);     if err != nil { t.Errorf("parse error:", err) }
         if ctx.modules == nil { t.Errorf("nil modules") }
         if ctx.templates == nil { t.Errorf("nil templates") }
@@ -1616,36 +1615,51 @@ $(commit)
                                 if s, x := c.str(), "="; s != x { t.Errorf("expects %v but %v", x, s) }
                         }
                         if c, x := temp.declNodes[2], nodeImmediateText; c.kind != x { t.Errorf("expects %v but %v", x, c.kind) } else {
-                                if s, x := c.str(), "$(info $(~.name): modules: $(~.modules))"; s != x { t.Errorf("expects %v but %v", x, s) }
+                                if s, x := c.str(), `$(info $(me.name): $(~.name) - "$(~.modules)")`; s != x { t.Errorf("expects %v but %v", x, s) }
                         }
                         if c, x := temp.declNodes[3], nodeImmediateText; c.kind != x { t.Errorf("expects %v but %v", x, c.kind) } else {
-                                if s, x := c.str(), "$(info module: $(me.name) $(me.dir))"; s != x { t.Errorf("expects %v but %v", x, s) }
+                                if s, x := c.str(), `$(info $(me.name): dir = "$(me.dir)")`; s != x { t.Errorf("expects %v but %v", x, s) }
                         }
                         if c, x := temp.declNodes[4], nodeImmediateText; c.kind != x { t.Errorf("expects %v but %v", x, c.kind) } else {
-                                if s, x := c.str(), "$(info source: \"$(me.source)\")"; s != x { t.Errorf("expects %v but %v", x, s) }
+                                if s, x := c.str(), `$(info $(me.name): source = "$(me.source)")`; s != x { t.Errorf("expects %v but %v", x, s) }
                         }
                         if c, x := temp.declNodes[5], nodeImmediateText; c.kind != x { t.Errorf("expects %v but %v", x, c.kind) } else {
-                                if s, x := c.str(), "$(info before-post)"; s != x { t.Errorf("expects %v but %v", x, s) }
+                                if s, x := c.str(), `$(info $(me.name): before-post)`; s != x { t.Errorf("expects %v but %v", x, s) }
                         }
                 }
                 if n, x := len(temp.postNodes), 4; n != x { t.Errorf("expects %v but %v", x, n) } else {
                         if c, x := temp.postNodes[0], nodeImmediateText; c.kind != x { t.Errorf("expects %v but %v", x, c.kind) } else {
-                                if s, x := c.str(), " $(info after-post) "; s != x { t.Errorf("expects %v but %v", x, s) }
+                                if s, x := c.str(), ` $(info $(me.name): after-post) `; s != x { t.Errorf("expects %v but %v", x, s) }
                         }
                         if c, x := temp.postNodes[1], nodeImmediateText; c.kind != x { t.Errorf("expects %v but %v", x, c.kind) } else {
-                                if s, x := c.str(), "$(info source: \"$(me.source)\")"; s != x { t.Errorf("expects %v but %v", x, s) }
+                                if s, x := c.str(), `$(info $(me.name): source = "$(me.source)")`; s != x { t.Errorf("expects %v but %v", x, s) }
                         }
                         if c, x := temp.postNodes[2], nodeRuleSingleColoned; c.kind != x { t.Errorf("expects %v but %v", x, c.kind) } else {
                                 if s, x := c.str(), ":"; s != x { t.Errorf("expects %v but %v", x, s) }
                         }
                         if c, x := temp.postNodes[3], nodeImmediateText; c.kind != x { t.Errorf("expects %v but %v", x, c.kind) } else {
-                                if s, x := c.str(), "$(info before-commit)"; s != x { t.Errorf("expects %v but %v", x, s) }
+                                if s, x := c.str(), `$(info $(me.name): before-commit)`; s != x { t.Errorf("expects %v but %v", x, s) }
                         }
                 }
         }
-        if s, x := info.String(), fmt.Sprintf(`test: modules: a
-test: 
-test %s
-%s/out
-`, wd, wd); s != x { t.Errorf("'%s' != '%s'", s, x) }
+        if s, x := info.String(), fmt.Sprintf(`after-commit
+a: test - "a"
+a: dir = "%s"
+a: source = ""
+a: before-post
+a - %s %s/out
+a: after-post
+a: source = "a.cpp"
+a: before-commit
+a commited
+b: test - "b"
+b: dir = "%s"
+b: source = ""
+b: before-post
+b - %s %s/out
+b: after-post
+b: source = "b.cpp"
+b: before-commit
+b commited
+`, wd, wd, wd, wd, wd, wd); s != x { t.Errorf("'%s' != '%s'", s, x) }
 }

@@ -48,7 +48,7 @@ var (
 
 func builtinDir(ctx *Context, loc location, args Items) (is Items) {
         for _, a := range args {
-                is = append(is, stringitem(filepath.Dir(ctx.ItemString(a))))
+                is = append(is, stringitem(filepath.Dir(a.Expand(ctx))))
         }
         return
 }
@@ -62,21 +62,21 @@ func builtinInfo(ctx *Context, loc location, args Items) (is Items) {
 
 func builtinUpper(ctx *Context, loc location, args Items) (is Items) {
         for _, a := range args {
-                is = append(is, stringitem(strings.ToUpper(ctx.ItemString(a))))
+                is = append(is, stringitem(strings.ToUpper(a.Expand(ctx))))
         }
         return
 }
 
 func builtinLower(ctx *Context, loc location, args Items) (is Items) {
         for _, a := range args {
-                is = append(is, stringitem(strings.ToLower(ctx.ItemString(a))))
+                is = append(is, stringitem(strings.ToLower(a.Expand(ctx))))
         }
         return
 }
 
 func builtinTitle(ctx *Context, loc location, args Items) (is Items) {
         for _, a := range args {
-                is = append(is, stringitem(strings.ToTitle(ctx.ItemString(a))))
+                is = append(is, stringitem(strings.ToTitle(a.Expand(ctx))))
         }
         return
 }
@@ -221,8 +221,10 @@ func builtinModule(ctx *Context, loc location, args Items) (is Items) {
                         l: nil,
                         Toolset: toolset,
                         Children: make(map[string]*Module, 2),
-                        defines: make(map[string]*define, 8),
-                        rules: make(map[string]*rule, 4),
+                        namespace: &namespace{
+                                defines: make(map[string]*define, 8),
+                                rules: make(map[string]*rule, 4),
+                        },
                 }
                 ctx.modules[name] = m
                 ctx.moduleOrderList = append(ctx.moduleOrderList, m)
@@ -258,11 +260,21 @@ func builtinModule(ctx *Context, loc location, args Items) (is Items) {
                         l: m.l,
                         Parent: m,
                         Children: make(map[string]*Module),
-                        defines: make(map[string]*define, 4),
-                        rules: make(map[string]*rule),
+                        namespace: &namespace{
+                                defines: make(map[string]*define, 4),
+                                rules: make(map[string]*rule),
+                        },
                 }
                 m.Children[exportName] = x
         }
+
+        if fi, e := os.Stat(ctx.l.scope); e == nil && fi != nil && !fi.IsDir() {
+                ctx.Set("me.dir", stringitem(filepath.Dir(ctx.l.scope)))
+        } else {
+                ctx.Set("me.dir", stringitem(workdir))
+        }
+        ctx.Set("me.name", stringitem(name))
+        ctx.Set("me.export.name", stringitem(exportName))
 
         if toolset != nil {
                 // parsed arguments in forms like "PLATFORM=android-9"
@@ -282,14 +294,6 @@ func builtinModule(ctx *Context, loc location, args Items) (is Items) {
                 }
                 toolset.ConfigModule(ctx, rest, vars)
         }
-
-        if fi, e := os.Stat(ctx.l.scope); e == nil && fi != nil && !fi.IsDir() {
-                ctx.Set("me.dir", stringitem(filepath.Dir(ctx.l.scope)))
-        } else {
-                ctx.Set("me.dir", stringitem(workdir))
-        }
-        ctx.Set("me.name", stringitem(name))
-        ctx.Set("me.export.name", stringitem(exportName))
         return
 }
 
@@ -354,8 +358,10 @@ func builtinUse(ctx *Context, loc location, args Items) (is Items) {
                                 l: nil,
                                 UsedBy: []*Module{ ctx.m },
                                 Children: make(map[string]*Module, 2),
-                                defines: make(map[string]*define, 8),
-                                rules: make(map[string]*rule, 4),
+                                namespace: &namespace{
+                                        defines: make(map[string]*define, 8),
+                                        rules: make(map[string]*rule, 4),
+                                },
                         }
                         ctx.m.Using = append(ctx.m.Using, m)
                         ctx.modules[s] = m
