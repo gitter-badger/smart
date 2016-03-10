@@ -180,6 +180,10 @@ func builtinTemplate(ctx *Context, loc location, args Items) (is Items) {
 
                 ctx.t = &template{
                         name:name,
+                        namespaceEmbed: &namespaceEmbed{
+                                defines: make(map[string]*define, 8),
+                                rules: make(map[string]*rule, 4),
+                        },
                 }
         }
         return
@@ -221,7 +225,7 @@ func builtinModule(ctx *Context, loc location, args Items) (is Items) {
                         l: nil,
                         Toolset: toolset,
                         Children: make(map[string]*Module, 2),
-                        namespace: &namespace{
+                        namespaceEmbed: &namespaceEmbed{
                                 defines: make(map[string]*define, 8),
                                 rules: make(map[string]*rule, 4),
                         },
@@ -260,7 +264,7 @@ func builtinModule(ctx *Context, loc location, args Items) (is Items) {
                         l: m.l,
                         Parent: m,
                         Children: make(map[string]*Module),
-                        namespace: &namespace{
+                        namespaceEmbed: &namespaceEmbed{
                                 defines: make(map[string]*define, 4),
                                 rules: make(map[string]*rule),
                         },
@@ -358,7 +362,7 @@ func builtinUse(ctx *Context, loc location, args Items) (is Items) {
                                 l: nil,
                                 UsedBy: []*Module{ ctx.m },
                                 Children: make(map[string]*Module, 2),
-                                namespace: &namespace{
+                                namespaceEmbed: &namespaceEmbed{
                                         defines: make(map[string]*define, 8),
                                         rules: make(map[string]*rule, 4),
                                 },

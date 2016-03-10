@@ -29,10 +29,57 @@ type rule struct {
         node *node
 }
 
-type namespace struct {
-        //scoper
+type namespace interface {
+        scoper
+        getNamespace(name string) namespace
+        getDefineMap() map[string]*define
+        getRuleMap() map[string]*rule
+}
+
+type namespaceEmbed struct {
         defines map[string]*define
         rules map[string]*rule
+}
+
+func (ns *namespaceEmbed) Call(ctx *Context, ids []string, args ...Item) (is Items) {
+        if n := len(ids); n == 1 {
+                if d, ok := ns.defines[ids[0]]; ok && d != nil {
+                        is = d.value
+                }
+        } else {
+                lineno, colno := ctx.l.caculateLocationLineColumn(ctx.l.location())
+                fmt.Fprintf(os.Stderr, "%v:%v:%v:warning: nested referencing\n", ctx.l.scope, lineno, colno)
+
+                // FIXME: nested
+        }
+        return
+}
+
+func (ns *namespaceEmbed) Set(ctx *Context, ids []string, items ...Item) {
+        if n := len(ids); n == 1 {
+                if d, ok := ns.defines[ids[0]]; ok && d != nil {
+                        d.value = items
+                }
+        } else {
+                lineno, colno := ctx.l.caculateLocationLineColumn(ctx.l.location())
+                fmt.Fprintf(os.Stderr, "%v:%v:%v:warning: nested referencing\n", ctx.l.scope, lineno, colno)
+
+                // FIXME: nested
+        }
+}
+
+func (ns *namespaceEmbed) getNamespace(name string) namespace {
+        //lineno, colno := ctx.l.caculateLocationLineColumn(ctx.l.location())
+        //fmt.Fprintf(os.Stderr, "%v:%v:%v:warning: nesting reference '%s'\n", ctx.l.scope, lineno, colno, name)
+        return nil
+}
+
+func (ns *namespaceEmbed) getDefineMap() map[string]*define {
+        return ns.defines
+}
+
+func (ns *namespaceEmbed) getRuleMap() map[string]*rule {
+        return ns.rules
 }
 
 type nodeType int
@@ -1172,8 +1219,8 @@ func (ctx *Context) callMultipart(loc location, parts []string, args ...Item) (i
                         return
                 }
         } else {
-                if m := ctx.getNamespaceForMultipartName(parts); m != nil {
-                        vars = m.defines
+                if ns := ctx.getNamespaceForMultipartName(parts); ns != nil {
+                        vars = ns.getDefineMap()
                 }
         }
 
@@ -1199,8 +1246,8 @@ func (ctx *Context) getMultipart(parts []string) (v *define) {
         vars, name := ctx.defines, parts[num-1]
 
         if 1 < num {
-                if m := ctx.getNamespaceForMultipartName(parts); m != nil {
-                        vars = m.defines
+                if ns := ctx.getNamespaceForMultipartName(parts); ns != nil {
+                        vars = ns.getDefineMap()
                 } else {
                         vars = nil
                 }
@@ -1225,8 +1272,8 @@ func (ctx *Context) setMultipart(parts []string, items...Item) (v *define) {
         vars, name := ctx.defines, parts[num-1]
 
         if 1 < num {
-                if m := ctx.getNamespaceForMultipartName(parts); m != nil {
-                        vars = m.defines
+                if ns := ctx.getNamespaceForMultipartName(parts); ns != nil {
+                        vars = ns.getDefineMap()
                 } else {
                         vars = nil
                 }
@@ -1254,31 +1301,25 @@ func (ctx *Context) setMultipart(parts []string, items...Item) (v *define) {
         return
 }
 
-func (ctx *Context) getNamespaceForMultipartName(parts []string) (ns *namespace) {
-        var (
-                num = len(parts)
-                m *Module
-        )
+func (ctx *Context) getNamespaceForMultipartName(parts []string) (ns namespace) {
+        var num = len(parts)
         for i, s := range parts[0:num-1] {
                 if i == 0 {
                         switch s {
-                        case "me": m, ns = ctx.m, ctx.m.namespace
+                        default:   ns, _ = ctx.modules[s]
+                        case "me": ns = ctx.m
                         case "~":
                                 if ctx.m.Toolset == nil {
                                         lineno, colno := ctx.l.caculateLocationLineColumn(ctx.l.location())
-                                        fmt.Fprintf(os.Stderr, "%v:%v:%v:warning: no valid toolset\n", ctx.l.scope, lineno, colno)
+                                        fmt.Fprintf(os.Stderr, "%v:%v:%v:warning: no bound toolset\n", ctx.l.scope, lineno, colno)
                                 } else {
                                         ns = ctx.m.Toolset.getNamespace()
                                 }
-                        default:
-                                if m, _ = ctx.modules[s]; m != nil {
-                                        ns = m.namespace
-                                }
                         }
-                } else if m, _ = m.Children[s]; m != nil {
-                        ns = m.namespace
+                } else {
+                        ns = ns.getNamespace(s)
                 }
-                if m == nil {
+                if ns == nil {
                         lineno, colno := ctx.l.caculateLocationLineColumn(ctx.l.location())
                         fmt.Fprintf(os.Stderr, "%v:%v:%v:warning: `%s' is undefined scope\n",
                                 ctx.l.scope, lineno, colno, strings.Join(parts[0:i+1], "."))

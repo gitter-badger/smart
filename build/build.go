@@ -104,7 +104,7 @@ type toolset interface {
         UseModule(p *Context, o *Module) bool
 
         // getNamespace returns toolset namespace (internal)
-        getNamespace() *namespace
+        getNamespace() namespace
 }
 
 type toolsetStub struct {
@@ -134,7 +134,7 @@ func (tt *BasicToolset) UseModule(ctx *Context, o *Module) bool {
         return false
 }
 
-func (tt *BasicToolset) getNamespace() *namespace { return nil }
+func (tt *BasicToolset) getNamespace() namespace { return nil }
 
 func (tt *BasicToolset) Call(p *Context, ids []string, args ...Item) (is Items) {
         return
@@ -508,7 +508,7 @@ func CreateSourceTransformActions(sources []string, namecommand func(src string)
 }
 
 type template struct {
-        *namespace
+        *namespaceEmbed
         name string
         declNodes []*node
         postNodes []*node
@@ -518,6 +518,10 @@ type template struct {
 type templateToolset struct {
         *template
         BasicToolset
+}
+
+func (tt *templateToolset) getNamespace() namespace {
+        return tt.template.namespaceEmbed
 }
 
 func (tt *templateToolset) ConfigModule(ctx *Context, args Items, vars map[string]string) {
@@ -536,18 +540,9 @@ func (tt *templateToolset) CreateActions(ctx *Context) bool {
         return false
 }
 
-func (tt *templateToolset) Call(p *Context, ids []string, args ...Item) (is Items) {
-        fmt.Printf("todo: TemplateToolset.Call %v\n", ids)
-        return
-}
-
-func (tt *templateToolset) Set(p *Context, ids []string, items ...Item) {
-        fmt.Printf("todo: TemplateToolset.Set %v\n", ids)
-}
-
 // Module is defined by a $(module) invocation in .smart script.
 type Module struct {
-        *namespace
+        *namespaceEmbed
         Parent *Module // upper module
         Toolset toolset
         Action *Action // action for building this module
@@ -559,6 +554,13 @@ type Module struct {
         declareLoc, commitLoc location // where does it defined and commit (could be nil)
         //x *Context // the context of the module
         l *lex // the lex scope where does it defined (could be nil)
+}
+
+func (m *Module) getNamespace(name string) (ns namespace) {
+        if c, ok := m.Children[name]; ok && c != nil {
+                ns = c
+        }
+        return
 }
 
 func (m *Module) GetDeclareLocation() (s string, lineno, colno int) {
