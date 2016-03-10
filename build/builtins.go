@@ -185,6 +185,8 @@ func builtinTemplate(ctx *Context, loc location, args Items) (is Items) {
                                 rules: make(map[string]*rule, 4),
                         },
                 }
+
+                ctx.t.Set(ctx, []string{ "name" }, StringItem(name))
         }
         return
 }

@@ -57,8 +57,11 @@ func (ns *namespaceEmbed) Call(ctx *Context, ids []string, args ...Item) (is Ite
 
 func (ns *namespaceEmbed) Set(ctx *Context, ids []string, items ...Item) {
         if n := len(ids); n == 1 {
-                if d, ok := ns.defines[ids[0]]; ok && d != nil {
+                name := ids[0]
+                if d, ok := ns.defines[name]; ok && d != nil {
                         d.value = items
+                } else {
+                        ns.defines[name] = &define{ loc:ctx.CurrentLocation(), name:name, value:items }
                 }
         } else {
                 lineno, colno := ctx.l.caculateLocationLineColumn(ctx.l.location())
