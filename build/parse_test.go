@@ -1642,24 +1642,27 @@ $(commit)$(info b commited)
                         }
                 }
         }
+/*
+a: after-post
+a: source = "a.cpp"
+a: before-commit
+---------------------
+b: after-post
+b: source = "b.cpp"
+b: before-commit
+*/
         if s, x := info.String(), fmt.Sprintf(`after-commit
 a: test - "a"
 a: dir = "%s"
 a: source = ""
 a: before-post
 a - %s %s/out
-a: after-post
-a: source = "a.cpp"
-a: before-commit
 a commited
-b: test - "b"
+b: test - "a b"
 b: dir = "%s"
 b: source = ""
 b: before-post
 b - %s %s/out
-b: after-post
-b: source = "b.cpp"
-b: before-commit
 b commited
 `, wd, wd, wd, wd, wd, wd); s != x { t.Errorf("'%s' != '%s'", s, x) }
 }
