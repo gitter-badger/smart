@@ -1511,13 +1511,17 @@ func (ctx *Context) processNode(n *node) (err error) {
                                         _, deferred = d.value[0].(*node)
                                 }
 
+                                //fmt.Printf("%v: %v %v\n", parts, d.value.Expand(ctx), n.Expand(ctx))
+
                                 if deferred {
                                         d.value = append(d.value, n)
                                 } else {
                                         d.value = ctx.nodeItems(n.children[1])
                                 }
                         } else {
-                                ctx.setMultipart(parts, n)
+                                if d := ctx.setMultipart(parts, n); d != nil {
+                                        //fmt.Printf("%v: %v %v\n", parts, n.Expand(ctx), d.value.Expand(ctx))
+                                }
                         }
                 }
 
