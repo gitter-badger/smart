@@ -29,6 +29,15 @@ type rule struct {
         node *node
 }
 
+type scoper interface {
+        // Call variable.
+        Call(ctx *Context, ids []string, args ...Item) Items
+        // Set variable.        
+        Set(ctx *Context, ids []string, items ...Item)
+        // Check if a variable exists.        
+        //Has(ctx *Context, ids []string) bool
+}
+
 type namespace interface {
         scoper
         getNamespace(name string) namespace
@@ -1176,12 +1185,20 @@ func (ctx *Context) Set(name string, items ...Item) {
 }
 
 func (ctx *Context) call(loc location, name string, args ...Item) (is Items) {
+        /*
         if i := strings.Index(name, ":"); 0 <= i {
                 return ctx.callScoped(loc, name[0:i], strings.Split(name[i+1:], "."), args...)
         }
-        return ctx.callMultipart(loc, strings.Split(name, "."), args...)
+        return ctx.callMultipart(loc, strings.Split(name, "."), args...) */
+        if d, _, parts := ctx.getDefine(name); d != nil {
+                is = d.value
+        } else {
+                errorf("'%v:%v' is undefined", name, strings.Join(parts, "."))
+        }
+        return
 }
 
+/*
 func (ctx *Context) callScoped(loc location, name string, parts []string, args ...Item) (is Items) {
         if ts, ok := toolsets[name]; ok && ts != nil {
                 is = ts.toolset.Call(ctx, parts, args...)
@@ -1234,7 +1251,7 @@ func (ctx *Context) callMultipart(loc location, parts []string, args ...Item) (i
         }
 
         return
-}
+} */
 
 func (ctx *Context) callWith(loc location, m *Module, name string, args ...Item) (is Items) {
         o := ctx.m
@@ -1302,6 +1319,53 @@ func (ctx *Context) setMultipart(parts []string, items...Item) (v *define) {
         
         v.name, v.value, v.loc = name, items, loc
         return
+}
+
+// getDefine returns a define for hierarchy names like `tool:m1.m2.var`, `m1.m2.var`, etc.
+func (ctx *Context) getDefine(name string) (d *define, prefix string, parts []string) {
+        var ns namespace
+        if ns, prefix, parts = ctx.getNamespace(name); ns != nil {
+                if m, n := ns.getDefineMap(), len(parts); m != nil && 0 < n {
+                        d, _ = m[parts[n-1]]
+                }
+        }
+        return
+}
+
+// getNamespace returns a namespace for hierarchy names like `tool:m1.m2.var`, `m1.m2.var`, etc.
+func (ctx *Context) getNamespace(name string) (ns namespace, prefix string, parts []string) {
+        if i := strings.Index(name, ":"); 0 <= i {
+                prefix = name[0:i]
+                if ts, ok := toolsets[name]; ok && ts != nil {
+                        ns = ts.getNamespace()
+                }
+        }
+
+        parts = strings.Split(name, ".")
+        num := len(parts)
+        for i, s := range parts[0:num-1] {
+                if ns != nil {
+                        ns = ns.getNamespace(s)
+                } else if i == 0 {
+                        switch s {
+                        default:   ns, _ = ctx.modules[s]
+                        case "me": ns = ctx.m
+                        case "~":
+                                if ctx.m.Toolset == nil {
+                                        lineno, colno := ctx.l.caculateLocationLineColumn(ctx.l.location())
+                                        fmt.Fprintf(os.Stderr, "%v:%v:%v:warning: no bound toolset\n", ctx.l.scope, lineno, colno)
+                                } else {
+                                        ns = ctx.m.Toolset.getNamespace()
+                                }
+                        }
+                }
+                if ns == nil {
+                        lineno, colno := ctx.l.caculateLocationLineColumn(ctx.l.location())
+                        fmt.Fprintf(os.Stderr, "%v:%v:%v:warning: `%s' is undefined scope\n",
+                                ctx.l.scope, lineno, colno, strings.Join(parts[0:i+1], "."))
+                        break
+                }
+        }
 }
 
 func (ctx *Context) getNamespaceForMultipartName(parts []string) (ns namespace) {

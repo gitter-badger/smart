@@ -96,6 +96,7 @@ func builtinSetNot(ctx *Context, loc location, args Items) (is Items) {
 func builtinSetQuestioned(ctx *Context, loc location, args Items) (is Items) {
         if num := len(args); 1 < num {
                 name := strings.TrimSpace(args[0].Expand(ctx))
+                /*
                 if i := strings.Index(name, ":"); 0 <= i {
                         prefix, parts := name[0:i], strings.Split(name[i+1:], ".")
                         if ii := ctx.callScoped(loc, prefix, parts); ii.IsEmpty(ctx) {
@@ -106,6 +107,9 @@ func builtinSetQuestioned(ctx *Context, loc location, args Items) (is Items) {
                         if ctx.getMultipart(parts) == nil {
                                 ctx.setMultipart(parts, args[1:]...)
                         }
+                } */
+                if d, _, _ := ctx.getDefine(name); d == nil || d.value.IsEmpty(ctx) {
+                        ctx.Set(name, args...)
                 }
         }
         return
@@ -114,6 +118,7 @@ func builtinSetQuestioned(ctx *Context, loc location, args Items) (is Items) {
 func builtinSetAppend(ctx *Context, loc location, args Items) (is Items) {
         if num := len(args); 1 < num {
                 name := strings.TrimSpace(args[0].Expand(ctx))
+                /*
                 if i := strings.Index(name, ":"); 0 <= i {
                         prefix, parts := name[0:i], strings.Split(name[i+1:], ".")
                         ctx.setScoped(prefix, parts, ctx.callScoped(loc, prefix, parts).Concat(ctx, args[1:]...)...)
@@ -122,6 +127,11 @@ func builtinSetAppend(ctx *Context, loc location, args Items) (is Items) {
                         if ctx.getMultipart(parts) == nil {
                                 ctx.setMultipart(parts, args[1:]...)
                         }
+                } */
+                if d, _, _ := ctx.getDefine(name); d == nil {
+                        ctx.Set(name, args...)
+                } else {
+                        d.value = append(d.value, args...)
                 }
         }
         return

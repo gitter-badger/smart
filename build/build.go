@@ -80,19 +80,8 @@ func (is Items) Concat(ctx *Context, args ...Item) (res Items) {
         return
 }
 
-type scoper interface {
-        // Call variable.
-        Call(ctx *Context, ids []string, args ...Item) Items
-        // Set variable.        
-        Set(ctx *Context, ids []string, items ...Item)
-        // Check if a variable exists.        
-        //Has(ctx *Context, ids []string) bool
-}
-
 // toolset represents a toolchain like gcc and related utilities.
 type toolset interface {
-        scoper
-
         // ConfigModule setup the current module being processed.
         // `args' and `vars' is passed in on the `$(module)' invocation.
         ConfigModule(p *Context, args Items, vars map[string]string)
@@ -120,7 +109,7 @@ func RegisterToolset(name string, ts toolset) {
         toolsets[name] = &toolsetStub{ name:name, toolset:ts };
 }
 
-type BasicToolset struct {        
+type BasicToolset struct {
 }
 
 func (tt *BasicToolset) ConfigModule(ctx *Context, args Items, vars map[string]string) {
@@ -135,13 +124,6 @@ func (tt *BasicToolset) UseModule(ctx *Context, o *Module) bool {
 }
 
 func (tt *BasicToolset) getNamespace() namespace { return nil }
-
-func (tt *BasicToolset) Call(p *Context, ids []string, args ...Item) (is Items) {
-        return
-}
-
-func (tt *BasicToolset) Set(p *Context, ids []string, items ...Item) {
-}
 
 func IsIA32Command(s string) bool {
         buf := new(bytes.Buffer)
