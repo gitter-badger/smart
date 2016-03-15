@@ -39,7 +39,6 @@ type scoper interface {
 }
 
 type namespace interface {
-        scoper
         getNamespace(name string) namespace
         getDefineMap() map[string]*define
         getRuleMap() map[string]*rule
@@ -50,6 +49,7 @@ type namespaceEmbed struct {
         rules map[string]*rule
 }
 
+/*
 func (ns *namespaceEmbed) Call(ctx *Context, ids []string, args ...Item) (is Items) {
         if n := len(ids); n == 1 {
                 if d, ok := ns.defines[ids[0]]; ok && d != nil {
@@ -62,7 +62,7 @@ func (ns *namespaceEmbed) Call(ctx *Context, ids []string, args ...Item) (is Ite
                 // FIXME: nested
         }
         return
-}
+} */
 
 func (ns *namespaceEmbed) Set(ctx *Context, ids []string, items ...Item) {
         if n := len(ids); n == 1 {
@@ -1029,11 +1029,7 @@ type Context struct {
         m *Module // the current module being processed
         t *template // the current template being processed
 
-        // variables in the context
-        defines map[string]*define
-
-        // rules in the context
-        rules map[string]*rule
+        g *namespaceEmbed // the global namespace
 
         templates map[string]*template
 
@@ -1073,6 +1069,7 @@ func (ctx *Context) With(m *Module, work func()) {
         work()
 }
 
+/*
 func (ctx *Context) expand(loc location, str string) string {
         var buf bytes.Buffer
         var exp func(s []byte) (out string, l int)
@@ -1166,7 +1163,7 @@ func (ctx *Context) expand(loc location, str string) string {
         }
 
         return buf.String()
-}
+} */
 
 func (ctx *Context) CallWith(m *Module, name string, args ...Item) (is Items) {
         return ctx.callWith(ctx.l.location(), m, name, args...)
@@ -1177,26 +1174,8 @@ func (ctx *Context) Call(name string, args ...Item) (is Items) {
 }
 
 func (ctx *Context) Set(name string, items ...Item) {
-        if ns, _, _, parts := ctx.getNamespace(name); ns != nil {
-                if m, n := ns.getDefineMap(), len(parts); m != nil && 0 < n {
-                        var (
-                                d *define
-                                found bool
-                                sym = parts[n-1]
-                                loc = ctx.l.location()
-                        )
-                        if d, found = m[sym]; !found {
-                                d = new(define)
-                                m[sym] = d
-                        }
-                        if d.readonly {
-                                lineno, colno := ctx.l.caculateLocationLineColumn(loc)
-                                fmt.Printf("%v:%v:%v:warning: readonly '%s'\n", ctx.l.scope, lineno, colno, strings.Join(parts, "."))
-                        } else {
-                                d.name, d.value, d.loc = sym, items, loc
-                        }
-                }
-        }
+        hasPrefix, prefix, parts := ctx.expandNameString(name)
+        ctx.setWithDetails(hasPrefix, prefix, parts, items...)
 }
 
 func (ctx *Context) setWithDetails(hasPrefix bool, prefix string, parts []string, items ...Item) {
@@ -1219,25 +1198,55 @@ func (ctx *Context) setWithDetails(hasPrefix bool, prefix string, parts []string
                                 d.name, d.value, d.loc = sym, items, loc
                         }
                 }
+        } else {
+                var loc = ctx.l.location()
+                lineno, colno := ctx.l.caculateLocationLineColumn(loc)
+                if hasPrefix {
+                        errorf("%v:%v:%v: no namespace for '%s:%s'", ctx.l.scope, lineno, colno, prefix, strings.Join(parts, "."))
+                } else {
+                        errorf("%v:%v:%v: no namespace for '%s'", ctx.l.scope, lineno, colno, strings.Join(parts, "."))
+                }
         }
 }
 
 func (ctx *Context) call(loc location, name string, args ...Item) (is Items) {
-        if d, _, _, parts := ctx.getDefine(name); d != nil {
-                is = d.value
-        } else {
-                errorf("'%v:%v' is undefined", name, strings.Join(parts, "."))
-        }
+        hasPrefix, prefix, parts := ctx.expandNameString(name)
+        is = ctx.callWithDetails(loc, hasPrefix, prefix, parts, args...)
         return
 }
 
-func (ctx *Context) callWithDetails(loc location, hasPrefix bool, prefix string, parts []string) (is Items) {
+func (ctx *Context) callWithDetails(loc location, hasPrefix bool, prefix string, parts []string, args ...Item) (is Items) {
+        n := len(parts)
+
+        // Process special symbols and builtins first.
+        if !hasPrefix && n == 1 {
+                switch sym := parts[0]; sym {
+                case "$":  is = append(is, stringitem("$"))
+                case "me": // rename: $(me) -> $(me.name)
+                        parts, n = append(parts, "name"), 2
+                default:
+                        if f, ok := builtins[sym]; ok && f != nil {
+                                is = f(ctx, loc, args)
+                                return
+                        }
+                }
+        }
+
         if ns := ctx.getNamespaceWithDetails(hasPrefix, prefix, parts); ns != nil {
-                if m, n := ns.getDefineMap(), len(parts); m != nil && 0 < n {
-                        if d, ok := m[parts[n-1]]; ok && d != nil {
+                if m := ns.getDefineMap(); m != nil && 0 < n {
+                        sym := parts[n-1]
+                        if d, ok := m[sym]; ok && d != nil {
                                 is = d.value
                         }
                 }
+        } else {
+                /*
+                lineno, colno := ctx.l.caculateLocationLineColumn(loc)
+                if hasPrefix {
+                        errorf("%v:%v:%v: no namespace for '%s:%s'", ctx.l.scope, lineno, colno, prefix, strings.Join(parts, "."))
+                } else {
+                        errorf("%v:%v:%v: no namespace for '%s'", ctx.l.scope, lineno, colno, strings.Join(parts, "."))
+                } */
         }
         return
 }
@@ -1265,14 +1274,16 @@ func (ctx *Context) getDefineWithDetails(hasPrefix bool, prefix string, parts []
         return
 }
 
-// getNamespace returns a namespace for hierarchy names like `tool:m1.m2.var`, `m1.m2.var`, etc.
-func (ctx *Context) getNamespace(name string) (ns namespace, hasPrefix bool, prefix string, parts []string) {
+// getNamespaceAndDetails returns a namespace for hierarchy names like `tool:m1.m2.var`, `m1.m2.var`, etc.
+func (ctx *Context) getNamespaceAndDetails(name string) (ns namespace, hasPrefix bool, prefix string, parts []string) {
         hasPrefix, prefix, parts = ctx.expandNameString(name)
         ns = ctx.getNamespaceWithDetails(hasPrefix, prefix, parts)
         return
 }
 
 func (ctx *Context) getNamespaceWithDetails(hasPrefix bool, prefix string, parts []string) (ns namespace) {
+        num := len(parts)
+
         if hasPrefix {
                 if s, ok := toolsets[prefix]; ok && s != nil {
                         ns = s.toolset.getNamespace()
@@ -1284,27 +1295,43 @@ func (ctx *Context) getNamespaceWithDetails(hasPrefix bool, prefix string, parts
                 }
         }
 
-        num := len(parts)
+        if num == 1 && ns == nil {
+                ns = ctx.g
+                return
+        }
+
+        lineno, colno := ctx.l.caculateLocationLineColumn(ctx.l.location())
         for i, s := range parts[0:num-1] {
                 if ns != nil {
                         ns = ns.getNamespace(s)
                 } else if i == 0 {
                         switch s {
-                        default:   ns, _ = ctx.modules[s]
-                        case "me": ns = ctx.m
+                        default:
+                                if m, ok := ctx.modules[s]; !ok || m == nil {
+                                        fmt.Fprintf(os.Stderr, "%v:%v:%v:warning: '%s' is nil\n", ctx.l.scope, lineno, colno, s)
+                                        //break loop_parts
+                                } else {
+                                        ns = m
+                                }
+                        case "me":
+                                if ctx.m == nil {
+                                        fmt.Fprintf(os.Stderr, "%v:%v:%v:warning: 'me' is nil\n", ctx.l.scope, lineno, colno)
+                                        //break loop_parts
+                                } else {
+                                        ns = ctx.m
+                                }
                         case "~":
                                 if ctx.m.Toolset == nil {
-                                        lineno, colno := ctx.l.caculateLocationLineColumn(ctx.l.location())
                                         fmt.Fprintf(os.Stderr, "%v:%v:%v:warning: no bound toolset\n", ctx.l.scope, lineno, colno)
+                                        //break loop_parts
                                 } else {
                                         ns = ctx.m.Toolset.getNamespace()
                                 }
                         }
                 }
                 if ns == nil {
-                        lineno, colno := ctx.l.caculateLocationLineColumn(ctx.l.location())
-                        fmt.Fprintf(os.Stderr, "%v:%v:%v:warning: `%s' is undefined scope\n",
-                                ctx.l.scope, lineno, colno, strings.Join(parts[0:i+1], "."))
+                        fmt.Fprintf(os.Stderr, "%v:%v:%v:warning: `%s' is undefined scope\n", ctx.l.scope, lineno, colno,
+                                strings.Join(parts[0:i+1], "."))
                         break
                 }
         }
@@ -1329,13 +1356,14 @@ func (ctx *Context) multipart(n *node) (*bytes.Buffer, []int) {
 
 func (ctx *Context) expandNameString(name string) (hasPrefix bool, prefix string, parts []string) {
         if i := strings.Index(name, ":"); 0 <= i {
-                hasPrefix, prefix = true, name[0:i]
+                prefix, hasPrefix = name[0:i], true
+                name = name[i+1:]
         }
         parts = strings.Split(name, ".")
         return
 }
 
-func (ctx *Context) expandNameNode(n *node) (parts []string, scoped bool, name string) {
+func (ctx *Context) expandNameNode(n *node) (scoped bool, name string, parts []string) {
         pos := 0
         b, i := ctx.multipart(n)
         if 0 <= i[0] {
@@ -1364,8 +1392,8 @@ func (ctx *Context) nodeItems(n *node) (is Items) {
                 for _, an := range n.children[1:] {
                         args = args.Concat(ctx, ctx.nodeItems(an)...)
                 }
-                parts, callScoped, name := ctx.expandNameNode(n.children[0])
-                is = ctx.callWithDetails(n.loc(), callScoped, name, parts)
+                scoped, name, parts := ctx.expandNameNode(n.children[0])
+                is = ctx.callWithDetails(n.loc(), scoped, name, parts, args...)
 
         case nodeName:          fallthrough
         case nodeArg:           fallthrough
@@ -1461,37 +1489,27 @@ func (ctx *Context) processNode(n *node) (err error) {
                 }
 
         case nodeDefineQuestioned:
-                parts, scoped, name := ctx.expandNameNode(n.children[0])
+                scoped, name, parts := ctx.expandNameNode(n.children[0])
                 if is := ctx.callWithDetails(n.loc(), scoped, name, parts); is.IsEmpty(ctx) {
                         ctx.setWithDetails(scoped, name, parts, n)
                 }
 
         case nodeDefineDeferred:
-                parts, scoped, name := ctx.expandNameNode(n.children[0])
+                scoped, name, parts := ctx.expandNameNode(n.children[0])
                 ctx.setWithDetails(scoped, name, parts, n)
 
         case nodeDefineSingleColoned: fallthrough
         case nodeDefineDoubleColoned:
-                parts, scoped, name := ctx.expandNameNode(n.children[0])
-                ctx.setWithDetails(scoped, name, parts, n)
+                scoped, name, parts := ctx.expandNameNode(n.children[0])
+                ctx.setWithDetails(scoped, name, parts, ctx.nodeItems(n.children[1])...)
 
         case nodeDefineAppend:
-                parts, scoped, name := ctx.expandNameNode(n.children[0])
+                scoped, name, parts := ctx.expandNameNode(n.children[0])
                 if d := ctx.getDefineWithDetails(scoped, name, parts); d != nil {
-                        deferred := true
-                        if 0 < len(d.value) {
-                                _, deferred = d.value[0].(*node)
-                        }
-
-                        //fmt.Printf("%v: %v %v\n", parts, d.value.Expand(ctx), n.Expand(ctx))
-
-                        if deferred {
-                                d.value = append(d.value, n)
-                        } else {
-                                d.value = ctx.nodeItems(n.children[1])
-                        }
+                        d.value = append(d.value, n.children[1])
                 } else {
-                        ctx.setWithDetails(scoped, name, parts)
+                        value := ctx.nodeItems(n.children[1])
+                        ctx.setWithDetails(scoped, name, parts, value...)
                 }
 
         case nodeDefineNot:
@@ -1515,7 +1533,7 @@ func (ctx *Context) processNode(n *node) (err error) {
                         if ctx.m != nil {
                                 ctx.m.rules[s] = r
                         } else {
-                                ctx.rules[s] = r
+                                ctx.g.rules[s] = r
                         }
                 }
 
@@ -1591,11 +1609,13 @@ func (ctx *Context) include(fn string) (err error) {
 
 func NewContext(scope string, s []byte, vars map[string]string) (ctx *Context, err error) {
         ctx = &Context{
-                l: &lex{ parseBuffer:&parseBuffer{ scope:scope, s: s }, pos: 0 },
                 templates: make(map[string]*template, 8),
-                defines: make(map[string]*define, len(vars) + 16),
                 modules: make(map[string]*Module, 8),
-                rules: make(map[string]*rule, 8),
+                l: &lex{ parseBuffer:&parseBuffer{ scope:scope, s: s }, pos: 0 },
+                g: &namespaceEmbed{
+                        defines: make(map[string]*define, len(vars) + 16),
+                        rules: make(map[string]*rule, 8),
+                },
         }
 
         for k, v := range vars {

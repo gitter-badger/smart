@@ -5,7 +5,7 @@ package smart
 
 import (
         "testing"
-        "strings"
+        //"strings"
         "bytes"
         "fmt"
         "os"
@@ -16,24 +16,20 @@ import (
 type testToolset struct {
         BasicToolset
         tag string
-        vars map[string]string
+        ns namespaceEmbed
 }
 
-func (tt *testToolset) Call(p *Context, ids []string, args ...Item) Items {
-        s := fmt.Sprintf("%v:%v:%v", tt.tag, strings.Join(ids, "."), Items(args).Expand(p))
-        if tt.vars == nil {
-                // ...
-        } else if v, ok := tt.vars[strings.Join(ids, ".")]; ok {
-                s = fmt.Sprintf("%v (%v)", v, s)
-        }
-        return Items{ stringitem(s) }
-}
+func (tt *testToolset) getNamespace() namespace { return &tt.ns }
 
-func (tt *testToolset) Set(p *Context, ids []string, items ...Item) {
-        if tt.vars == nil {
-                tt.vars = make(map[string]string, 4)
+func newTestToolset(tag string) (ts *testToolset) {
+        ts = &testToolset{
+                tag:tag, ns:namespaceEmbed{
+                        defines: make(map[string]*define),
+                        rules: make(map[string]*rule),
+                },
         }
-        tt.vars[strings.Join(ids, ".")] = strings.Join(p.ItemsStrings(items...), ";")
+        ts.ns.defines["name"] = &define{ name:tag, value:Items{ stringitem("test-"+tag) } }
+        return
 }
 
 func newTestLex(file, s string) (l *lex) {
@@ -1277,31 +1273,31 @@ func TestParse(t *testing.T) {
                 fmt.Fprintf(info, "%v\n", args.Expand(ctx))
         }
 
-        p, err := newTestContext("TestParse#1", `
+        ctx, err := newTestContext("TestParse#1", `
 a = a
 i = i
 ii = x x $a $i x x
 i1 = $a$i-$(ii)
 i2 = $a$($i)-$($i$i)
 `);     if err != nil { t.Error("parse error:", err) }
-        if ex, nl := 5, len(p.l.nodes); nl != ex { t.Error("expect", ex, "but", nl) }
+        if ex, nl := 5, len(ctx.l.nodes); nl != ex { t.Error("expect", ex, "but", nl) }
 
         for _, s := range []string{ "a", "i", "ii", "i1", "i2" } {
-                if d, ok := p.defines[s]; !ok || d == nil { t.Errorf("missing '%v'", s) } else {
-                        //if s, x := d.value.Expand(p), "" 
+                if d, ok := ctx.g.defines[s]; !ok || d == nil { t.Errorf("missing '%v'", s) } else {
+                        if s := d.value.Expand(ctx); s == "" { t.Errorf("empty '%v'", s) }
                 }
         }
 
-        if l1, l2 := len(p.defines), 5; l1 != l2 { t.Errorf("expects '%v' defines but got '%v'", l2, l1) }
+        if l1, l2 := len(ctx.g.defines), 5; l1 != l2 { t.Errorf("expects '%v' defines but got '%v'", l2, l1) }
 
-        if s, ex := p.Call("a").Expand(p), "a";                   s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
-        if s, ex := p.Call("i").Expand(p), "i";                   s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
-        if s, ex := p.Call("ii").Expand(p), "x x a i x x";        s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
-        if s, ex := p.Call("i1").Expand(p), "ai-x x a i x x";     s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
-        if s, ex := p.Call("i2").Expand(p), "ai-x x a i x x";     s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
+        if s, ex := ctx.Call("a").Expand(ctx), "a";                   s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
+        if s, ex := ctx.Call("i").Expand(ctx), "i";                   s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
+        if s, ex := ctx.Call("ii").Expand(ctx), "x x a i x x";        s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
+        if s, ex := ctx.Call("i1").Expand(ctx), "ai-x x a i x x";     s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
+        if s, ex := ctx.Call("i2").Expand(ctx), "ai-x x a i x x";     s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
 
         //////////////////////////////////////////////////
-        p, err = newTestContext("TestParse#2", `
+        ctx, err = newTestContext("TestParse#2", `
 a = a
 i = i
 ii = i $a i a \
@@ -1314,25 +1310,27 @@ bbbb := xxx$(info 2:$(sh$ared),$(stat$ic))-$(a$$a)-xxx
 cccc = xxx-$(sh$ared)-$(stat$ic)-$(a$$a)-xxx
 dddd := xxx-$(sh$ared)-$(stat$ic)-$(a$$a)-xxx
 `);     if err != nil { t.Error("parse error:", err) }
-        if ex, nl := 10, len(p.defines); nl != ex { t.Error("expect", ex, "defines, but", nl) }
+        if ex, nl := 10, len(ctx.g.defines); nl != ex { t.Error("expect", ex, "defines, but", nl) }
 
         for _, s := range []string{ "a", "i", "ii", "shared", "static", "a$a", "aaaa", "bbbb", "cccc", "dddd" } {
-                if _, ok := p.defines[s]; !ok { t.Errorf("missing '%v'", s) }
+                if d, ok := ctx.g.defines[s]; !ok || d == nil { t.Errorf("missing '%v' (%v)", s, ctx.g.defines) } else {
+                        if s := d.value.Expand(ctx); s == "" { t.Errorf("empty '%v'", s) }
+                }
         }
 
-        if s, ex := p.Call("a").Expand(p), "a";                   s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
-        if s, ex := p.Call("i").Expand(p), "i";                   s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
-        if s, ex := p.Call("ii").Expand(p), "i a i a   a i";      s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
-        if s, ex := p.Call("shared").Expand(p), "shared";         s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
-        if s, ex := p.Call("static").Expand(p), "static";         s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
-        if s, ex := p.Call("a").Expand(p), "a";                   s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
-        if s, ex := p.Call("a$a").Expand(p), "foo";               s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
-        if s, ex := p.Call("a$$a").Expand(p), "";                 s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
-        if s, ex := p.Call("aaaa").Expand(p), "xxx-foo-xxx";      s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
-        if s, ex := p.Call("bbbb").Expand(p), "xxx-foo-xxx";      s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
-        if s, ex := p.Call("cccc").Expand(p), "xxx-shared-static-foo-xxx";       s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
-        if s, ex := p.Call("dddd").Expand(p), "xxx-shared-static-foo-xxx";       s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
-        if s, ex := info.String(), "2:shared static\n1:shared static\n"; s != ex {
+        if s, ex := ctx.Call("a").Expand(ctx), "a";                   s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
+        if s, ex := ctx.Call("i").Expand(ctx), "i";                   s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
+        if s, ex := ctx.Call("ii").Expand(ctx), "i a i a   a i";      s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
+        if s, ex := ctx.Call("shared").Expand(ctx), "shared";         s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
+        if s, ex := ctx.Call("static").Expand(ctx), "static";         s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
+        if s, ex := ctx.Call("a").Expand(ctx), "a";                   s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
+        if s, ex := ctx.Call("a$a").Expand(ctx), "foo";               s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
+        if s, ex := ctx.Call("a$$a").Expand(ctx), "";                 s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
+        if s, ex := ctx.Call("aaaa").Expand(ctx), "xxx-foo-xxx";      s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
+        if s, ex := ctx.Call("bbbb").Expand(ctx), "xxx-foo-xxx";      s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
+        if s, ex := ctx.Call("cccc").Expand(ctx), "xxx-shared-static-foo-xxx";       s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
+        if s, ex := ctx.Call("dddd").Expand(ctx), "xxx-shared-static-foo-xxx";       s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
+        if s, ex := info.String(), "2:shared static\n1:shared static\n1:shared static\n"; s != ex {
                 t.Errorf("expects '%v' but got '%v'", ex, s)
         }
 }
@@ -1369,12 +1367,12 @@ func TestMultipartNames(t *testing.T) {
                 fmt.Fprintf(info, "%v\n", args.Expand(ctx))
         }
 
-        ts := &testToolset{ tag:"test" }
+        ts := newTestToolset("test")
         toolsets["test"] = &toolsetStub{ name:"test", toolset:ts }
 
         ctx, err := newTestContext("TestMultipartNames", `
 $(= test:foo, f o o)
-$(= test:foo.bar,  foo bar)
+#$(= test:foo.bar,  foo bar)
 
 $(= test:foobar, f)     $(info [$(test:foobar 1,2,3)])
 $(+= test:foobar, o, o) $(info [$(test:foobar 1,2,3)])
@@ -1399,20 +1397,21 @@ test.a.foo = FOOOO
 $(info $(test.foo))
 $(info $(test.a.foo))
 `);     if err != nil { t.Errorf("parse error:", err) }
-        if s, x := ctx.Call("test:foo").Expand(ctx), " f o o (test:foo:)"; s != x { t.Errorf("expects '%s' but '%s'", x, s) }
-        if s, x := ctx.Call("test:foo.bar").Expand(ctx), "  foo bar (test:foo.bar:)"; s != x { t.Errorf("expects '%s' but '%s'", x, s) }
+        if s, x := ctx.Call("test:foo").Expand(ctx), " f o o"; s != x { t.Errorf("expects '%s' but '%s'", x, s) }
+        //if s, x := ctx.Call("test:foo.bar").Expand(ctx), "  foo bar (test:foo.bar:)"; s != x { t.Errorf("expects '%s' but '%s'", x, s) }
         if s, x := ctx.Call("test.foo").Expand(ctx), "FOOO"; s != x { t.Errorf("expects '%s' but '%s'", x, s) }
         if s, x := ctx.Call("test.a.foo").Expand(ctx), "FOOOO"; s != x { t.Errorf("expects '%s' but '%s'", x, s) }
         if s, x := ctx.Call("test.a.bar").Expand(ctx), "bar"; s != x { t.Errorf("expects '%s' but '%s'", x, s) }
-        if s, b := ts.vars["foo"]; !b { t.Errorf("expects 'foo'") } else {
-                if x := " f o o"; s != x { t.Errorf("expects '%s' but '%s'", x, s) }
+        if d, b := ts.ns.defines["foo"]; !b { t.Errorf("expects 'foo'") } else {
+                if x, s := " f o o", d.value.Expand(ctx); s != x { t.Errorf("expects '%s' but '%s'", x, s) }
         }
-        if s, b := ts.vars["foo.bar"]; !b { t.Errorf("expects 'foo.bar'") } else {
-                if x := "  foo bar"; s != x { t.Errorf("expects '%s' but '%s'", x, s) }
-        }
+        /*
+        if d, b := ts.ns.defines["foo.bar"]; !b { t.Errorf("expects 'foo.bar'") } else {
+                if x, s := "  foo bar", d.value.Expand(ctx); s != x { t.Errorf("expects '%s' but '%s'", x, s) }
+        } */
 
-        if v, s := info.String(), fmt.Sprintf(`[ f (test:foobar:1 2 3)]
-[ f (test:foobar:); o; o (test:foobar:1 2 3)]
+        if v, s := info.String(), fmt.Sprintf(`[ f]
+[ f test:foobar  o  o]
 fooo
 foooo
 fooo
@@ -1481,9 +1480,9 @@ $(info $(test.name) $(test.dir))
                         if s := d.value.Expand(ctx); s != workdir { t.Errorf("dir != '%v' (%v)", workdir, s) }
                 }
                 ctx.With(m, func() {
-                        if s := ctx.Call("me").Expand(ctx); s != "test" { t.Errorf("me != test (%v)", s) }
-                        if s := ctx.Call("me.name").Expand(ctx); s != "test" { t.Errorf("me.name != test (%v)", s) }
-                        if s := ctx.Call("me.dir").Expand(ctx); s != workdir { t.Errorf("me.dir != %v (%v)", workdir, s) }
+                        if s := ctx.Call("me").Expand(ctx); s != "test" { t.Errorf("$(me) != test (%v)", s) }
+                        if s := ctx.Call("me.name").Expand(ctx); s != "test" { t.Errorf("$(me.name) != test (%v)", s) }
+                        if s := ctx.Call("me.dir").Expand(ctx); s != workdir { t.Errorf("$(me.dir) != %v (%v)", workdir, s) }
                 })
         }
 
@@ -1512,7 +1511,7 @@ $(commit)
 `);     if err != nil { t.Errorf("parse error:", err) }
 
         if ctx.modules == nil { t.Errorf("nil modules") }
-        if _, ok := ctx.rules["foo"]; ok { t.Errorf("foo defined in context") }
+        if _, ok := ctx.g.rules["foo"]; ok { t.Errorf("foo defined in context") }
         if m, ok := ctx.modules["test"]; !ok || m == nil { t.Errorf("nil 'test' module") } else {
                 if r, ok := m.rules["foo"]; !ok { t.Errorf("foo not defined in %v", m.GetName(ctx)) } else {
                         if n := len(r.targets); n != 1 { t.Errorf("incorrect number of targets: %v %v", n, r.targets) }
@@ -1544,24 +1543,20 @@ func TestToolsetVariables(t *testing.T) {
         ndk = filepath.Dir(ndk)
         sdk = filepath.Dir(filepath.Dir(sdk))
 
-        toolsets["test-sdk"] = &toolsetStub{ name:"test-sdk", toolset:&testToolset{ tag:"sdk" } }
-        toolsets["test-ndk"] = &toolsetStub{ name:"test-ndk", toolset:&testToolset{ tag:"ndk" } }
-        toolsets["test-shell"] = &toolsetStub{ name:"test-shell", toolset:&testToolset{ tag:"shell" } }
+        toolsets["test-sdk"] = &toolsetStub{ name:"test-sdk", toolset:newTestToolset("sdk") }
+        toolsets["test-ndk"] = &toolsetStub{ name:"test-ndk", toolset:newTestToolset("ndk") }
+        toolsets["test-shell"] = &toolsetStub{ name:"test-shell", toolset:newTestToolset("shell") }
 
         _, err := newTestContext("TestToolsetVariables", `
 $(info $(test-shell:name))
 $(info $(test-sdk:name))
-$(info $(test-sdk:root))
 $(info $(test-sdk:support a,b,c))
 $(info $(test-ndk:name))
-$(info $(test-ndk:root))
 `);     if err != nil { t.Errorf("parse error:", err) }
-        if v, s := info.String(), fmt.Sprintf(`shell:name:
-sdk:name:
-sdk:root:
-sdk:support:a b c
-ndk:name:
-ndk:root:
+        if v, s := info.String(), fmt.Sprintf(`test-shell
+test-sdk
+
+test-ndk
 `); v != s { t.Errorf("`%s` != `%s`", v, s) }
         delete(toolsets, "test-sdk")
         delete(toolsets, "test-ndk")
