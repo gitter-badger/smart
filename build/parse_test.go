@@ -1287,10 +1287,12 @@ i2 = $a$($i)-$($i$i)
         if ex, nl := 5, len(p.l.nodes); nl != ex { t.Error("expect", ex, "but", nl) }
 
         for _, s := range []string{ "a", "i", "ii", "i1", "i2" } {
-                if _, ok := p.defines[s]; !ok { t.Errorf("missing '%v'", s) }
+                if d, ok := p.defines[s]; !ok || d == nil { t.Errorf("missing '%v'", s) } else {
+                        //if s, x := d.value.Expand(p), "" 
+                }
         }
 
-        if l1, l2 := len(p.defines), 5;                 l1 != l2 { t.Errorf("expects '%v' defines but got '%v'", l2, l1) }
+        if l1, l2 := len(p.defines), 5; l1 != l2 { t.Errorf("expects '%v' defines but got '%v'", l2, l1) }
 
         if s, ex := p.Call("a").Expand(p), "a";                   s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
         if s, ex := p.Call("i").Expand(p), "i";                   s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }

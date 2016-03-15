@@ -1177,20 +1177,53 @@ func (ctx *Context) Call(name string, args ...Item) (is Items) {
 }
 
 func (ctx *Context) Set(name string, items ...Item) {
-        if i := strings.Index(name, ":"); 0 <= i {
-                ctx.setScoped(name[0:i], strings.Split(name[i+1:], "."), items...)
-        } else {
-                ctx.setMultipart(strings.Split(name, "."), items...)
+        if ns, _, _, parts := ctx.getNamespace(name); ns != nil {
+                if m, n := ns.getDefineMap(), len(parts); m != nil && 0 < n {
+                        var (
+                                d *define
+                                found bool
+                                sym = parts[n-1]
+                                loc = ctx.l.location()
+                        )
+                        if d, found = m[sym]; !found {
+                                d = new(define)
+                                m[sym] = d
+                        }
+                        if d.readonly {
+                                lineno, colno := ctx.l.caculateLocationLineColumn(loc)
+                                fmt.Printf("%v:%v:%v:warning: readonly '%s'\n", ctx.l.scope, lineno, colno, strings.Join(parts, "."))
+                        } else {
+                                d.name, d.value, d.loc = sym, items, loc
+                        }
+                }
+        }
+}
+
+func (ctx *Context) setWithDetails(hasPrefix bool, prefix string, parts []string, items ...Item) {
+        if ns := ctx.getNamespaceWithDetails(hasPrefix, prefix, parts); ns != nil {
+                if m, n := ns.getDefineMap(), len(parts); m != nil && 0 < n {
+                        var (
+                                d *define
+                                found bool
+                                sym = parts[n-1]
+                                loc = ctx.l.location()
+                        )
+                        if d, found = m[sym]; !found {
+                                d = new(define)
+                                m[sym] = d
+                        }
+                        if d.readonly {
+                                lineno, colno := ctx.l.caculateLocationLineColumn(loc)
+                                fmt.Printf("%v:%v:%v:warning: readonly '%s'\n", ctx.l.scope, lineno, colno, strings.Join(parts, "."))
+                        } else {
+                                d.name, d.value, d.loc = sym, items, loc
+                        }
+                }
         }
 }
 
 func (ctx *Context) call(loc location, name string, args ...Item) (is Items) {
-        /*
-        if i := strings.Index(name, ":"); 0 <= i {
-                return ctx.callScoped(loc, name[0:i], strings.Split(name[i+1:], "."), args...)
-        }
-        return ctx.callMultipart(loc, strings.Split(name, "."), args...) */
-        if d, _, parts := ctx.getDefine(name); d != nil {
+        if d, _, _, parts := ctx.getDefine(name); d != nil {
                 is = d.value
         } else {
                 errorf("'%v:%v' is undefined", name, strings.Join(parts, "."))
@@ -1198,60 +1231,16 @@ func (ctx *Context) call(loc location, name string, args ...Item) (is Items) {
         return
 }
 
-/*
-func (ctx *Context) callScoped(loc location, name string, parts []string, args ...Item) (is Items) {
-        if ts, ok := toolsets[name]; ok && ts != nil {
-                is = ts.toolset.Call(ctx, parts, args...)
-        } else {
-                errorf("'%v:%v' is undefined", name, strings.Join(parts, "."))
+func (ctx *Context) callWithDetails(loc location, hasPrefix bool, prefix string, parts []string) (is Items) {
+        if ns := ctx.getNamespaceWithDetails(hasPrefix, prefix, parts); ns != nil {
+                if m, n := ns.getDefineMap(), len(parts); m != nil && 0 < n {
+                        if d, ok := m[parts[n-1]]; ok && d != nil {
+                                is = d.value
+                        }
+                }
         }
         return
 }
-
-func (ctx *Context) callMultipart(loc location, parts []string, args ...Item) (is Items) {
-        num := len(parts)
-        vars, name := ctx.defines, parts[num-1]
-
-        if num == 1 { // single part name
-                switch {
-                default:
-                        if f, ok := builtins[name]; ok {
-                                // Expand all arguments.
-                                //fmt.Printf("%v: %v\n", name, args)
-                                //for i := range args { args[i] = ctx.expand(loc, args[i]) }
-                                //fmt.Printf("%v: %v\n", name, args)
-                                return f(ctx, loc, args)
-                        } else if *flagW {
-                                lineno, colno := ctx.l.caculateLocationLineColumn(loc)
-                                fmt.Printf("%v:%v:%v:warning: `%v' is undefined\n", ctx.l.scope, lineno, colno, name)
-                        }
-                case name == "$": return Items{ stringitem("$") };
-                case name == "call":
-                        if 0 < len(args) {
-                                return ctx.call(loc, args[0].Expand(ctx), args[1:]...)
-                        }
-                        return
-                case name == "me":
-                        if ctx.m != nil {
-                                s := ctx.m.GetName(ctx) //ctx.m.Get(ctx, "dir")
-                                return Items{ stringitem(s) }
-                        }
-                        return
-                }
-        } else {
-                if ns := ctx.getNamespaceForMultipartName(parts); ns != nil {
-                        vars = ns.getDefineMap()
-                }
-        }
-
-        if vars != nil {
-                if d, ok := vars[name]; ok && d != nil {
-                        is = d.value
-                }
-        }
-
-        return
-} */
 
 func (ctx *Context) callWith(loc location, m *Module, name string, args ...Item) (is Items) {
         o := ctx.m
@@ -1261,70 +1250,14 @@ func (ctx *Context) callWith(loc location, m *Module, name string, args ...Item)
         return
 }
 
-func (ctx *Context) getMultipart(parts []string) (v *define) {
-        num := len(parts)
-        vars, name := ctx.defines, parts[num-1]
-
-        if 1 < num {
-                if ns := ctx.getNamespaceForMultipartName(parts); ns != nil {
-                        vars = ns.getDefineMap()
-                } else {
-                        vars = nil
-                }
-        }
-
-        if vars != nil {
-                v, _ = vars[name]
-        }
-        return
-}
-
-func (ctx *Context) setScoped(name string, parts []string, items...Item) {
-        if ts, ok := toolsets[name]; ok && ts != nil {
-                ts.toolset.Set(ctx, parts, items...)
-        } else {
-                errorf("'%v:%v' is undefined", name, strings.Join(parts, "."))
-        }
-}
-
-func (ctx *Context) setMultipart(parts []string, items...Item) (v *define) {
-        loc, num := ctx.l.location(), len(parts)
-        vars, name := ctx.defines, parts[num-1]
-
-        if 1 < num {
-                if ns := ctx.getNamespaceForMultipartName(parts); ns != nil {
-                        vars = ns.getDefineMap()
-                } else {
-                        vars = nil
-                }
-        }
-
-        if vars == nil {
-                lineno, colno := ctx.l.caculateLocationLineColumn(loc)
-                fmt.Printf("%v:%v:%v:warning: undefined scope '%s'\n", ctx.l.scope, lineno, colno, strings.Join(parts, "."))
-                return
-        }
-
-        var ok bool
-        if v, ok = vars[name]; !ok {
-                v = &define{}
-                vars[name] = v
-        }
-
-        if v.readonly {
-                lineno, colno := ctx.l.caculateLocationLineColumn(loc)
-                fmt.Printf("%v:%v:%v:warning: readonly '%s'\n", ctx.l.scope, lineno, colno, strings.Join(parts, "."))
-                return
-        }
-        
-        v.name, v.value, v.loc = name, items, loc
-        return
-}
-
 // getDefine returns a define for hierarchy names like `tool:m1.m2.var`, `m1.m2.var`, etc.
-func (ctx *Context) getDefine(name string) (d *define, prefix string, parts []string) {
-        var ns namespace
-        if ns, prefix, parts = ctx.getNamespace(name); ns != nil {
+func (ctx *Context) getDefine(name string) (d *define, hasPrefix bool, prefix string, parts []string) {
+        hasPrefix, prefix, parts = ctx.expandNameString(name)
+        d = ctx.getDefineWithDetails(hasPrefix, prefix, parts)
+        return
+}
+func (ctx *Context) getDefineWithDetails(hasPrefix bool, prefix string, parts []string) (d *define) {
+        if ns := ctx.getNamespaceWithDetails(hasPrefix, prefix, parts); ns != nil {
                 if m, n := ns.getDefineMap(), len(parts); m != nil && 0 < n {
                         d, _ = m[parts[n-1]]
                 }
@@ -1333,15 +1266,24 @@ func (ctx *Context) getDefine(name string) (d *define, prefix string, parts []st
 }
 
 // getNamespace returns a namespace for hierarchy names like `tool:m1.m2.var`, `m1.m2.var`, etc.
-func (ctx *Context) getNamespace(name string) (ns namespace, prefix string, parts []string) {
-        if i := strings.Index(name, ":"); 0 <= i {
-                prefix = name[0:i]
-                if ts, ok := toolsets[name]; ok && ts != nil {
-                        ns = ts.getNamespace()
+func (ctx *Context) getNamespace(name string) (ns namespace, hasPrefix bool, prefix string, parts []string) {
+        hasPrefix, prefix, parts = ctx.expandNameString(name)
+        ns = ctx.getNamespaceWithDetails(hasPrefix, prefix, parts)
+        return
+}
+
+func (ctx *Context) getNamespaceWithDetails(hasPrefix bool, prefix string, parts []string) (ns namespace) {
+        if hasPrefix {
+                if s, ok := toolsets[prefix]; ok && s != nil {
+                        ns = s.toolset.getNamespace()
+                } else {
+                        lineno, colno := ctx.l.caculateLocationLineColumn(ctx.l.location())
+                        fmt.Fprintf(os.Stderr, "%v:%v:%v:warning: undefined toolset prefix `%s'\n",
+                                ctx.l.scope, lineno, colno, prefix)
+                        return
                 }
         }
 
-        parts = strings.Split(name, ".")
         num := len(parts)
         for i, s := range parts[0:num-1] {
                 if ns != nil {
@@ -1358,33 +1300,6 @@ func (ctx *Context) getNamespace(name string) (ns namespace, prefix string, part
                                         ns = ctx.m.Toolset.getNamespace()
                                 }
                         }
-                }
-                if ns == nil {
-                        lineno, colno := ctx.l.caculateLocationLineColumn(ctx.l.location())
-                        fmt.Fprintf(os.Stderr, "%v:%v:%v:warning: `%s' is undefined scope\n",
-                                ctx.l.scope, lineno, colno, strings.Join(parts[0:i+1], "."))
-                        break
-                }
-        }
-}
-
-func (ctx *Context) getNamespaceForMultipartName(parts []string) (ns namespace) {
-        var num = len(parts)
-        for i, s := range parts[0:num-1] {
-                if i == 0 {
-                        switch s {
-                        default:   ns, _ = ctx.modules[s]
-                        case "me": ns = ctx.m
-                        case "~":
-                                if ctx.m.Toolset == nil {
-                                        lineno, colno := ctx.l.caculateLocationLineColumn(ctx.l.location())
-                                        fmt.Fprintf(os.Stderr, "%v:%v:%v:warning: no bound toolset\n", ctx.l.scope, lineno, colno)
-                                } else {
-                                        ns = ctx.m.Toolset.getNamespace()
-                                }
-                        }
-                } else {
-                        ns = ns.getNamespace(s)
                 }
                 if ns == nil {
                         lineno, colno := ctx.l.caculateLocationLineColumn(ctx.l.location())
@@ -1412,7 +1327,15 @@ func (ctx *Context) multipart(n *node) (*bytes.Buffer, []int) {
         return b, parts
 }
 
-func (ctx *Context) expandName(n *node) (parts []string, scoped bool, name string) {
+func (ctx *Context) expandNameString(name string) (hasPrefix bool, prefix string, parts []string) {
+        if i := strings.Index(name, ":"); 0 <= i {
+                hasPrefix, prefix = true, name[0:i]
+        }
+        parts = strings.Split(name, ".")
+        return
+}
+
+func (ctx *Context) expandNameNode(n *node) (parts []string, scoped bool, name string) {
         pos := 0
         b, i := ctx.multipart(n)
         if 0 <= i[0] {
@@ -1441,11 +1364,8 @@ func (ctx *Context) nodeItems(n *node) (is Items) {
                 for _, an := range n.children[1:] {
                         args = args.Concat(ctx, ctx.nodeItems(an)...)
                 }
-                if parts, callScoped, name := ctx.expandName(n.children[0]); callScoped {
-                        is = ctx.callScoped(n.loc(), name, parts, args...)
-                } else {
-                        is = ctx.callMultipart(n.loc(), parts, args...)
-                }
+                parts, callScoped, name := ctx.expandNameNode(n.children[0])
+                is = ctx.callWithDetails(n.loc(), callScoped, name, parts)
 
         case nodeName:          fallthrough
         case nodeArg:           fallthrough
@@ -1541,52 +1461,37 @@ func (ctx *Context) processNode(n *node) (err error) {
                 }
 
         case nodeDefineQuestioned:
-                if parts, scoped, name := ctx.expandName(n.children[0]); scoped {
-                        if is := ctx.callScoped(n.loc(), name, parts); is.IsEmpty(ctx) {
-                                ctx.setScoped(name, parts, n)
-                        }
-                } else if is := ctx.callMultipart(n.loc(), parts); is.IsEmpty(ctx) {
-                        ctx.setMultipart(parts, n)
+                parts, scoped, name := ctx.expandNameNode(n.children[0])
+                if is := ctx.callWithDetails(n.loc(), scoped, name, parts); is.IsEmpty(ctx) {
+                        ctx.setWithDetails(scoped, name, parts, n)
                 }
 
         case nodeDefineDeferred:
-                if parts, scoped, name := ctx.expandName(n.children[0]); scoped {
-                        ctx.setScoped(name, parts, n)
-                } else {
-                        ctx.setMultipart(parts, n)
-                }
+                parts, scoped, name := ctx.expandNameNode(n.children[0])
+                ctx.setWithDetails(scoped, name, parts, n)
 
         case nodeDefineSingleColoned: fallthrough
         case nodeDefineDoubleColoned:
-                parts, scoped, name := ctx.expandName(n.children[0])
-                if is := ctx.nodeItems(n.children[1]); scoped {
-                        ctx.setScoped(name, parts, is)
-                } else {
-                        ctx.setMultipart(parts, is)
-                }
+                parts, scoped, name := ctx.expandNameNode(n.children[0])
+                ctx.setWithDetails(scoped, name, parts, n)
 
         case nodeDefineAppend:
-                if parts, scoped, name := ctx.expandName(n.children[0]); scoped {
-                        ctx.setScoped(name, parts, n) // FIXME: append instead of replace
-                } else {
-                        if d := ctx.getMultipart(parts); d != nil {
-                                deferred := true
-                                if 0 < len(d.value) {
-                                        _, deferred = d.value[0].(*node)
-                                }
-
-                                //fmt.Printf("%v: %v %v\n", parts, d.value.Expand(ctx), n.Expand(ctx))
-
-                                if deferred {
-                                        d.value = append(d.value, n)
-                                } else {
-                                        d.value = ctx.nodeItems(n.children[1])
-                                }
-                        } else {
-                                if d := ctx.setMultipart(parts, n); d != nil {
-                                        //fmt.Printf("%v: %v %v\n", parts, n.Expand(ctx), d.value.Expand(ctx))
-                                }
+                parts, scoped, name := ctx.expandNameNode(n.children[0])
+                if d := ctx.getDefineWithDetails(scoped, name, parts); d != nil {
+                        deferred := true
+                        if 0 < len(d.value) {
+                                _, deferred = d.value[0].(*node)
                         }
+
+                        //fmt.Printf("%v: %v %v\n", parts, d.value.Expand(ctx), n.Expand(ctx))
+
+                        if deferred {
+                                d.value = append(d.value, n)
+                        } else {
+                                d.value = ctx.nodeItems(n.children[1])
+                        }
+                } else {
+                        ctx.setWithDetails(scoped, name, parts)
                 }
 
         case nodeDefineNot:

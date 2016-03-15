@@ -28,10 +28,11 @@ var (
                 "when":         builtinWhen,
                 "unless":       builtinUnless,
                 "let":          builtinLet,
+                "set":          builtinSet,
 
                 "expr":         builtinExpr,
 
-                "=":            builtinSet,
+                "=":            builtinSetEqual,
                 //"!=":         builtinSetNot,
                 "?=":           builtinSetQuestioned,
                 "+=":           builtinSetAppend,
@@ -82,8 +83,14 @@ func builtinTitle(ctx *Context, loc location, args Items) (is Items) {
 }
 
 func builtinSet(ctx *Context, loc location, args Items) (is Items) {
+        return builtinSetEqual(ctx, loc, args)
+}
+
+func builtinSetEqual(ctx *Context, loc location, args Items) (is Items) {
         if num := len(args); 1 < num {
-                ctx.Set(strings.TrimSpace(args[0].Expand(ctx)), args[1:]...)
+                name := strings.TrimSpace(args[0].Expand(ctx))
+                hasPrefix, prefix, parts := ctx.expandNameString(name)
+                ctx.setWithDetails(hasPrefix, prefix, parts, args[1:]...)
         }
         return
 }
@@ -96,20 +103,9 @@ func builtinSetNot(ctx *Context, loc location, args Items) (is Items) {
 func builtinSetQuestioned(ctx *Context, loc location, args Items) (is Items) {
         if num := len(args); 1 < num {
                 name := strings.TrimSpace(args[0].Expand(ctx))
-                /*
-                if i := strings.Index(name, ":"); 0 <= i {
-                        prefix, parts := name[0:i], strings.Split(name[i+1:], ".")
-                        if ii := ctx.callScoped(loc, prefix, parts); ii.IsEmpty(ctx) {
-                                ctx.setScoped(prefix, parts, args[1:]...)
-                        }
-                } else {
-                        parts := strings.Split(name, ".")
-                        if ctx.getMultipart(parts) == nil {
-                                ctx.setMultipart(parts, args[1:]...)
-                        }
-                } */
-                if d, _, _ := ctx.getDefine(name); d == nil || d.value.IsEmpty(ctx) {
-                        ctx.Set(name, args...)
+                hasPrefix, prefix, parts := ctx.expandNameString(name)
+                if d := ctx.getDefineWithDetails(hasPrefix, prefix, parts); d == nil || d.value.IsEmpty(ctx) {
+                        ctx.setWithDetails(hasPrefix, prefix, parts, args[1:]...)
                 }
         }
         return
@@ -118,18 +114,9 @@ func builtinSetQuestioned(ctx *Context, loc location, args Items) (is Items) {
 func builtinSetAppend(ctx *Context, loc location, args Items) (is Items) {
         if num := len(args); 1 < num {
                 name := strings.TrimSpace(args[0].Expand(ctx))
-                /*
-                if i := strings.Index(name, ":"); 0 <= i {
-                        prefix, parts := name[0:i], strings.Split(name[i+1:], ".")
-                        ctx.setScoped(prefix, parts, ctx.callScoped(loc, prefix, parts).Concat(ctx, args[1:]...)...)
-                } else {
-                        parts := strings.Split(name, ".")
-                        if ctx.getMultipart(parts) == nil {
-                                ctx.setMultipart(parts, args[1:]...)
-                        }
-                } */
-                if d, _, _ := ctx.getDefine(name); d == nil {
-                        ctx.Set(name, args...)
+                hasPrefix, prefix, parts := ctx.expandNameString(name)
+                if d := ctx.getDefineWithDetails(hasPrefix, prefix, parts); d == nil {
+                        ctx.setWithDetails(hasPrefix, prefix, parts, args[1:]...)
                 } else {
                         d.value = append(d.value, args...)
                 }
