@@ -16,6 +16,54 @@ import (
         "strings"
 )
 
+type Item interface{
+        // Expand the item to string
+        Expand(ctx *Context) string
+
+        // Check if the item is empty (including all spaces)
+        IsEmpty(ctx *Context) bool
+}
+
+type Items []Item
+
+func (is Items) Len() int { return len(is) }
+func (is Items) IsEmpty(ctx *Context) bool {
+        if 0 < len(is) { return false }
+        for _, i := range is {
+                if !i.IsEmpty(ctx) { return false }
+        }
+        return true
+}
+
+func (is Items) Expand(ctx *Context) string { return is.Join(ctx, " ") }
+func (is Items) Join(ctx *Context, sep string) string {
+        b := new(bytes.Buffer)
+        for i, a := range is {
+                if s := a.Expand(ctx); s != "" {
+                        if i == 0 {
+                                fmt.Fprint(b, s)
+                        } else {
+                                fmt.Fprintf(b, "%s%s", sep, s)
+                        }
+                }
+        }
+        return b.String()
+}
+
+func (is Items) Concat(ctx *Context, args ...Item) (res Items) {
+        for _, a := range is {
+                if !a.IsEmpty(ctx) {
+                        res = append(res, a)
+                }
+        }
+        for _, a := range args {
+                if !a.IsEmpty(ctx) {
+                        res = append(res, a)
+                }
+        }
+        return
+}
+
 type define struct {
         name string
         value Items
