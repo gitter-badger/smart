@@ -1563,6 +1563,78 @@ test-ndk
         delete(toolsets, "test-shell")
 }
 
+func TestToolsetRules(t *testing.T) {
+        if wd, e := os.Getwd(); e != nil || workdir != wd { t.Errorf("%v != %v (%v)", workdir, wd, e) }
+
+        info, f := new(bytes.Buffer), builtinInfoFunc; defer func(){ builtinInfoFunc = f }()
+        builtinInfoFunc = func(ctx *Context, args Items) {
+                fmt.Fprintf(info, "%v\n", args.Expand(ctx))
+        }
+
+        ctx, err := newTestContext("TestToolsetRules", `
+all: foo bar
+foo:; @touch $@.txt 
+bar:
+	@echo $@ > $@.txt
+	@touch $@.txt
+`);     if err != nil { t.Errorf("parse error:", err) }
+
+        if r, ok := ctx.g.rules["all"]; !ok && r == nil { t.Errorf("'all' not defined") } else {
+                if n, x := len(r.node.children), 2; n != x { t.Errorf("children %d != %d", n, x) }
+                if n, x := len(r.targets), 1; n != x { t.Errorf("targets %d != %d", n, x) } else {
+                        if s, x := r.targets[0], "all"; s != x { t.Errorf("targets[0] %v != %v", s, x) }
+                }
+                if n, x := len(r.prerequisites), 2; n != x { t.Errorf("prerequisites %d != %d", n, x) } else {
+                        if s, x := r.prerequisites[0], "foo"; s != x { t.Errorf("prerequisites[0] %v != %v", s, x) }
+                        if s, x := r.prerequisites[1], "bar"; s != x { t.Errorf("prerequisites[0] %v != %v", s, x) }
+                }
+                if n, x := len(r.actions), 0; n != x { t.Errorf("actions %d != %d", n, x) }
+        }
+        if r, ok := ctx.g.rules["foo"]; !ok && r == nil { t.Errorf("'foo' not defined") } else {
+                if n, x := len(r.node.children), 3; n != x { t.Errorf("children %d != %d", n, x) } else {
+                        if c, x := r.node.children[0], nodeTargets; c.kind != x { t.Errorf("children %v != %v", c.kind, x) }
+                        if c, x := r.node.children[1], nodePrerequisites; c.kind != x { t.Errorf("children %v != %v", c.kind, x) }
+                        if c, x := r.node.children[2], nodeAction; c.kind != x { t.Errorf("children %v != %v", c.kind, x) }
+                }
+                if n, x := len(r.targets), 1; n != x { t.Errorf("targets %d != %d", n, x) } else {
+                        if s, x := r.targets[0], "foo"; s != x { t.Errorf("targets[0] %v != %v", s, x) }
+                }
+                if n, x := len(r.prerequisites), 0; n != x { t.Errorf("prerequisites %d != %d", n, x) }
+                if n, x := len(r.actions), 1; n != x { t.Errorf("actions %d != %d", n, x) } else {
+                        if c, ok := r.actions[0].(*node); !ok { t.Errorf("actions[0] '%v' is not node", r.actions[0]) } else {
+                                if k, x := c.kind, nodeAction; k != x { t.Errorf("actions[0] %v != %v", k, x) }
+                                if s, x := c.str(), "@touch $@.txt "; s != x { t.Errorf("actions[0] %v != %v", s, x) }
+                                if s, x := c.Expand(ctx), "@touch .txt "; s != x { t.Errorf("actions[0] %v != %v", s, x) }
+                        }
+                }
+        }
+        if r, ok := ctx.g.rules["bar"]; !ok && r == nil { t.Errorf("'bar' not defined") } else {
+                if n, x := len(r.node.children), 3; n != x { t.Errorf("children %d != %d", n, x) } else {
+                        if c, x := r.node.children[0], nodeTargets; c.kind != x { t.Errorf("children %v != %v", c.kind, x) }
+                        if c, x := r.node.children[1], nodePrerequisites; c.kind != x { t.Errorf("children %v != %v", c.kind, x) }
+                        if c, x := r.node.children[2], nodeActions; c.kind != x { t.Errorf("children %v != %v", c.kind, x) }
+                }
+                if n, x := len(r.targets), 1; n != x { t.Errorf("targets %d != %d", n, x) } else {
+                        if s, x := r.targets[0], "bar"; s != x { t.Errorf("targets[0] %v != %v", s, x) }
+                }
+                if n, x := len(r.prerequisites), 0; n != x { t.Errorf("prerequisites %d != %d", n, x) }
+                if n, x := len(r.actions), 2; n != x { t.Errorf("actions %d != %d", n, x) } else {
+                        if c, ok := r.actions[0].(*node); !ok { t.Errorf("actions[0] '%v' is not node", r.actions[0]) } else {
+                                if k, x := c.kind, nodeAction; k != x { t.Errorf("actions[0] %v != %v", k, x) }
+                                if s, x := c.str(), "@echo $@ > $@.txt"; s != x { t.Errorf("actions[0] %v != %v", s, x) }
+                                if s, x := c.Expand(ctx), "@echo  > .txt"; s != x { t.Errorf("actions[0] %v != %v", s, x) }
+                        }
+                        if c, ok := r.actions[1].(*node); !ok { t.Errorf("actions[1] '%v' is not node", r.actions[1]) } else {
+                                if k, x := c.kind, nodeAction; k != x { t.Errorf("actions[1] %v != %v", k, x) }
+                                if s, x := c.str(), "@touch $@.txt"; s != x { t.Errorf("actions[1] %v != %v", s, x) }
+                                if s, x := c.Expand(ctx), "@touch .txt"; s != x { t.Errorf("actions[1] %v != %v", s, x) }
+                        }
+                }
+        }
+
+        if v, s := info.String(), fmt.Sprintf(``); v != s { t.Errorf("`%s` != `%s`", v, s) }
+}
+
 func TestDefineToolset(t *testing.T) {
         wd, e := os.Getwd()
         if e != nil || workdir != wd { t.Errorf("%v != %v (%v)", workdir, wd, e) }

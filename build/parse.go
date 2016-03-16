@@ -1445,6 +1445,7 @@ func (ctx *Context) nodeItems(n *node) (is Items) {
 
         case nodeName:          fallthrough
         case nodeArg:           fallthrough
+        case nodeAction:        fallthrough
         case nodeDeferredText:  fallthrough
         case nodeTargets:       fallthrough
         case nodePrerequisites: fallthrough
@@ -1571,8 +1572,13 @@ func (ctx *Context) processNode(n *node) (err error) {
                         node:n,
                 }
                 if 2 < len(n.children) {
-                        for c, _ := range n.children[2].children {
-                                r.actions = append(r.actions, c)
+                        switch a := n.children[2]; a.kind {
+                        case nodeActions:
+                                for _, c := range n.children[2].children {
+                                        r.actions = append(r.actions, c)
+                                }
+                        case nodeAction:
+                                r.actions = append(r.actions, a)
                         }
                 }
 
