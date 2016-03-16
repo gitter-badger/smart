@@ -1549,7 +1549,7 @@ func (ctx *Context) processNode(n *node) (err error) {
         return
 }
 
-func (ctx *Context) _parse() (err error) {
+func (ctx *Context) parseBuffer() (err error) {
         if !ctx.l.parse() {
                 err = errors.New("syntax error")
                 return
@@ -1583,7 +1583,7 @@ func (ctx *Context) append(scope string, s []byte) (err error) {
         ctx.l = &lex{ parseBuffer:&parseBuffer{ scope:scope, s: s }, pos: 0 }
         ctx.m = nil
 
-        if err = ctx._parse(); err != nil {
+        if err = ctx.parseBuffer(); err != nil {
                 // ...
         }
         return
@@ -1622,7 +1622,7 @@ func NewContext(scope string, s []byte, vars map[string]string) (ctx *Context, e
                 ctx.Set(k, stringitem(v))
         }
 
-        err = ctx._parse()
+        err = ctx.parseBuffer()
         return
 }
 
