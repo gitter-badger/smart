@@ -126,5 +126,5 @@ func Main() {
                 cmds = append(cmds, "update")
         }
 
-        Build(vars, cmds);
+        Build(vars, cmds...)
 }

@@ -755,47 +755,7 @@ func matchFileName(fn string, rules []*FileMatchRule) *FileMatchRule {
         return nil
 }
 
-// Build builds the project with specified variables and commands.
-func Build(vars map[string]string, cmds []string) (ctx *Context) {
-        defer func() {
-                if e := recover(); e != nil {
-                        if se, ok := e.(*smarterror); ok {
-                                fmt.Printf("smart: %v\n", se.message)
-                                os.Exit(-1)
-                        } else {
-                                panic(e)
-                        }
-                }
-        }()
-
-        var (
-                d string
-                err error
-        )
-        if d = *flagC; d == "" { d = "." }
-
-        s := []byte{} // TODO: needs init script
-        ctx, err = NewContext("init", s, vars)
-        if err != nil {
-                fmt.Printf("smart: %v\n", err)
-                return
-        }
-
-        // Find and process modules.
-        err = traverse(d, func(fn string, fi os.FileInfo) bool {
-                fr := matchFileInfo(fi, generalMetaFiles)
-                if *flagG && fr != nil { return false }
-                if fi.Name() == ".smart" {
-                        if err := ctx.include(fn); err != nil {
-                                errorf("include: `%v', %v\n", fn, err)
-                        }
-                }
-                return true
-        })
-        if err != nil {
-                fmt.Printf("error: %v\n", err)
-        }
-
+func buildInContext(ctx *Context, cmds ...string) {
         // Build the modules
         var i *pendedBuild
         for 0 < len(ctx.moduleBuildList) {
@@ -821,5 +781,50 @@ func Build(vars map[string]string, cmds []string) (ctx *Context) {
         }
 
         for _, m := range ctx.moduleOrderList { updateMod(m) }
+}
+
+// Build builds the project with specified variables and commands.
+func Build(vars map[string]string, cmds ...string) (ctx *Context) {
+        defer func() {
+                if e := recover(); e != nil {
+                        if se, ok := e.(*smarterror); ok {
+                                fmt.Printf("smart: %v\n", se.message)
+                                os.Exit(-1)
+                        } else {
+                                panic(e)
+                        }
+                }
+        }()
+
+        var (
+                d string
+                err error
+        )
+        if d = *flagC; d == "" { d = "." }
+
+        s := []byte{} // TODO: needs init script
+
+        ctx, err = NewContext("init", s, vars)
+        if err != nil {
+                fmt.Printf("smart: %v\n", err)
+                return
+        }
+
+        // Find and process modules.
+        err = traverse(d, func(fn string, fi os.FileInfo) bool {
+                fr := matchFileInfo(fi, generalMetaFiles)
+                if *flagG && fr != nil { return false }
+                if fi.Name() == ".smart" {
+                        if err := ctx.include(fn); err != nil {
+                                errorf("include: `%v', %v\n", fn, err)
+                        }
+                }
+                return true
+        })
+        if err != nil {
+                fmt.Printf("error: %v\n", err)
+        }
+
+        buildInContext(ctx, cmds...)
         return
 }
