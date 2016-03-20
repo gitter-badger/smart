@@ -755,7 +755,54 @@ func matchFileName(fn string, rules []*FileMatchRule) *FileMatchRule {
         return nil
 }
 
-func buildInContext(ctx *Context, cmds ...string) {
+type match struct {
+        target string
+        stem string
+}
+
+func (r *rule) match(cmd string) (m *match, matched bool) {
+        for _, t := range r.targets {
+                if t == cmd {
+                        matched, m = true, &match{
+                                target: t,
+                        }
+                }
+        }
+        return
+}
+
+func (r *rule) updatePrerequisites(ctx *Context) ([]*rule, []*rule) {
+        var prerequisites, updated []*rule
+        for _, prerequisite := range r.prerequisites {
+                if pr, ok := ctx.g.rules[prerequisite]; ok && pr != nil {
+                        prerequisites = append(prerequisites, pr)
+                } else {
+                        errorf("no rule for %s\n", prerequisite)
+                        return nil, nil
+                }
+        }
+        for _, prerequisite := range prerequisites {
+                if ok := prerequisite.update(); ok {
+                        updated = append(updated, prerequisite)
+                }
+        }
+        return prerequisites, updated
+}
+
+func (r *rule) update(ctx *Context, m *match) (updated bool) {
+        prerequisites, prerequisitesUpdated := r.updatePrerequisites(ctx)
+
+        num := len(prerequisitesUpdated)
+        fi, err := os.Stat(m.target)
+        if 0 < num || err != nil {
+                
+        }
+        
+        fmt.Printf("update: %v\n", *m)
+        return
+}
+
+func Update(ctx *Context, cmds ...string) {
         // Build the modules
         var i *pendedBuild
         for 0 < len(ctx.moduleBuildList) {
@@ -765,22 +812,32 @@ func buildInContext(ctx *Context, cmds ...string) {
                 }
         }
 
-        var updateMod, updateDeps func(mod *Module)
-        updateMod = func(mod *Module) {
-                updateDeps(mod)
-                if !mod.Updated {
+        var (
+                updateMod, updateDeps func(m *Module)
+        )
+        updateMod = func(m *Module) {
+                updateDeps(m)
+                if !m.Updated {
                         if *flagV {
-                                fmt.Printf("smart: update `%v'...\n", mod.GetName(ctx))
+                                fmt.Printf("smart: update `%v'...\n", m.GetName(ctx))
                         }
-                        mod.update(ctx)
-                        mod.Updated = true
+                        m.update(ctx)
+                        m.Updated = true
                 }
         }
-        updateDeps = func(mod *Module) {
-                for _, u := range mod.Using { updateMod(u) }
+        updateDeps = func(m *Module) {
+                for _, u := range m.Using { updateMod(u) }
         }
 
         for _, m := range ctx.moduleOrderList { updateMod(m) }
+
+        for _, cmd := range cmds {
+                for _, r := range ctx.g.rules {
+                        if m, ok := r.match(cmd); ok {
+                                r.update(ctx, m)
+                        }
+                }
+        }
 }
 
 // Build builds the project with specified variables and commands.
@@ -825,6 +882,6 @@ func Build(vars map[string]string, cmds ...string) (ctx *Context) {
                 fmt.Printf("error: %v\n", err)
         }
 
-        buildInContext(ctx, cmds...)
+        Update(ctx, cmds...)
         return
 }

@@ -32,39 +32,39 @@ func TestBuildRules(t *testing.T) {
         }
 
         ctx, err := newTestContext("TestBuildRules", `
-all: foo bar
-foo:; @touch $@.txt $(info noop: $@)
-bar:
-	@touch $@.txt $(info noop: $@.1)
-	@echo $@ >> $@.txt $(info noop: $@.2)
+all: foo.txt bar.txt
+foo.txt:; @touch $@ $(info noop: $@)
+bar.txt:
+	@touch $@ $(info noop: $@.1)
+	@echo $@ >> $@ $(info noop: $@.2)
 `);     if err != nil { t.Errorf("parse error:", err) }
 
         os.Remove("foo.txt")
         os.Remove("bar.txt")
-        buildInContext(ctx)
+        Update(ctx)
         if fi, e := os.Stat("foo.txt"); fi == nil || e != nil { t.Errorf("TestBuildRules: %s", e) }
         if fi, e := os.Stat("bar.txt"); fi == nil || e != nil { t.Errorf("TestBuildRules: %s", e) }
 
         os.Remove("foo.txt")
         os.Remove("bar.txt")
-        buildInContext(ctx, "all")
+        Update(ctx, "all")
         if fi, e := os.Stat("foo.txt"); fi == nil || e != nil { t.Errorf("TestBuildRules: %s", e) }
         if fi, e := os.Stat("bar.txt"); fi == nil || e != nil { t.Errorf("TestBuildRules: %s", e) }
 
         os.Remove("foo.txt")
         os.Remove("bar.txt")
-        buildInContext(ctx, "foo")
+        Update(ctx, "foo.txt")
         if fi, e := os.Stat("foo.txt"); fi == nil || e != nil { t.Errorf("TestBuildRules: %s", e) }
         if fi, e := os.Stat("bar.txt"); fi != nil || e == nil { t.Errorf("TestBuildRules: bar.txt should not exists!") }
 
         os.Remove("foo.txt")
         os.Remove("bar.txt")
-        buildInContext(ctx, "bar")
+        Update(ctx, "bar.txt")
         if fi, e := os.Stat("foo.txt"); fi != nil || e == nil { t.Errorf("TestBuildRules: foo.txt should not exists!") }
         if fi, e := os.Stat("bar.txt"); fi == nil || e != nil { t.Errorf("TestBuildRules: %s", e) }
 
-        if s, x := info.String(), fmt.Sprintf(`noop: foo
-noop: bar.1
-noop: bar.2
+        if s, x := info.String(), fmt.Sprintf(`noop: foo.txt
+noop: bar.txt.1
+noop: bar.txt.2
 `); s != x { t.Errorf("'%s' != '%s'", s, x) }
 }

@@ -1735,3 +1735,31 @@ b - %s %s/out
 b commited
 `, wd, wd, wd, wd, wd, wd); s != x { t.Errorf("'%s' != '%s'", s, x) }
 }
+
+func TestSpeakSomething(t *testing.T) {
+        wd, e := os.Getwd()
+        if e != nil || workdir != wd { t.Errorf("%v != %v (%v)", workdir, wd, e) }
+
+        info, f := new(bytes.Buffer), builtinInfoFunc; defer func(){ builtinInfoFunc = f }()
+        builtinInfoFunc = func(ctx *Context, args Items) {
+                fmt.Fprintf(info, "%v\n", args.Expand(ctx))
+        }
+
+        ctx, err := newTestContext("TestSpeakSomething", `
+script = $(speak template,
+--------------------------
+echo "smart speak - hello"
+-------------------------)
+
+text = $(speak /bin/bash, $(script))
+
+$(info $(script))
+$(info $(text))
+`);     if err != nil { t.Errorf("parse error:", err) }
+        if ctx == nil { t.Errorf("nil context") } else {
+                
+        }
+        if s, x := info.String(), fmt.Sprintf(`echo "smart speak - hello"
+smart speak - hello
+`); s != x { t.Errorf("'%s' != '%s'", s, x) }
+}
