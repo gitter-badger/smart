@@ -17,7 +17,10 @@ import (
 
 var (
         flagA = flag.Bool("a", false, "auto mode")
-        flagG = flag.Bool("g", true, "ignore names like \".git\", \".svn\", etc.")
+        flagM = flag.Bool("m", false, "searching module for targets")
+        flagG = flag.Bool("g", false, "searching global targets")
+        flagGG = flag.Bool("G", true, "ignore names like \".git\", \".svn\", etc.")
+        flagJ = flag.Int("j", 3, "Allow N jobs at once.")
         flagO = flag.String("o", "", "output directory")
         flagC = flag.String("C", "", "change directory")
         flagT = flag.String("T", "", "traverse")
@@ -28,7 +31,10 @@ var (
 )
 
 func GetFlagA() bool    { return *flagA }
+func GetFlagM() bool    { return *flagM }
 func GetFlagG() bool    { return *flagG }
+func GetFlagGG() bool   { return *flagGG }
+func GetFlagJ() int     { return *flagJ }
 func GetFlagO() string  { return *flagO }
 func GetFlagC() string  { return *flagC }
 func GetFlagT() string  { return *flagT }
@@ -37,7 +43,10 @@ func GetFlagV() bool    { return *flagV }
 func GetFlagVV() bool   { return *flagVV }
 
 func SetFlagA(v bool)   { *flagA = v }
+func SetFlagM(v bool)   { *flagM = v }
 func SetFlagG(v bool)   { *flagG = v }
+func SetFlagGG(v bool)  { *flagGG = v }
+func SetFlagJ(v int)    { *flagJ = v }
 func SetFlagO(v string) { *flagO = v }
 func SetFlagC(v string) { *flagC = v }
 func SetFlagT(v string) { *flagT = v }

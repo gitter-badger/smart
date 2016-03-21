@@ -14,6 +14,7 @@ import (
         "runtime"
         "strings"
         "sort"
+        "github.com/duzy/worker"
 )
 
 var (
@@ -760,9 +761,9 @@ type match struct {
         stem string
 }
 
-func (r *rule) match(cmd string) (m *match, matched bool) {
+func (r *rule) match(target string) (m *match, matched bool) {
         for _, t := range r.targets {
-                if t == cmd {
+                if t == target {
                         matched, m = true, &match{
                                 target: t,
                         }
@@ -771,38 +772,115 @@ func (r *rule) match(cmd string) (m *match, matched bool) {
         return
 }
 
-func (r *rule) updatePrerequisites(ctx *Context) ([]*rule, []*rule) {
-        var prerequisites, updated []*rule
+func (r *rule) update(ctx *Context, ns namespace, m *match) bool {
+        type MR struct { m *match; r *rule }
+        var (
+                list, updated []*MR
+        )
         for _, prerequisite := range r.prerequisites {
-                if pr, ok := ctx.g.rules[prerequisite]; ok && pr != nil {
-                        prerequisites = append(prerequisites, pr)
+                if m, r := ns.findMatchedRule(ctx, prerequisite); m != nil && r != nil {
+                        list = append(list, &MR{ m, r })
                 } else {
                         errorf("no rule for %s\n", prerequisite)
-                        return nil, nil
                 }
         }
-        for _, prerequisite := range prerequisites {
-                if ok := prerequisite.update(); ok {
-                        updated = append(updated, prerequisite)
+
+        for _, i := range list {
+                if ok := i.r.update(ctx, ns, i.m); ok {
+                        updated = append(updated, i)
                 }
         }
-        return prerequisites, updated
-}
 
-func (r *rule) update(ctx *Context, m *match) (updated bool) {
-        prerequisites, prerequisitesUpdated := r.updatePrerequisites(ctx)
-
-        num := len(prerequisitesUpdated)
-        fi, err := os.Stat(m.target)
-        if 0 < num || err != nil {
-                
+        num, targetNeedsUpdate := len(updated), false
+        if 0 < num || ns.isPhonyTarget(ctx, m.target) {
+                targetNeedsUpdate = true
+        } else if _, err := os.Stat(m.target); err != nil {
+                targetNeedsUpdate = true
         }
-        
-        fmt.Printf("update: %v\n", *m)
-        return
+
+        if targetNeedsUpdate {
+                ns := ctx.g
+                saveIndex, _ := ns.saveDefines("@", "@D", "<", "<D", "^", "^D")
+                defer ns.restoreDefines(saveIndex)
+
+                ns.Set(ctx, []string{ "@" }, stringitem(m.target))
+                ns.Set(ctx, []string{ "@D" }, stringitem(filepath.Dir(m.target)))
+
+                var l, ld []Item
+                for n, i := range list {
+                        if n == 0 {
+                                ns.Set(ctx, []string{ "<" }, stringitem(i.m.target))
+                                ns.Set(ctx, []string{ "<D" }, stringitem(filepath.Dir(i.m.target)))
+                        }
+                        ld = append(ld, stringitem(filepath.Dir(i.m.target)))
+                        l = append(l, stringitem(i.m.target))
+                }
+                ns.Set(ctx, []string{ "^" }, l...)
+                ns.Set(ctx, []string{ "^D" }, ld...)
+
+                job := new(runActions)
+                for _, action := range r.actions {
+                        var s string
+                        switch a := action.(type) {
+                        case string: s = a
+                        case *node: s = a.Expand(ctx)
+                        }
+                        job.actions = append(job.actions, s)
+                }
+                if 1 < *flagJ {
+                        job.Action()
+                } else {
+                        ctx.w.Do(job)
+                }
+        }
+        return false
 }
 
+type runActions struct {
+        actions []string
+}
+
+func (job *runActions) Action() worker.Result {
+        for _, s := range job.actions {
+                silent := false
+                if s[0] == '@' {
+                        s, silent = s[1:], true
+                }
+
+                cmd := exec.Command("sh", "-c", s)
+                if !silent {
+                        cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
+                        fmt.Printf("%v\n", s)
+                }
+
+                if err := cmd.Run(); err != nil {
+                        errorf("%v", err)
+                } else {
+                        fmt.Printf("rule: %v\n", s)
+                }
+        }
+        return nil
+}
+
+// Update updates the specified targets given in `cmds`.
+//
+// Example:
+//      
+//      # Updates global target 'foo.txt'
+//      smart -g foo.txt
+//      
+//      # Updates module foo's target 'bar.txt'
+//      smart foo:bar.txt
+//      
+//      # Updates module 'foobar'
+//      smart -m foobar
+//      
+//      # Updates both module and global 'foobar'
+//      smart foobar
+// 
 func Update(ctx *Context, cmds ...string) {
+        ctx.w.StartN(*flagJ); defer ctx.w.StopN(*flagJ)
+
         // Build the modules
         var i *pendedBuild
         for 0 < len(ctx.moduleBuildList) {
@@ -834,7 +912,7 @@ func Update(ctx *Context, cmds ...string) {
         for _, cmd := range cmds {
                 for _, r := range ctx.g.rules {
                         if m, ok := r.match(cmd); ok {
-                                r.update(ctx, m)
+                                r.update(ctx, ctx.g, m)
                         }
                 }
         }
@@ -870,7 +948,7 @@ func Build(vars map[string]string, cmds ...string) (ctx *Context) {
         // Find and process modules.
         err = traverse(d, func(fn string, fi os.FileInfo) bool {
                 fr := matchFileInfo(fi, generalMetaFiles)
-                if *flagG && fr != nil { return false }
+                if *flagGG && fr != nil { return false }
                 if fi.Name() == ".smart" {
                         if err := ctx.include(fn); err != nil {
                                 errorf("include: `%v', %v\n", fn, err)

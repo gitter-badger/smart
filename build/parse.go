@@ -14,6 +14,7 @@ import (
         //"path/filepath"
         //"reflect"
         "strings"
+        "github.com/duzy/worker"
 )
 
 type Item interface{
@@ -90,11 +91,38 @@ type namespace interface {
         getNamespace(name string) namespace
         getDefineMap() map[string]*define
         getRuleMap() map[string]*rule
+        findMatchedRule(ctx *Context, target string) (m *match, r *rule)
+        isPhonyTarget(ctx *Context, target string) bool
+        saveDefines(names ...string) (saveIndex int, m map[string]*define)
+        restoreDefines(saveIndex int)
+        Set(ctx *Context, ids []string, items ...Item)
 }
 
 type namespaceEmbed struct {
         defines map[string]*define
+        saveList []map[string]*define // saveDefines, restoreDefines
         rules map[string]*rule
+}
+
+func (ns *namespaceEmbed) saveDefines(names ...string) (saveIndex int, m map[string]*define) {
+        m = make(map[string]*define, len(names))
+        for _, name := range names {
+                if d, ok := ns.defines[name]; ok {
+                        delete(ns.defines, name)
+                        if d != nil { m[name] = d }
+                }
+        }
+        saveIndex = len(ns.saveList)
+        ns.saveList = append(ns.saveList, m)
+        return
+}
+
+func (ns *namespaceEmbed) restoreDefines(saveIndex int) {
+        m := ns.saveList[saveIndex]
+        ns.saveList = ns.saveList[0:saveIndex]
+        for name, d := range m {
+                ns.defines[name] = d
+        }
 }
 
 /*
@@ -140,6 +168,22 @@ func (ns *namespaceEmbed) getDefineMap() map[string]*define {
 
 func (ns *namespaceEmbed) getRuleMap() map[string]*rule {
         return ns.rules
+}
+
+func (ns *namespaceEmbed) findMatchedRule(ctx *Context, target string) (m *match, r *rule) {
+        if rr, ok := ns.rules[target]; ok && rr != nil {
+                if m, ok = rr.match(target); ok && m != nil {
+                        r = rr
+                }
+        } else {
+                /// TODO: perform pattern match for a perfect rule
+        }
+        return
+}
+
+func (ns *namespaceEmbed) isPhonyTarget(ctx *Context, target string) bool {
+        /// TODO: checking phony target
+        return false
 }
 
 type nodeType int
@@ -1084,6 +1128,8 @@ type Context struct {
         modules map[string]*Module
         moduleOrderList []*Module
         moduleBuildList []pendedBuild
+
+        w *worker.Worker
 }
 
 func (ctx *Context) GetModules() map[string]*Module { return ctx.modules }
@@ -1670,6 +1716,7 @@ func NewContext(scope string, s []byte, vars map[string]string) (ctx *Context, e
                         defines: make(map[string]*define, len(vars) + 16),
                         rules: make(map[string]*rule, 8),
                 },
+                w: worker.New(),
         }
 
         for k, v := range vars {
