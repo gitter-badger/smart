@@ -772,13 +772,20 @@ func (r *rule) match(target string) (m *match, matched bool) {
         return
 }
 
-func (r *rule) update(ctx *Context, ns namespace, m *match) bool {
+func (r *rule) updateAll(ctx *Context) bool {
+        var num = 0
+        for _, t := range r.targets {
+                m := &match{ target:t }
+                if r.update(ctx, m) { num++ }
+        }
+        return 0 < num
+}
+
+func (r *rule) update(ctx *Context, m *match) bool {
         type MR struct { m *match; r *rule }
-        var (
-                list, updated []*MR
-        )
+        var list, updated []*MR
         for _, prerequisite := range r.prerequisites {
-                if m, r := ns.findMatchedRule(ctx, prerequisite); m != nil && r != nil {
+                if m, r := r.ns.findMatchedRule(ctx, prerequisite); m != nil && r != nil {
                         list = append(list, &MR{ m, r })
                 } else {
                         errorf("no rule for %s\n", prerequisite)
@@ -786,13 +793,13 @@ func (r *rule) update(ctx *Context, ns namespace, m *match) bool {
         }
 
         for _, i := range list {
-                if ok := i.r.update(ctx, ns, i.m); ok {
+                if ok := i.r.update(ctx, i.m); ok {
                         updated = append(updated, i)
                 }
         }
 
         num, targetNeedsUpdate := len(updated), false
-        if 0 < num || ns.isPhonyTarget(ctx, m.target) {
+        if 0 < num || r.ns.isPhonyTarget(ctx, m.target) {
                 targetNeedsUpdate = true
         } else if _, err := os.Stat(m.target); err != nil {
                 targetNeedsUpdate = true
@@ -805,6 +812,8 @@ func (r *rule) update(ctx *Context, ns namespace, m *match) bool {
 
                 ns.Set(ctx, []string{ "@" }, stringitem(m.target))
                 ns.Set(ctx, []string{ "@D" }, stringitem(filepath.Dir(m.target)))
+                ns.Set(ctx, []string{ "*" }, stringitem(m.stem))
+                ns.Set(ctx, []string{ "*D" }, stringitem(filepath.Dir(m.stem)))
 
                 var l, ld []Item
                 for n, i := range list {
@@ -856,31 +865,13 @@ func (job *runActions) Action() worker.Result {
                 if err := cmd.Run(); err != nil {
                         errorf("%v", err)
                 } else {
-                        fmt.Printf("rule: %v\n", s)
+                        //fmt.Printf("rule: %v\n", s)
                 }
         }
         return nil
 }
 
-// Update updates the specified targets given in `cmds`.
-//
-// Example:
-//      
-//      # Updates global target 'foo.txt'
-//      smart -g foo.txt
-//      
-//      # Updates module foo's target 'bar.txt'
-//      smart foo:bar.txt
-//      
-//      # Updates module 'foobar'
-//      smart -m foobar
-//      
-//      # Updates both module and global 'foobar'
-//      smart foobar
-// 
-func Update(ctx *Context, cmds ...string) {
-        ctx.w.StartN(*flagJ); defer ctx.w.StopN(*flagJ)
-
+func UpdateModules(ctx *Context, cmds ...string) {
         // Build the modules
         var i *pendedBuild
         for 0 < len(ctx.moduleBuildList) {
@@ -908,11 +899,40 @@ func Update(ctx *Context, cmds ...string) {
         }
 
         for _, m := range ctx.moduleOrderList { updateMod(m) }
+}
+
+// Update updates the specified targets given in `cmds`.
+//
+// Example:
+//      
+//      # Updates global target 'foo.txt'
+//      smart -g foo.txt
+//      
+//      # Updates module foo's target 'bar.txt'
+//      smart foo:bar.txt
+//      
+//      # Updates module 'foobar'
+//      smart -m foobar
+//      
+//      # Updates both module and global 'foobar'
+//      smart foobar
+// 
+func Update(ctx *Context, cmds ...string) {
+        ctx.w.StartN(*flagJ); defer ctx.w.StopN(*flagJ)
+
+        if n := len(cmds); n == 0 {
+                if ctx.g.goal == nil {
+                        UpdateModules(ctx, cmds...)
+                } else {
+                        ctx.g.goal.updateAll(ctx)
+                }
+                return
+        }
 
         for _, cmd := range cmds {
                 for _, r := range ctx.g.rules {
                         if m, ok := r.match(cmd); ok {
-                                r.update(ctx, ctx.g, m)
+                                r.update(ctx, m)
                         }
                 }
         }

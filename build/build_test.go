@@ -63,11 +63,17 @@ bar.txt:
         if fi, e := os.Stat("foo.txt"); fi != nil || e == nil { t.Errorf("TestBuildRules: foo.txt should not exists!") }
         if fi, e := os.Stat("bar.txt"); fi == nil || e != nil { t.Errorf("TestBuildRules: %s", e) }
 
-        os.Remove("foo.txt")
-        os.Remove("bar.txt")
-
         if s, x := info.String(), fmt.Sprintf(`noop: foo.txt
 noop: bar.txt.1
 noop: bar.txt.2
+noop: foo.txt
+noop: bar.txt.1
+noop: bar.txt.2
+noop: foo.txt
+noop: bar.txt.1
+noop: bar.txt.2
 `); s != x { t.Errorf("'%s' != '%s'", s, x) }
+
+        os.Remove("foo.txt")
+        os.Remove("bar.txt")
 }

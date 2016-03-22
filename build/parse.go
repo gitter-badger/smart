@@ -75,6 +75,7 @@ type define struct {
 type rule struct {
         targets, prerequisites []string
         actions []interface{} // *node, string
+        ns namespace
         node *node
 }
 
@@ -102,15 +103,15 @@ type namespaceEmbed struct {
         defines map[string]*define
         saveList []map[string]*define // saveDefines, restoreDefines
         rules map[string]*rule
+        goal *rule
 }
 
 func (ns *namespaceEmbed) saveDefines(names ...string) (saveIndex int, m map[string]*define) {
+        var ok bool
         m = make(map[string]*define, len(names))
         for _, name := range names {
-                if d, ok := ns.defines[name]; ok {
-                        delete(ns.defines, name)
-                        if d != nil { m[name] = d }
-                }
+                m[name], ok = ns.defines[name]
+                if ok { delete(ns.defines, name) }
         }
         saveIndex = len(ns.saveList)
         ns.saveList = append(ns.saveList, m)
@@ -121,7 +122,11 @@ func (ns *namespaceEmbed) restoreDefines(saveIndex int) {
         m := ns.saveList[saveIndex]
         ns.saveList = ns.saveList[0:saveIndex]
         for name, d := range m {
-                ns.defines[name] = d
+                if d == nil {
+                        delete(ns.defines, name)
+                } else {
+                        ns.defines[name] = d
+                }
         }
 }
 
@@ -1631,9 +1636,17 @@ func (ctx *Context) processNode(n *node) (err error) {
                 // Map each target to the new rule.
                 for _, s := range r.targets {
                         if ctx.m != nil {
+                                r.ns = ctx.m.namespaceEmbed
                                 ctx.m.rules[s] = r
+                                if ctx.m.goal == nil {
+                                        ctx.m.goal = r
+                                }
                         } else {
+                                r.ns = ctx.g
                                 ctx.g.rules[s] = r
+                                if ctx.g.goal == nil {
+                                        ctx.g.goal = r
+                                }
                         }
                 }
 
