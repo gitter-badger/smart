@@ -1267,6 +1267,37 @@ blah : blah.c
         i = 6; c = l.nodes[i]; checkNode(c, nodeRuleSingleColoned, 3, `:`, `blah`, "blah.c", "\tgcc -c $< -o $@\n")
 }
 
+func TestLexSpeak(t *testing.T) {
+        l := newTestLex("TestLexSpeak", `
+text = $(speak text,\
+-----------------------
+blah blah blah blah...
+----------------------)
+`)
+        l.parse()
+        if ex, n := 1, len(l.nodes); n != ex { t.Errorf("expecting %v nodes but got %v", ex, n) }
+        if c, k := l.nodes[0], nodeDefineDeferred; c.kind != k { t.Errorf("expecting %v but %v", c.kind, k) } else {
+                if n, x := len(c.children), 2; n != x { t.Errorf("expecting %v but %v", n, x) } else {
+                        if c, k := c.children[1], nodeDeferredText; c.kind != k { t.Errorf("expecting %v but %v", c.kind, k) } else {
+                                if n, x := len(c.children), 1; n != x { t.Errorf("expecting %v but %v", n, x) } else {
+                                        if c, k := c.children[0], nodeSpeak; c.kind != k { t.Errorf("expecting %v but %v", c.kind, k) } else {
+                                                if n, x := len(c.children), 2; n != x { t.Errorf("expecting %v but %v", n, x) } else {
+                                                        if c, k := c.children[0], nodeArg; c.kind != k { t.Errorf("expecting %v but %v", c.kind, k) } else {
+                                                                if n, x := len(c.children), 0; n != x { t.Errorf("expecting %v but %v", n, x) }
+                                                                if s, x := c.str(), "text"; s != x { t.Errorf("expecting %v but %v", s, x) }
+                                                        }
+                                                        if c, k := c.children[1], nodeArg; c.kind != k { t.Errorf("expecting %v but %v", c.kind, k) } else {
+                                                                if n, x := len(c.children), 0; n != x { t.Errorf("expecting %v but %v", n, x) }
+                                                                if s, x := c.str(), "blah blah blah blah..."; s != x { t.Errorf("expecting %v but %v", s, x) }
+                                                        }
+                                                }
+                                        }
+                                }
+                        }
+                }
+        }
+}
+
 func TestParse(t *testing.T) {
         info, f := new(bytes.Buffer), builtinInfoFunc; defer func(){ builtinInfoFunc = f }()
         builtinInfoFunc = func(ctx *Context, args Items) {
@@ -1746,20 +1777,22 @@ func TestSpeakSomething(t *testing.T) {
         }
 
         ctx, err := newTestContext("TestSpeakSomething", `
-script = $(speak template,
+s := hello
+script = $(speak text,\
 --------------------------
-echo "smart speak - hello"
+echo -n "smart speak - $s"
 -------------------------)
 
-text = $(speak /bin/bash, $(script))
+text = $(speak /bin/bash, -c, $(script))
 
 $(info $(script))
 $(info $(text))
 `);     if err != nil { t.Errorf("parse error:", err) }
         if ctx == nil { t.Errorf("nil context") } else {
-                
+                if s, ex := ctx.Call("script").Expand(ctx), `echo -n "smart speak - hello"`; s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
+                if s, ex := ctx.Call("text").Expand(ctx), `smart speak - hello`; s != ex { t.Errorf("expects '%v' but got '%v'", ex, s) }
         }
-        if s, x := info.String(), fmt.Sprintf(`echo "smart speak - hello"
+        if s, x := info.String(), fmt.Sprintf(`echo -n "smart speak - hello"
 smart speak - hello
 `); s != x { t.Errorf("'%s' != '%s'", s, x) }
 }

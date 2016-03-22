@@ -11,6 +11,7 @@ import (
         "unicode/utf8"
         "io/ioutil"
         "os"
+        "os/exec"
         //"path/filepath"
         //"reflect"
         "strings"
@@ -216,6 +217,7 @@ const (
         nodeActions
         nodeAction
         nodeCall
+        nodeSpeak               // $(speak dialect, ...)
 )
 
 /*
@@ -263,10 +265,10 @@ var (
                 nodeEscape:                     "escape",
                 nodeDeferredText:               "deferred-text",
                 nodeImmediateText:              "immediate-text",
-                nodeName:                       "call-name",
-                nodeNamePrefix:                 "call-name-prefix",
-                nodeNamePart:                   "call-name-part",
-                nodeArg:                        "call-arg",
+                nodeName:                       "name",
+                nodeNamePrefix:                 "name-prefix",
+                nodeNamePart:                   "name-part",
+                nodeArg:                        "arg",
                 nodeValueText:                  "value-text",
                 nodeDefineDeferred:             "define-deferred",
                 nodeDefineQuestioned:           "define-questioned",
@@ -281,6 +283,7 @@ var (
                 nodeActions:                    "actions",
                 nodeAction:                     "action",
                 nodeCall:                       "call",
+                nodeSpeak:                      "speak",
         }
 )
 
@@ -415,14 +418,6 @@ func (l *lex) get() bool {
                 return false //errorf(-2, "zero reading (at %v)", l.pos)
         case l.rune == utf8.RuneError:
                 errorf("invalid UTF8 encoding")
-
-                /*
-        case l.rune == '\n':
-                l.lineno, l.prevColno, l.colno = l.lineno+1, l.colno, 0
-        case l.runeLen > 1:
-                l.colno += 2
-        default:
-                l.colno ++ */
         }
         return true
 }
@@ -945,7 +940,7 @@ func (l *lex) stateDollar() {
                         name.pos = l.pos - 1 // include the single char
                         st := l.top() // nodeCall
                         st.node.children = append(st.node.children, name)
-                        l.endCall(st, 0)
+                        l.endCall(st)
                 }
         }
 }
@@ -977,12 +972,23 @@ state_loop:
                         l.pop()
 
                         st = l.top()
-                        st.node.children = append(st.node.children, name)
-                        switch l.rune {
-                        case delm:
-                                l.endCall(st, 1)
-                        case ' ':
-                                l.push(nodeArg, l.stateCallArg, 0).delm = delm
+                        switch s := name.str(); s {
+                        case "speak":
+                                st.node.kind = nodeSpeak
+                                if l.rune != delm {
+                                        l.push(nodeArg, l.stateSpeakDialect, 0).delm = delm
+                                } else {
+                                        lineno, colno := l.getLineColumn()
+                                        errorf("%v:%v:%v: unexpected delimiter\n", l.scope, lineno, colno)
+                                }
+                        default:
+                                st.node.children = append(st.node.children, name)
+                                switch l.rune {
+                                case delm:
+                                        l.endCall(st)
+                                case ' ':
+                                        l.push(nodeArg, l.stateCallArg, 0).delm = delm
+                                }
                         }
                         break state_loop
                 }
@@ -1009,7 +1015,7 @@ state_loop:
                         st = l.top()
                         st.node.children = append(st.node.children, arg)
                         if l.rune == delm {
-                                l.endCall(st, 1)
+                                l.endCall(st)
                         } else {
                                 l.push(nodeArg, l.stateCallArg, 0).delm = delm
                         }
@@ -1018,13 +1024,98 @@ state_loop:
         }
 }
 
-func (l *lex) endCall(st *lexStack, off int) {
-        call := st.node
-        call.end = l.pos //- off
+func (l *lex) stateSpeakDialect() {
+        st := l.top() // Must be a nodeArg.
+        delm := st.delm
+state_loop:
+        for l.get() {
+                switch {
+                case l.rune == '$':
+                        l.push(nodeCall, l.stateDollar, 0).node.pos-- // 'pos--' for the '$'
+                        break state_loop
+                case l.rune == '\\':
+                        l.escapeTextLine(st.node)
+                case l.rune == ',': fallthrough
+                case l.rune == delm:
+                        arg := st.node
+                        arg.end = l.pos - 1
+                        l.pop()
 
-        /*
-        lineno, colno := l.caculateLocationLineColumn(call.loc())
-        fmt.Fprintf(os.Stderr, "%v:%v:%v: %v (of %v)\n", l.scope, lineno, colno, call.str(), st.node.kind) //*/
+                        st = l.top()
+                        st.node.children = append(st.node.children, arg)
+                        if l.rune == delm {
+                                l.endCall(st)
+                        } else {
+                                l.push(nodeArg, l.stateSpeakScript, 0).delm = delm
+                        }
+                        break state_loop
+                }
+        }
+}
+
+func (l *lex) stateSpeakScript() {
+        st := l.top() // Must be a nodeArg.
+        delm := st.delm
+state_loop:
+        for l.get() {
+                switch {
+                case l.rune == '$':
+                        l.push(nodeCall, l.stateDollar, 0).node.pos-- // 'pos--' for the '$'
+                        break state_loop
+                case l.rune == '\\':
+                        if st.code == 0 {
+                                if l.get() {
+                                        if l.rune != '\n' { // skip \\\n
+                                                lineno, colno := l.getLineColumn()
+                                                errorf("%v:%v:%v: bad escape \\%v in this context\n", l.scope, lineno, colno, string(l.rune))
+                                        }
+                                }
+                        } else {
+                                l.escapeTextLine(st.node)
+                        }
+                case l.rune == '-' && st.code == 0: /* skip */
+                case l.rune != '-' && st.code == 0:
+                        st.code, st.node.pos = 1, l.pos
+                case l.rune == '\n' && st.code == 1 && l.peek() == '-':
+                delimiter_loop:
+                        for i, r, n := l.pos, rune(0), 1; i < len(l.s); i += n {
+                                switch r, n = utf8.DecodeRune(l.s[i:]); r {
+                                default: break delimiter_loop
+                                case '-': /* skip */
+                                case delm:
+                                        script := st.node
+                                        script.end = l.backwardNonSpace(l.pos)
+
+                                        l.rune, l.pos, st = delm, i+1, l.pop()
+
+                                        st = l.top() // the $(speak) node
+                                        st.node.children = append(st.node.children, script)
+                                        l.endCall(st)
+                                        break state_loop
+                                }
+                        }
+                case l.rune == ',': fallthrough
+                case l.rune == delm:
+                        script := st.node
+                        script.end = l.pos - 1
+
+                        l.pop()
+
+                        st = l.top() // the $(speak) node
+                        st.node.children = append(st.node.children, script)
+                        if l.rune == delm {
+                                l.endCall(st)
+                        } else {
+                                l.push(nodeArg, l.stateSpeakScript, 0).delm = delm
+                        }
+                        break state_loop
+                }
+        }
+}
+
+func (l *lex) endCall(st *lexStack) {
+        call := st.node
+        call.end = l.pos
 
         l.pop() // pop out the current nodeCall
 
@@ -1478,6 +1569,30 @@ func (ctx *Context) expandNameNode(n *node) (scoped bool, name string, parts []s
         return
 }
 
+func (ctx *Context) speak(name string, scripts ...*node) (is Items) {
+        if dialect, ok := dialects[name]; ok {
+                for _, sn := range scripts {
+                        is = append(is, dialect(ctx, sn)...)
+                }
+        } else if c, e := exec.LookPath(name); e == nil {
+                var args []string
+                for _, s := range scripts {
+                        args = append(args, s.Expand(ctx))
+                }
+                out := new(bytes.Buffer)
+                cmd := exec.Command(c, args...)
+                cmd.Stdout = out
+                if err := cmd.Run(); err != nil {
+                        errorf("%v: %v", name, err)
+                } else {
+                        is = append(is, stringitem(out.String()))
+                }
+        } else {
+                errorf("unknown dialect %v", name)
+        }
+        return
+}
+
 func (ctx *Context) nodeItems(n *node) (is Items) {
         switch n.kind {
         case nodeEscape:
@@ -1493,6 +1608,14 @@ func (ctx *Context) nodeItems(n *node) (is Items) {
                 }
                 scoped, name, parts := ctx.expandNameNode(n.children[0])
                 is = ctx.callWithDetails(n.loc(), scoped, name, parts, args...)
+
+        case nodeSpeak:
+                dialect := n.children[0].Expand(ctx)
+                if 1 < len(n.children) {
+                        is = ctx.speak(dialect, n.children[1:]...)
+                } else {
+                        is = ctx.speak(dialect)
+                }
 
         case nodeName:          fallthrough
         case nodeArg:           fallthrough
@@ -1514,7 +1637,7 @@ func (ctx *Context) nodeItems(n *node) (is Items) {
                 is = Items{ stringitem(s) }
 
         default:
-                panic(fmt.Sprintf("fixme: %v: %v (%v)\n", n.kind, n.str(), len(n.children)))
+                panic(fmt.Sprintf("fixme: %v: %v (%v children)\n", n.kind, n.str(), len(n.children)))
         }
         return
 }
