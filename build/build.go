@@ -350,7 +350,7 @@ func (a *Action) update() (updated bool, updatedTargets []string) {
         }
 
         if 0 < updatedPreNum || targetsNeedUpdate {
-                updated, updatedTargets = a.force(targets, fis, prerequisites)
+                updated, updatedTargets = a.execute(targets, fis, prerequisites)
         } else {
                 var rr []int
                 var request []string
@@ -369,17 +369,15 @@ func (a *Action) update() (updated bool, updatedTargets []string) {
 
                 //fmt.Printf("targets: %v, %v, %v, %v\n", targets, request, len(a.prerequisites), prerequisites)
                 if 0 < len(request) {
-                        updated, updatedTargets = a.force(request, requestfis, prerequisites)
+                        updated, updatedTargets = a.execute(request, requestfis, prerequisites)
                 }
         }
 
         return
 }
 
-func (a *Action) force(targets []string, tarfis []os.FileInfo, prerequisites []string) (updated bool, updatedTargets []string) {
-        updated = a.Command.Execute(targets, prerequisites)
-
-        if updated {
+func (a *Action) execute(targets []string, tarfis []os.FileInfo, prerequisites []string) (updated bool, updatedTargets []string) {
+        if updated = a.Command.Execute(targets, prerequisites); updated {
                 var targetsNeedUpdate bool
                 if c, ok := a.Command.(intercommand); ok {
                         updatedTargets, targetsNeedUpdate = c.Targets(a.Prerequisites)
@@ -798,49 +796,53 @@ func (r *rule) update(ctx *Context, m *match) bool {
                 }
         }
 
-        num, targetNeedsUpdate := len(updated), false
-        if 0 < num || r.ns.isPhonyTarget(ctx, m.target) {
+        targetNeedsUpdate := false
+        if 0 < len(updated) || r.ns.isPhonyTarget(ctx, m.target) {
                 targetNeedsUpdate = true
-        } else if _, err := os.Stat(m.target); err != nil {
+        } else if fi, err := os.Stat(m.target); err != nil {
                 targetNeedsUpdate = true
+        } else {
+                if fi == nil {}
         }
 
-        if targetNeedsUpdate {
-                ns := ctx.g
-                saveIndex, _ := ns.saveDefines("@", "@D", "<", "<D", "^", "^D")
-                defer ns.restoreDefines(saveIndex)
+        if !targetNeedsUpdate {
+                return false
+        }
 
-                ns.Set(ctx, []string{ "@" }, stringitem(m.target))
-                ns.Set(ctx, []string{ "@D" }, stringitem(filepath.Dir(m.target)))
-                ns.Set(ctx, []string{ "*" }, stringitem(m.stem))
-                ns.Set(ctx, []string{ "*D" }, stringitem(filepath.Dir(m.stem)))
+        ns := ctx.g
+        saveIndex, _ := ns.saveDefines("@", "@D", "<", "<D", "^", "^D")
+        defer ns.restoreDefines(saveIndex)
 
-                var l, ld []Item
-                for n, i := range list {
-                        if n == 0 {
-                                ns.Set(ctx, []string{ "<" }, stringitem(i.m.target))
-                                ns.Set(ctx, []string{ "<D" }, stringitem(filepath.Dir(i.m.target)))
-                        }
-                        ld = append(ld, stringitem(filepath.Dir(i.m.target)))
-                        l = append(l, stringitem(i.m.target))
-                }
-                ns.Set(ctx, []string{ "^" }, l...)
-                ns.Set(ctx, []string{ "^D" }, ld...)
+        ns.Set(ctx, []string{ "@" }, stringitem(m.target))
+        ns.Set(ctx, []string{ "@D" }, stringitem(filepath.Dir(m.target)))
+        ns.Set(ctx, []string{ "*" }, stringitem(m.stem))
+        ns.Set(ctx, []string{ "*D" }, stringitem(filepath.Dir(m.stem)))
 
-                job := new(runActions)
-                for _, action := range r.actions {
-                        var s string
-                        switch a := action.(type) {
-                        case string: s = a
-                        case *node: s = a.Expand(ctx)
-                        }
-                        job.actions = append(job.actions, s)
+        var l, ld []Item
+        for n, i := range list {
+                if n == 0 {
+                        ns.Set(ctx, []string{ "<" }, stringitem(i.m.target))
+                        ns.Set(ctx, []string{ "<D" }, stringitem(filepath.Dir(i.m.target)))
                 }
-                if 1 < *flagJ {
-                        job.Action()
-                } else {
-                        ctx.w.Do(job)
+                ld = append(ld, stringitem(filepath.Dir(i.m.target)))
+                l = append(l, stringitem(i.m.target))
+        }
+        ns.Set(ctx, []string{ "^" }, l...)
+        ns.Set(ctx, []string{ "^D" }, ld...)
+
+        job := new(runActions)
+        for _, action := range r.actions {
+                var s string
+                switch a := action.(type) {
+                case string: s = a
+                case *node: s = a.Expand(ctx)
                 }
+                job.actions = append(job.actions, s)
+        }
+        if 1 < *flagJ {
+                job.Action()
+        } else {
+                ctx.w.Do(job)
         }
         return false
 }

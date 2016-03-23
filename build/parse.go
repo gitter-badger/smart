@@ -212,6 +212,7 @@ const (
         nodeDefineAppend        // +=     deferred or immediate (parsed into deferred)
         nodeRuleSingleColoned   // :
         nodeRuleDoubleColoned   // ::
+        nodeRuleChecker         // :?:    check if the target is updated
         nodeTargets
         nodePrerequisites
         nodeActions
@@ -278,6 +279,7 @@ var (
                 nodeDefineAppend:               "define-append",
                 nodeRuleSingleColoned:          "rule-single-coloned",
                 nodeRuleDoubleColoned:          "rule-double-coloned",
+                nodeRuleChecker:                "rule-checker",
                 nodeTargets:                    "targets",
                 nodePrerequisites:              "prerequisites",
                 nodeActions:                    "actions",

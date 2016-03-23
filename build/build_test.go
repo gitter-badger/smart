@@ -77,3 +77,21 @@ noop: bar.txt.2
         os.Remove("foo.txt")
         os.Remove("bar.txt")
 }
+
+func TestBuildRuleTargetChecker(t *testing.T) {
+        if wd, e := os.Getwd(); e != nil || workdir != wd { t.Errorf("%v != %v (%v)", workdir, wd, e) }
+
+        info, f := new(bytes.Buffer), builtinInfoFunc; defer func(){ builtinInfoFunc = f }()
+        builtinInfoFunc = func(ctx *Context, args Items) {
+                fmt.Fprintf(info, "%v\n", args.Expand(ctx))
+        }
+
+        ctx, err := newTestContext("TestBuildRuleTargetChecker", `
+foo.txt:
+	@echo -n foo > $@ 
+foo.txt:?:
+	@test -f $@ && test "$$(cat $@)" = "foo"
+`);     if err != nil { t.Errorf("parse error:", err) }
+        if ctx == nil { t.Errorf("nil context") } else {
+        }
+}
