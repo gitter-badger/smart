@@ -74,19 +74,26 @@ type define struct {
 }
 
 type rule struct {
-        targets, prerequisites []string
-        actions []interface{} // *node, string
+        prev map[string]*rule // previously defined rules of a specific target
+        targets, prerequisites []string // expanded targets
+        recipes []interface{} // *node, string
         ns namespace
+        c checker
         node *node
 }
 
-type scoper interface {
-        // Call variable.
-        Call(ctx *Context, ids []string, args ...Item) Items
-        // Set variable.        
-        Set(ctx *Context, ids []string, items ...Item)
-        // Check if a variable exists.        
-        //Has(ctx *Context, ids []string) bool
+type checker interface {
+        check(ctx *Context, r *rule, m *match) bool
+}
+
+type defaultTargetChecker struct {
+}
+
+type phonyTargetChecker struct {
+}
+
+type checkRuleChecker struct {
+        checkRule *rule
 }
 
 type namespace interface {
@@ -98,6 +105,10 @@ type namespace interface {
         saveDefines(names ...string) (saveIndex int, m map[string]*define)
         restoreDefines(saveIndex int)
         Set(ctx *Context, ids []string, items ...Item)
+        getGoalRule() (r *rule)
+        setGoalRule(r *rule)
+        addCheckRule(checkRule *rule) (targetRule *rule)
+        link(targets ...string) (r *rule)
 }
 
 type namespaceEmbed struct {
@@ -106,7 +117,23 @@ type namespaceEmbed struct {
         rules map[string]*rule
         goal *rule
 }
-
+func (ns *namespaceEmbed) link(targets ...string) (r *rule) {
+        r = &rule{ ns:ns, targets:targets, prev:make(map[string]*rule) }
+        for _, target := range targets {
+                if prev, ok := ns.rules[target]; ok && prev != nil {
+                        r.prev[target] = prev
+                }
+                ns.rules[target] = r
+        }
+        return
+}
+func (ns *namespaceEmbed) getGoalRule() (r *rule) { return ns.goal }
+func (ns *namespaceEmbed) setGoalRule(r *rule) { ns.goal = r }
+func (ns *namespaceEmbed) addCheckRule(checkRule *rule) (targetRule *rule) {
+        targetRule = ns.link(checkRule.targets...)
+        targetRule.c = &checkRuleChecker{ checkRule }
+        return
+}
 func (ns *namespaceEmbed) saveDefines(names ...string) (saveIndex int, m map[string]*define) {
         var ok bool
         m = make(map[string]*define, len(names))
@@ -212,11 +239,12 @@ const (
         nodeDefineAppend        // +=     deferred or immediate (parsed into deferred)
         nodeRuleSingleColoned   // :
         nodeRuleDoubleColoned   // ::
+        nodeRulePhony           // :!:    phony target
         nodeRuleChecker         // :?:    check if the target is updated
         nodeTargets
         nodePrerequisites
-        nodeActions
-        nodeAction
+        nodeRecipes
+        nodeRecipe
         nodeCall
         nodeSpeak               // $(speak dialect, ...)
 )
@@ -279,11 +307,12 @@ var (
                 nodeDefineAppend:               "define-append",
                 nodeRuleSingleColoned:          "rule-single-coloned",
                 nodeRuleDoubleColoned:          "rule-double-coloned",
+                nodeRulePhony:                  "rule-phony",
                 nodeRuleChecker:                "rule-checker",
                 nodeTargets:                    "targets",
                 nodePrerequisites:              "prerequisites",
-                nodeActions:                    "actions",
-                nodeAction:                     "action",
+                nodeRecipes:                    "recipes",
+                nodeRecipe:                     "recipe",
                 nodeCall:                       "call",
                 nodeSpeak:                      "speak",
         }
@@ -399,6 +428,16 @@ func (l *lex) getLineColumn() (lineno, colno int) {
 func (l *lex) peek() (r rune) {
         if l.pos < len(l.s) {
                 r, _ = utf8.DecodeRune(l.s[l.pos:])
+        }
+        return
+}
+
+func (l *lex) peekN(n int) (rs []rune) {
+        for pos := l.pos; 0 < n; n-- {
+                if pos < len(l.s) {
+                        r, l := utf8.DecodeRune(l.s[pos:])
+                        rs, pos = append(rs, r), pos+l
+                }
         }
         return
 }
@@ -622,7 +661,6 @@ state_loop:
                         } else {
                                 l.top().node.end = l.backwardNonSpace(l.pos-1)
                                 l.step = l.stateRule
-                                //fmt.Fprintf(os.Stderr, "line head text: %v (%v)\n", l.top().node.str(), string(r))
                         }
                         break state_loop
 
@@ -737,37 +775,41 @@ func (l *lex) escapeTextLine(t *node) {
 }
 
 func (l *lex) stateRule() {
-        r, t, n := l.peek(), nodeRuleSingleColoned, 1 // Assuming single colon.
-        switch {
-        case r == ':': // targets :: blah blah blah
-                l.get() // drop the ':'
-                if l.peek() == '=' {
-                        l.get() // consume the '=' for '::='
-                        l.top().code = int(nodeDefineDoubleColoned)
-                        l.step = l.stateDefine
-                        return
+        rs, t, n := l.peekN(2), nodeRuleSingleColoned, 1 // Assuming single colon.
+
+        if len(rs) == 2 {
+                switch {
+                case rs[0] == ':': // targets :: blah blah blah
+                        l.get() // drop the second ':'
+                        t, n = nodeRuleDoubleColoned, 2
+                        if rs[1] == '=' { // ::=
+                                l.get() // consume the '=' for '::='
+                                l.top().code = int(nodeDefineDoubleColoned)
+                                l.step = l.stateDefine
+                                return
+                        }
+                case rs[0] == '!' && rs[1] == ':': // targets :!:
+                        l.get(); l.get() // drop the "!:"
+                        t, n = nodeRulePhony, 3
+                case rs[0] == '?' && rs[1] == ':': // targets :?:
+                        l.get(); l.get() // drop the "?:"
+                        t, n = nodeRuleChecker, 3
                 }
-                t, n = nodeRuleDoubleColoned, 2; fallthrough
-        case r == '\n': fallthrough // targets :
-        default: // targets : blah blah blah
-                if r == '\n' {
-                        //l.get() // drop the '\n'
-                }
-
-                targets := l.pop().node
-                targets.kind = nodeTargets
-
-                st := l.push(t, l.stateAppendNode, 0)
-                st.node.children = []*node{ targets }
-                st.node.pos -= n // for the ':' or '::'
-
-                prerequisites := l.push(nodePrerequisites, l.stateRuleTextLine, 0).node
-                st.node.children = append(st.node.children, prerequisites)
-
-                /*
-                lineno, colno := l.caculateLocationLineColumn(st.node.loc())
-                fmt.Fprintf(os.Stderr, "%v:%v:%v: stateRule: %v\n", l.scope, lineno, colno, st.node.children[0].str()) //*/
         }
+
+        targets := l.pop().node
+        targets.kind = nodeTargets
+
+        st := l.push(t, l.stateAppendNode, 0)
+        st.node.children = []*node{ targets }
+        st.node.pos -= n // for the ':', '::', ':!:', ':?:'
+
+        prerequisites := l.push(nodePrerequisites, l.stateRuleTextLine, 0).node
+        st.node.children = append(st.node.children, prerequisites)
+
+        /*
+        lineno, colno := l.caculateLocationLineColumn(st.node.loc())
+        fmt.Fprintf(os.Stderr, "%v:%v:%v: stateRule: %v\n", l.scope, lineno, colno, st.node.children[0].str()) //*/
 }
 
 func (l *lex) stateRuleTextLine() {
@@ -809,15 +851,14 @@ state_loop:
                         switch l.rune {
                         case ';':
                                 st.node.end = l.backwardNonSpace(l.pos-1)
-                                st = l.push(nodeAction, l.stateInlineAction, 0)
+                                st = l.push(nodeRecipe, l.stateInlineRecipe, 0)
                                 //st.node.pos-- // for the ';'
                         case '#':
                                 st = l.push(nodeComment, l.stateComment, 0)
                                 st.node.pos-- // for the '#'
                         case '\n':
                                 if p := l.peek(); p == '\t' || p == '#' {
-                                        st = l.push(nodeActions, l.stateTabbedActions, 0)
-                                        //st.node.pos-- // for the '\t'
+                                        st = l.push(nodeRecipes, l.stateTabbedRecipes, 0)
                                 }
                         }
                         break state_loop
@@ -827,7 +868,7 @@ state_loop:
         }
 }
 
-func (l *lex) stateInlineAction() {
+func (l *lex) stateInlineRecipe() {
         st := l.top()
 state_loop:
         for l.get() {
@@ -840,9 +881,12 @@ state_loop:
                         st = l.push(nodeCall, l.stateDollar, 0)
                         st.node.pos-- // for the '$'
                         break state_loop
-
-                //case l.rune == '#': fallthrough
-                case l.rune == '\n': fallthrough
+                case l.rune == '\n':
+                        if p := l.peek(); p == '\t' || p == '#' {
+                                st = l.push(nodeRecipes, l.stateTabbedRecipes, 0)
+                                break state_loop                                
+                        }
+                        fallthrough
                 case l.rune == rune(0): // end of string
                         a := st.node
                         a.end = l.pos
@@ -852,7 +896,7 @@ state_loop:
 
                         /*
                         lineno, colno := l.caculateLocationLineColumn(st.node.loc())
-                        fmt.Fprintf(os.Stderr, "%v:%v:%v: stateInlineAction: %v\n", l.scope, lineno, colno, st.node.str()) //*/
+                        fmt.Fprintf(os.Stderr, "%v:%v:%v: stateInlineRecipe: %v\n", l.scope, lineno, colno, st.node.str()) //*/
 
                         st = l.pop() // pop out the node
                         st = l.top() // the rule node
@@ -869,11 +913,11 @@ state_loop:
         }
 }
 
-func (l *lex) stateTabbedActions() { // tab-indented action of a rule
+func (l *lex) stateTabbedRecipes() { // tab-indented action of a rule
         if st := l.top(); l.get() {
                 switch {
                 case l.rune == '\t':
-                        st = l.push(nodeAction, l.stateAction, 0)
+                        st = l.push(nodeRecipe, l.stateRecipe, 0)
                         //st.node.pos-- // for the '\t'
 
                 case l.rune == '#':
@@ -882,27 +926,29 @@ func (l *lex) stateTabbedActions() { // tab-indented action of a rule
 
                         /*
                         lineno, colno := l.caculateLocationLineColumn(st.node.loc())
-                        fmt.Fprintf(os.Stderr, "%v:%v:%v: stateTabbedActions: %v (%v, stack=%v)\n", l.scope, lineno, colno, st.node.str(), l.top().node.kind, len(l.stack)) //*/
+                        fmt.Fprintf(os.Stderr, "%v:%v:%v: stateTabbedRecipes: %v (%v, stack=%v)\n", l.scope, lineno, colno, st.node.str(), l.top().node.kind, len(l.stack)) //*/
 
                 default:
-                        a := st.node
+                        a := st.node // the recipes node
                         a.end = l.pos
                         if l.rune == '\n' {
                                 a.end--
+                        } else if l.rune != rune(0) {
+                                l.unget() // put back the non-space character following by a recipe
                         }
 
-                        st = l.pop() // pop out the actions
+                        st = l.pop() // pop out the recipes
                         st = l.top() // the rule node
                         st.node.children = append(st.node.children, a)
 
                         /*
                         lineno, colno := l.caculateLocationLineColumn(st.node.loc())
-                        fmt.Fprintf(os.Stderr, "%v:%v:%v: stateTabbedActions: %v (%v)\n", l.scope, lineno, colno, st.node.str(), l.top().node.kind) //*/
+                        fmt.Fprintf(os.Stderr, "%v:%v:%v: stateTabbedRecipes: %v (%v)\n", l.scope, lineno, colno, st.node.str(), l.top().node.kind) //*/
                 }
         }
 }
 
-func (l *lex) stateAction() { // tab-indented action of a rule
+func (l *lex) stateRecipe() { // tab-indented action of a rule
         st := l.top()
 state_loop:
         for l.get() {
@@ -913,20 +959,20 @@ state_loop:
                         break state_loop
                 case l.rune == '\n': fallthrough
                 case l.rune == rune(0): // end of string
-                        a := st.node
-                        a.end = l.pos
+                        recipe := st.node
+                        recipe.end = l.pos
                         if l.rune != rune(0) {
-                                a.end-- // exclude the '\n'
+                                recipe.end-- // exclude the '\n'
                         }
 
                         l.pop() // pop out the node
 
                         st = l.top()
-                        st.node.children = append(st.node.children, a)
+                        st.node.children = append(st.node.children, recipe)
 
                         /*
                         lineno, colno := l.caculateLocationLineColumn(a.loc())
-                        fmt.Fprintf(os.Stderr, "%v:%v:%v: stateAction: %v (of %v)\n", l.scope, lineno, colno, a.str(), st.node.kind) //*/
+                        fmt.Fprintf(os.Stderr, "%v:%v:%v: stateRecipe: %v (of %v)\n", l.scope, lineno, colno, a.str(), st.node.kind) //*/
                         break state_loop
                 }
         }
@@ -1621,7 +1667,7 @@ func (ctx *Context) nodeItems(n *node) (is Items) {
 
         case nodeName:          fallthrough
         case nodeArg:           fallthrough
-        case nodeAction:        fallthrough
+        case nodeRecipe:        fallthrough
         case nodeDeferredText:  fallthrough
         case nodeTargets:       fallthrough
         case nodePrerequisites: fallthrough
@@ -1740,39 +1786,41 @@ func (ctx *Context) processNode(n *node) (err error) {
         case nodeDefineNot:
                 panic("'!=' not implemented")
 
-        case nodeRuleSingleColoned: fallthrough
-        case nodeRuleDoubleColoned:
-                r := &rule{
-                        targets:Split(ctx.nodeItems(n.children[0]).Expand(ctx)),
-                        prerequisites:Split(ctx.nodeItems(n.children[1]).Expand(ctx)),
-                        node:n,
+        case nodeRulePhony: fallthrough
+        case nodeRuleChecker: fallthrough
+        case nodeRuleDoubleColoned: fallthrough
+        case nodeRuleSingleColoned:
+                var ns namespace
+                if ctx.m == nil {
+                        ns = ctx.g
+                } else {
+                        ns = ctx.m
                 }
+
+                r := ns.link(Split(ctx.nodeItems(n.children[0]).Expand(ctx))...)
+                r.prerequisites, r.node = Split(ctx.nodeItems(n.children[1]).Expand(ctx)), n
                 if 2 < len(n.children) {
                         switch a := n.children[2]; a.kind {
-                        case nodeActions:
+                        case nodeRecipes:
                                 for _, c := range n.children[2].children {
-                                        r.actions = append(r.actions, c)
+                                        r.recipes = append(r.recipes, c)
                                 }
-                        case nodeAction:
-                                r.actions = append(r.actions, a)
+                        case nodeRecipe:
+                                r.recipes = append(r.recipes, a)
                         }
                 }
 
-                // Map each target to the new rule.
-                for _, s := range r.targets {
-                        if ctx.m != nil {
-                                r.ns = ctx.m.namespaceEmbed
-                                ctx.m.rules[s] = r
-                                if ctx.m.goal == nil {
-                                        ctx.m.goal = r
-                                }
-                        } else {
-                                r.ns = ctx.g
-                                ctx.g.rules[s] = r
-                                if ctx.g.goal == nil {
-                                        ctx.g.goal = r
-                                }
-                        }
+                switch n.kind {
+                case nodeRulePhony:             r.c = &phonyTargetChecker{}
+                case nodeRuleDoubleColoned:     r.c = &defaultTargetChecker{}
+                case nodeRuleSingleColoned:     r.c = &defaultTargetChecker{}
+                case nodeRuleChecker:           r = r.ns.addCheckRule(r); r.node = n
+                default: errorf("unexpected rule type: %v", n.kind)
+                }
+
+                // Set goal rule if nil
+                if r.ns.getGoalRule() == nil {
+                        r.ns.setGoalRule(r)
                 }
 
                 /*

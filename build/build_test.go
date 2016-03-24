@@ -87,10 +87,11 @@ func TestBuildRuleTargetChecker(t *testing.T) {
         }
 
         ctx, err := newTestContext("TestBuildRuleTargetChecker", `
-foo.txt:
-	@echo -n foo > $@ 
-foo.txt:?:
-	@test -f $@ && test "$$(cat $@)" = "foo"
+foo:!: foobar
+	@echo -n foo > $@.txt
+foo:?:
+	@test -f $@.txt && test "$$(cat $@.txt)" = "foo"
+foobar:!:
 `);     if err != nil { t.Errorf("parse error:", err) }
         if ctx == nil { t.Errorf("nil context") } else {
         }

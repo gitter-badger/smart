@@ -1246,18 +1246,18 @@ blah : blah.c
         i = 2; c = l.nodes[i]; checkNode(c, nodeRuleSingleColoned, 3, `:`, `bar`, "bar.c", "\t# this is command line comment\n# this is script comment being ignored\n\t@echo \"compiling...\"\n\t@gcc -c $< -o $@\n")
         cc = c.children[0]; checkNode(cc, nodeTargets, 0, `bar`)
         cc = c.children[1]; checkNode(cc, nodePrerequisites, 0, "bar.c")
-        cc = c.children[2]; checkNode(cc, nodeActions, 4, "\t# this is command line comment\n# this is script comment being ignored\n\t@echo \"compiling...\"\n\t@gcc -c $< -o $@\n", "# this is command line comment", "# this is script comment being ignored", "@echo \"compiling...\"", "@gcc -c $< -o $@")
-        if ex = nodeActions; cc.kind != ex { t.Errorf("expecting %v but %v", ex, cc.kind) }
-        if cx, ex = cc.children[0], nodeAction;  cx.kind != ex { t.Errorf("expecting %v but %v", ex, cx.kind) } else {
+        cc = c.children[2]; checkNode(cc, nodeRecipes, 4, "\t# this is command line comment\n# this is script comment being ignored\n\t@echo \"compiling...\"\n\t@gcc -c $< -o $@\n", "# this is command line comment", "# this is script comment being ignored", "@echo \"compiling...\"", "@gcc -c $< -o $@")
+        if ex = nodeRecipes; cc.kind != ex { t.Errorf("expecting %v but %v", ex, cc.kind) }
+        if cx, ex = cc.children[0], nodeRecipe;  cx.kind != ex { t.Errorf("expecting %v but %v", ex, cx.kind) } else {
                 if s, ss := cx.str(), "# this is command line comment"; s != ss { t.Errorf("expecting %v but %v", ss, s) }
         }
         if cx, ex = cc.children[1], nodeComment; cx.kind != ex { t.Errorf("expecting %v but %v", ex, cx.kind) } else {
                 if s, ss := cx.str(), "# this is script comment being ignored"; s != ss { t.Errorf("expecting %v but %v", ss, s) }
         }
-        if cx, ex = cc.children[2], nodeAction;  cx.kind != ex { t.Errorf("expecting %v but %v", ex, cx.kind) } else {
+        if cx, ex = cc.children[2], nodeRecipe;  cx.kind != ex { t.Errorf("expecting %v but %v", ex, cx.kind) } else {
                 if s, ss := cx.str(), "@echo \"compiling...\""; s != ss { t.Errorf("expecting %v but %v", ss, s) }
         }
-        if cx, ex = cc.children[3], nodeAction;  cx.kind != ex { t.Errorf("expecting %v but %v", ex, cx.kind) } else {
+        if cx, ex = cc.children[3], nodeRecipe;  cx.kind != ex { t.Errorf("expecting %v but %v", ex, cx.kind) } else {
                 if s, ss := cx.str(), "@gcc -c $< -o $@"; s != ss { t.Errorf("expecting %v but %v", ss, s) }
         }
 
@@ -1547,12 +1547,12 @@ $(commit)
                 if r, ok := m.rules["foo"]; !ok { t.Errorf("foo not defined in %v", m.GetName(ctx)) } else {
                         if n := len(r.targets); n != 1 { t.Errorf("incorrect number of targets: %v %v", n, r.targets) }
                         if n := len(r.prerequisites); n != 0 { t.Errorf("incorrect number of prerequisites: %v %v", n, r.prerequisites) }
-                        if n := len(r.actions); n != 1 { t.Errorf("incorrect number of actions: %v %v", n, r.actions) }
+                        if n := len(r.recipes); n != 1 { t.Errorf("incorrect number of recipes: %v %v", n, r.recipes) }
                 }
                 if r, ok := m.rules["foobar"]; !ok { t.Errorf("foobar not defined in %v", m.GetName(ctx)) } else {
                         if n := len(r.targets); n != 1 { t.Errorf("incorrect number of targets: %v %v", n, r.targets) }
                         if n := len(r.prerequisites); n != 1 { t.Errorf("incorrect number of prerequisites: %v %v", n, r.prerequisites) }
-                        if n := len(r.actions); n != 1 { t.Errorf("incorrect number of actions: %v %v", n, r.actions) }
+                        if n := len(r.recipes); n != 1 { t.Errorf("incorrect number of recipes: %v %v", n, r.recipes) }
                 }
         }
         if s := info.String(); s != `` { t.Errorf("info: '%s'", s) }
@@ -1609,7 +1609,7 @@ bar:
 	@echo $@ > $@.txt
 	@touch $@.txt
 `);     if err != nil { t.Errorf("parse error:", err) }
-
+        if n, x := len(ctx.g.rules), 3; n != x { t.Errorf("wrong number of rules: %v", ctx.g.rules) }
         if r, ok := ctx.g.rules["all"]; !ok && r == nil { t.Errorf("'all' not defined") } else {
                 if n, x := len(r.node.children), 2; n != x { t.Errorf("children %d != %d", n, x) }
                 if n, x := len(r.targets), 1; n != x { t.Errorf("targets %d != %d", n, x) } else {
@@ -1619,48 +1619,90 @@ bar:
                         if s, x := r.prerequisites[0], "foo"; s != x { t.Errorf("prerequisites[0] %v != %v", s, x) }
                         if s, x := r.prerequisites[1], "bar"; s != x { t.Errorf("prerequisites[0] %v != %v", s, x) }
                 }
-                if n, x := len(r.actions), 0; n != x { t.Errorf("actions %d != %d", n, x) }
+                if n, x := len(r.recipes), 0; n != x { t.Errorf("recipes %d != %d", n, x) }
+                if c, ok := r.c.(*defaultTargetChecker); !ok { t.Errorf("wrong type of checker %v", c) }
         }
         if r, ok := ctx.g.rules["foo"]; !ok && r == nil { t.Errorf("'foo' not defined") } else {
                 if n, x := len(r.node.children), 3; n != x { t.Errorf("children %d != %d", n, x) } else {
                         if c, x := r.node.children[0], nodeTargets; c.kind != x { t.Errorf("children %v != %v", c.kind, x) }
                         if c, x := r.node.children[1], nodePrerequisites; c.kind != x { t.Errorf("children %v != %v", c.kind, x) }
-                        if c, x := r.node.children[2], nodeAction; c.kind != x { t.Errorf("children %v != %v", c.kind, x) }
+                        if c, x := r.node.children[2], nodeRecipe; c.kind != x { t.Errorf("children %v != %v", c.kind, x) }
                 }
                 if n, x := len(r.targets), 1; n != x { t.Errorf("targets %d != %d", n, x) } else {
                         if s, x := r.targets[0], "foo"; s != x { t.Errorf("targets[0] %v != %v", s, x) }
                 }
                 if n, x := len(r.prerequisites), 0; n != x { t.Errorf("prerequisites %d != %d", n, x) }
-                if n, x := len(r.actions), 1; n != x { t.Errorf("actions %d != %d", n, x) } else {
-                        if c, ok := r.actions[0].(*node); !ok { t.Errorf("actions[0] '%v' is not node", r.actions[0]) } else {
-                                if k, x := c.kind, nodeAction; k != x { t.Errorf("actions[0] %v != %v", k, x) }
-                                if s, x := c.str(), "@touch $@.txt "; s != x { t.Errorf("actions[0] %v != %v", s, x) }
-                                if s, x := c.Expand(ctx), "@touch .txt "; s != x { t.Errorf("actions[0] %v != %v", s, x) }
+                if n, x := len(r.recipes), 1; n != x { t.Errorf("recipes %d != %d", n, x) } else {
+                        if c, ok := r.recipes[0].(*node); !ok { t.Errorf("recipes[0] '%v' is not node", r.recipes[0]) } else {
+                                if k, x := c.kind, nodeRecipe; k != x { t.Errorf("recipes[0] %v != %v", k, x) }
+                                if s, x := c.str(), "@touch $@.txt "; s != x { t.Errorf("recipes[0] %v != %v", s, x) }
+                                if s, x := c.Expand(ctx), "@touch .txt "; s != x { t.Errorf("recipes[0] %v != %v", s, x) }
                         }
                 }
+                if c, ok := r.c.(*defaultTargetChecker); !ok { t.Errorf("wrong type of checker %v", c) }
         }
         if r, ok := ctx.g.rules["bar"]; !ok && r == nil { t.Errorf("'bar' not defined") } else {
                 if n, x := len(r.node.children), 3; n != x { t.Errorf("children %d != %d", n, x) } else {
                         if c, x := r.node.children[0], nodeTargets; c.kind != x { t.Errorf("children %v != %v", c.kind, x) }
                         if c, x := r.node.children[1], nodePrerequisites; c.kind != x { t.Errorf("children %v != %v", c.kind, x) }
-                        if c, x := r.node.children[2], nodeActions; c.kind != x { t.Errorf("children %v != %v", c.kind, x) }
+                        if c, x := r.node.children[2], nodeRecipes; c.kind != x { t.Errorf("children %v != %v", c.kind, x) }
                 }
                 if n, x := len(r.targets), 1; n != x { t.Errorf("targets %d != %d", n, x) } else {
                         if s, x := r.targets[0], "bar"; s != x { t.Errorf("targets[0] %v != %v", s, x) }
                 }
                 if n, x := len(r.prerequisites), 0; n != x { t.Errorf("prerequisites %d != %d", n, x) }
-                if n, x := len(r.actions), 2; n != x { t.Errorf("actions %d != %d", n, x) } else {
-                        if c, ok := r.actions[0].(*node); !ok { t.Errorf("actions[0] '%v' is not node", r.actions[0]) } else {
-                                if k, x := c.kind, nodeAction; k != x { t.Errorf("actions[0] %v != %v", k, x) }
-                                if s, x := c.str(), "@echo $@ > $@.txt"; s != x { t.Errorf("actions[0] %v != %v", s, x) }
-                                if s, x := c.Expand(ctx), "@echo  > .txt"; s != x { t.Errorf("actions[0] %v != %v", s, x) }
+                if n, x := len(r.recipes), 2; n != x { t.Errorf("recipes %d != %d", n, x) } else {
+                        ctx.Set("@", stringitem("xxx"))
+                        if c, ok := r.recipes[0].(*node); !ok { t.Errorf("recipes[0] '%v' is not node", r.recipes[0]) } else {
+                                if k, x := c.kind, nodeRecipe; k != x { t.Errorf("recipes[0] %v != %v", k, x) }
+                                if s, x := c.str(), "@echo $@ > $@.txt"; s != x { t.Errorf("recipes[0] %v != %v", s, x) }
+                                if s, x := c.Expand(ctx), "@echo xxx > xxx.txt"; s != x { t.Errorf("recipes[0] %v != %v", s, x) }
                         }
-                        if c, ok := r.actions[1].(*node); !ok { t.Errorf("actions[1] '%v' is not node", r.actions[1]) } else {
-                                if k, x := c.kind, nodeAction; k != x { t.Errorf("actions[1] %v != %v", k, x) }
-                                if s, x := c.str(), "@touch $@.txt"; s != x { t.Errorf("actions[1] %v != %v", s, x) }
-                                if s, x := c.Expand(ctx), "@touch .txt"; s != x { t.Errorf("actions[1] %v != %v", s, x) }
+                        if c, ok := r.recipes[1].(*node); !ok { t.Errorf("recipes[1] '%v' is not node", r.recipes[1]) } else {
+                                if k, x := c.kind, nodeRecipe; k != x { t.Errorf("recipes[1] %v != %v", k, x) }
+                                if s, x := c.str(), "@touch $@.txt"; s != x { t.Errorf("recipes[1] %v != %v", s, x) }
+                                if s, x := c.Expand(ctx), "@touch xxx.txt"; s != x { t.Errorf("recipes[1] %v != %v", s, x) }
                         }
+                        ctx.Set("@", stringitem(""))
                 }
+                if c, ok := r.c.(*defaultTargetChecker); !ok { t.Errorf("wrong type of checker %v", c) }
+        }
+
+        if v, s := info.String(), fmt.Sprintf(``); v != s { t.Errorf("`%s` != `%s`", v, s) }
+}
+
+func TestToolsetRuleCheckers(t *testing.T) {
+        if wd, e := os.Getwd(); e != nil || workdir != wd { t.Errorf("%v != %v (%v)", workdir, wd, e) }
+
+        info, f := new(bytes.Buffer), builtinInfoFunc; defer func(){ builtinInfoFunc = f }()
+        builtinInfoFunc = func(ctx *Context, args Items) {
+                fmt.Fprintf(info, "%v\n", args.Expand(ctx))
+        }
+
+        ctx, err := newTestContext("TestToolsetRules", `
+foo:!:
+	@echo -n foo > $@.txt
+foo:?:
+	@test -f $@.txt && test "$$(cat $@.txt)" = "foo"
+`);     if err != nil { t.Errorf("parse error:", err) }
+        if n, x := len(ctx.g.rules), 1; n != x { t.Errorf("wrong number of rules: %v", ctx.g.rules) }
+        if r, ok := ctx.g.rules["foo"]; !ok && r == nil { t.Errorf("'all' not defined") } else {
+                if n, x := len(r.node.children), 2; n != x { t.Errorf("children %d != %d", n, x) }
+                if n, x := len(r.targets), 1; n != x { t.Errorf("targets %d != %d", n, x) } else {
+                        if s, x := r.targets[0], "foo"; s != x { t.Errorf("targets[0] %v != %v", s, x) }
+                }
+                if n, x := len(r.prerequisites), 0; n != x { t.Errorf("prerequisites %d != %d", n, x) } else {
+                }
+                if n, x := len(r.recipes), 1; n != x { t.Errorf("recipes %d != %d", n, x) } else {
+                        ctx.Set("@", stringitem("xxx"))
+                        if c, ok := r.recipes[0].(*node); !ok { t.Errorf("recipes[0] '%v' is not node", r.recipes[0]) } else {
+                                if k, x := c.kind, nodeRecipe; k != x { t.Errorf("recipes[1] %v != %v", k, x) }
+                                if s, x := c.str(), "@echo -n foo > $@.txt"; s != x { t.Errorf("recipes[1] %v != %v", s, x) }
+                                if s, x := c.Expand(ctx), "@echo -n foo > xxx.txt"; s != x { t.Errorf("recipes[1] %v != %v", s, x) }
+                        }
+                        ctx.Set("@", stringitem(""))
+                }
+                if c, ok := r.c.(*checkRuleChecker); !ok { t.Errorf("wrong type of checker %v", c) }
         }
 
         if v, s := info.String(), fmt.Sprintf(``); v != s { t.Errorf("`%s` != `%s`", v, s) }
