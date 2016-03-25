@@ -107,7 +107,6 @@ type namespace interface {
         Set(ctx *Context, ids []string, items ...Item)
         getGoalRule() (r *rule)
         setGoalRule(r *rule)
-        addCheckRule(checkRule *rule) (targetRule *rule)
         link(targets ...string) (r *rule)
 }
 
@@ -117,21 +116,19 @@ type namespaceEmbed struct {
         rules map[string]*rule
         goal *rule
 }
+func (ns *namespaceEmbed) getGoalRule() (r *rule) { return ns.goal }
+func (ns *namespaceEmbed) setGoalRule(r *rule) { ns.goal = r }
 func (ns *namespaceEmbed) link(targets ...string) (r *rule) {
-        r = &rule{ ns:ns, targets:targets, prev:make(map[string]*rule) }
+        r = &rule{ ns:ns, targets:targets }
         for _, target := range targets {
                 if prev, ok := ns.rules[target]; ok && prev != nil {
+                        if r.prev == nil {
+                                r.prev = make(map[string]*rule)
+                        }
                         r.prev[target] = prev
                 }
                 ns.rules[target] = r
         }
-        return
-}
-func (ns *namespaceEmbed) getGoalRule() (r *rule) { return ns.goal }
-func (ns *namespaceEmbed) setGoalRule(r *rule) { ns.goal = r }
-func (ns *namespaceEmbed) addCheckRule(checkRule *rule) (targetRule *rule) {
-        targetRule = ns.link(checkRule.targets...)
-        targetRule.c = &checkRuleChecker{ checkRule }
         return
 }
 func (ns *namespaceEmbed) saveDefines(names ...string) (saveIndex int, m map[string]*define) {
@@ -1810,17 +1807,17 @@ func (ctx *Context) processNode(n *node) (err error) {
                         }
                 }
 
+                // Set goal rule if nil
+                if r.ns.getGoalRule() == nil {
+                        r.ns.setGoalRule(r)
+                }
+
                 switch n.kind {
                 case nodeRulePhony:             r.c = &phonyTargetChecker{}
                 case nodeRuleDoubleColoned:     r.c = &defaultTargetChecker{}
                 case nodeRuleSingleColoned:     r.c = &defaultTargetChecker{}
-                case nodeRuleChecker:           r = r.ns.addCheckRule(r); r.node = n
+                case nodeRuleChecker:           r.c = &checkRuleChecker{ r }
                 default: errorf("unexpected rule type: %v", n.kind)
-                }
-
-                // Set goal rule if nil
-                if r.ns.getGoalRule() == nil {
-                        r.ns.setGoalRule(r)
                 }
 
                 /*

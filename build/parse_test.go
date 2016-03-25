@@ -1684,25 +1684,99 @@ foo:!:
 	@echo -n foo > $@.txt
 foo:?:
 	@test -f $@.txt && test "$$(cat $@.txt)" = "foo"
+bar:?:
+	@test -f $@.txt && test "$$(cat $@.txt)" = "bar"
+bar:!:
+	@echo -n bar > $@.txt
 `);     if err != nil { t.Errorf("parse error:", err) }
-        if n, x := len(ctx.g.rules), 1; n != x { t.Errorf("wrong number of rules: %v", ctx.g.rules) }
+        if n, x := len(ctx.g.rules), 2; n != x { t.Errorf("wrong rules: %v", ctx.g.rules) }
         if r, ok := ctx.g.rules["foo"]; !ok && r == nil { t.Errorf("'all' not defined") } else {
-                if n, x := len(r.node.children), 2; n != x { t.Errorf("children %d != %d", n, x) }
+                if k, x := r.node.kind, nodeRuleChecker; k != x { t.Errorf("%v != %v", k, x) }
+                if n, x := len(r.node.children), 3; n != x { t.Errorf("children %d != %d", n, x) }
                 if n, x := len(r.targets), 1; n != x { t.Errorf("targets %d != %d", n, x) } else {
                         if s, x := r.targets[0], "foo"; s != x { t.Errorf("targets[0] %v != %v", s, x) }
                 }
-                if n, x := len(r.prerequisites), 0; n != x { t.Errorf("prerequisites %d != %d", n, x) } else {
-                }
+                if n, x := len(r.prerequisites), 0; n != x { t.Errorf("prerequisites %d != %d", n, x) }
                 if n, x := len(r.recipes), 1; n != x { t.Errorf("recipes %d != %d", n, x) } else {
                         ctx.Set("@", stringitem("xxx"))
                         if c, ok := r.recipes[0].(*node); !ok { t.Errorf("recipes[0] '%v' is not node", r.recipes[0]) } else {
                                 if k, x := c.kind, nodeRecipe; k != x { t.Errorf("recipes[1] %v != %v", k, x) }
-                                if s, x := c.str(), "@echo -n foo > $@.txt"; s != x { t.Errorf("recipes[1] %v != %v", s, x) }
-                                if s, x := c.Expand(ctx), "@echo -n foo > xxx.txt"; s != x { t.Errorf("recipes[1] %v != %v", s, x) }
+                                if s, x := c.str(), `@test -f $@.txt && test "$$(cat $@.txt)" = "foo"`; s != x { t.Errorf("recipes[1]: %v != %v", s, x) }
+                                if s, x := c.Expand(ctx), `@test -f xxx.txt && test "$(cat xxx.txt)" = "foo"`; s != x { t.Errorf("recipes[1]: %v != %v", s, x) }
                         }
                         ctx.Set("@", stringitem(""))
                 }
-                if c, ok := r.c.(*checkRuleChecker); !ok { t.Errorf("wrong type of checker %v", c) }
+                if c, ok := r.c.(*checkRuleChecker); !ok { t.Errorf("wrong type %v", c) } else {
+                        if c.checkRule == nil { t.Errorf("nil check rule") } else {
+                                if c.checkRule != r { t.Errorf("diverged check rule") }
+                                if c.checkRule.c != c { t.Errorf("diverged check rule") }
+                        }
+                        if n, x := len(r.prev), 1; n != x { t.Errorf("prev: %d != %d", n, x) }
+                        if r, ok := r.prev["foo"]; !ok && r == nil { t.Errorf("prev[foo] not defined") } else {
+                                if k, x := r.node.kind, nodeRulePhony; k != x { t.Errorf("%v != %v", k, x) }
+                                if n, x := len(r.node.children), 3; n != x { t.Errorf("children %d != %d", n, x) }
+                                if n, x := len(r.targets), 1; n != x { t.Errorf("targets %d != %d", n, x) } else {
+                                        if s, x := r.targets[0], "foo"; s != x { t.Errorf("targets[0] %v != %v", s, x) }
+                                }
+                                if n, x := len(r.prerequisites), 0; n != x { t.Errorf("prerequisites %d != %d", n, x) }
+                                if n, x := len(r.recipes), 1; n != x { t.Errorf("recipes %d != %d", n, x) } else {
+                                        ctx.Set("@", stringitem("xxx"))
+                                        if c, ok := r.recipes[0].(*node); !ok { t.Errorf("recipes[0] '%v' is not node", r.recipes[0]) } else {
+                                                if k, x := c.kind, nodeRecipe; k != x { t.Errorf("recipes[1] %v != %v", k, x) }
+                                                if s, x := c.str(), `@echo -n foo > $@.txt`; s != x { t.Errorf("recipes[1]: %v != %v", s, x) }
+                                                if s, x := c.Expand(ctx), `@echo -n foo > xxx.txt`; s != x { t.Errorf("recipes[1]: %v != %v", s, x) }
+                                        }
+                                        ctx.Set("@", stringitem(""))
+                                }
+                                if c, ok := r.c.(*phonyTargetChecker); !ok { t.Errorf("wrong checker %v", c) } else {
+                                }
+                        }
+                }
+        }
+        if r, ok := ctx.g.rules["bar"]; !ok && r == nil { t.Errorf("'all' not defined") } else {
+                if k, x := r.node.kind, nodeRulePhony; k != x { t.Errorf("%v != %v", k, x) }
+                if n, x := len(r.node.children), 3; n != x { t.Errorf("children %d != %d", n, x) }
+                if n, x := len(r.targets), 1; n != x { t.Errorf("targets %d != %d", n, x) } else {
+                        if s, x := r.targets[0], "bar"; s != x { t.Errorf("targets[0] %v != %v", s, x) }
+                }
+                if n, x := len(r.prerequisites), 0; n != x { t.Errorf("prerequisites %d != %d", n, x) }
+                if n, x := len(r.recipes), 1; n != x { t.Errorf("recipes %d != %d", n, x) } else {
+                        ctx.Set("@", stringitem("xxx"))
+                        if c, ok := r.recipes[0].(*node); !ok { t.Errorf("recipes[0] '%v' is not node", r.recipes[0]) } else {
+                                if k, x := c.kind, nodeRecipe; k != x { t.Errorf("recipes[1] %v != %v", k, x) }
+                                if s, x := c.str(), `@echo -n bar > $@.txt`; s != x { t.Errorf("recipes[1]: %v != %v", s, x) }
+                                if s, x := c.Expand(ctx), `@echo -n bar > xxx.txt`; s != x { t.Errorf("recipes[1]: %v != %v", s, x) }
+                        }
+                        ctx.Set("@", stringitem(""))
+                }
+                if c, ok := r.c.(*phonyTargetChecker); !ok { t.Errorf("wrong type %v", c) } else {
+                        if n, x := len(r.prev), 1; n != x { t.Errorf("prev: %d != %d", n, x) }
+                        if r, ok := r.prev["bar"]; !ok && r == nil { t.Errorf("prev[foo] not defined") } else {
+                                if k, x := r.node.kind, nodeRuleChecker; k != x { t.Errorf("%v != %v", k, x) }
+                                if n, x := len(r.node.children), 3; n != x { t.Errorf("children %d != %d", n, x) }
+                                if n, x := len(r.targets), 1; n != x { t.Errorf("targets %d != %d", n, x) } else {
+                                        if s, x := r.targets[0], "bar"; s != x { t.Errorf("targets[0] %v != %v", s, x) }
+                                }
+                                if n, x := len(r.prerequisites), 0; n != x { t.Errorf("prerequisites %d != %d", n, x) }
+                                if n, x := len(r.recipes), 1; n != x { t.Errorf("recipes %d != %d", n, x) } else {
+                                        ctx.Set("@", stringitem("xxx"))
+                                        if c, ok := r.recipes[0].(*node); !ok { t.Errorf("recipes[0] '%v' is not node", r.recipes[0]) } else {
+                                                if k, x := c.kind, nodeRecipe; k != x { t.Errorf("recipes[1] %v != %v", k, x) }
+                                                if s, x := c.str(), `@test -f $@.txt && test "$$(cat $@.txt)" = "bar"`; s != x { t.Errorf("recipes[1]: %v != %v", s, x) }
+                                                if s, x := c.Expand(ctx), `@test -f xxx.txt && test "$(cat xxx.txt)" = "bar"`; s != x { t.Errorf("recipes[1]: %v != %v", s, x) }
+                                        }
+                                        ctx.Set("@", stringitem(""))
+                                }
+                                if c, ok := r.c.(*checkRuleChecker); !ok { t.Errorf("wrong checker %v", c) } else {
+                                        if c.checkRule == nil { t.Errorf("nil check rule") } else {
+                                                if c.checkRule != r { t.Errorf("diverged check rule") }
+                                                if c.checkRule.c != c { t.Errorf("diverged check rule") }
+                                        }
+                                        if n, x := len(r.prev), 0; n != x { t.Errorf("prev: %d != %d", n, x) }
+                                }
+                                if n, x := len(r.prev), 0; n != x { t.Errorf("prev: %d != %d", n, x) }
+                        }
+                }
         }
 
         if v, s := info.String(), fmt.Sprintf(``); v != s { t.Errorf("`%s` != `%s`", v, s) }
