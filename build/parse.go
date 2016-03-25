@@ -507,39 +507,23 @@ func (l *lex) top() *lexStack {
         return nil
 }
 
-/*
-func (l *lex) forward(i, n int) int {
-        for x = len(l.s); i < x && 0 < n {
+func (l *lex) backwardNonSpace(beg, i int) int {
+        for beg < i {
                 r, l := utf8.DecodeLastRune(l.s[0:i])
                 if unicode.IsSpace(r) {
+                        i -= l
+                } else {
+                        break
+                }
+        }
+        return i
+}
+
+func (l *lex) forwardNonSpaceInline(i int) int {
+        for e := len(l.s); i < e; {
+                r, l := utf8.DecodeRune(l.s[i:])
+                if r != '\n' && unicode.IsSpace(r) {
                         i += l
-                } else {
-                        break
-                }
-                n--
-        }
-        return i
-}
-
-func (l *lex) backward(i, n int) int {
-        for 0 < i && 0 < n {
-                r, l := utf8.DecodeLastRune(l.s[0:i])
-                if unicode.IsSpace(r) {
-                        i -= l
-                } else {
-                        break
-                }
-                n--
-        }
-        return i
-}
-*/
-
-func (l *lex) backwardNonSpace(i int) int {
-        for 0 < i {
-                r, l := utf8.DecodeLastRune(l.s[0:i])
-                if unicode.IsSpace(r) {
-                        i -= l
                 } else {
                         break
                 }
@@ -656,7 +640,8 @@ state_loop:
                                 l.top().code = int(nodeDefineSingleColoned)
                                 l.step = l.stateDefine
                         } else {
-                                l.top().node.end = l.backwardNonSpace(l.pos-1)
+                                n := l.top().node
+                                n.end = l.backwardNonSpace(n.pos, l.pos-1)
                                 l.step = l.stateRule
                         }
                         break state_loop
@@ -701,7 +686,7 @@ func (l *lex) stateDefine() {
         default:                     vt = nodeDeferredText
         }
 
-        name.end = l.backwardNonSpace(l.pos-n) // for '=', '+=', '?=', ':=', '::='
+        name.end = l.backwardNonSpace(st.node.pos, l.pos-n) // for '=', '+=', '?=', ':=', '::='
 
         st = l.push(t, l.stateAppendNode, 0)
         st.node.children = []*node{ name }
@@ -818,13 +803,6 @@ state_loop:
                 }
 
                 switch {
-                /* case l.rune != '\n' && unicode.IsSpace(l.rune):
-                        t := l.new(nodeImmediateText)
-                        i := len(st.node.children)-1
-                        st.node.children[i].end = l.pos
-                        st.node.children = append(st.node.children, t)
-                        break state_loop */
-
                 case l.rune == '$':
                         st = l.push(nodeCall, l.stateDollar, 0)
                         st.node.pos-- // for the '$'
@@ -843,65 +821,22 @@ state_loop:
                         lineno, colno := l.caculateLocationLineColumn(st.node.loc())
                         fmt.Fprintf(os.Stderr, "%v:%v:%v: stateRuleTextLine: %v\n", l.scope, lineno, colno, st.node.str()) //*/
 
-                        st = l.pop() // pop out the node
-
+                        st = l.pop() // pop out the prerequisites node
                         switch l.rune {
-                        case ';':
-                                st.node.end = l.backwardNonSpace(l.pos-1)
-                                st = l.push(nodeRecipe, l.stateInlineRecipe, 0)
-                                //st.node.pos-- // for the ';'
                         case '#':
                                 st = l.push(nodeComment, l.stateComment, 0)
                                 st.node.pos-- // for the '#'
+                        case ';':
+                                st.node.end = l.backwardNonSpace(st.node.pos, l.pos-1)
+                                recipes := l.push(nodeRecipes, l.stateTabbedRecipes, 0).node
+                                recipes.pos-- // includes ';'
+
+                                l.pos = l.forwardNonSpaceInline(l.pos)
+                                l.push(nodeRecipe, l.stateRecipe, 0)
                         case '\n':
                                 if p := l.peek(); p == '\t' || p == '#' {
                                         st = l.push(nodeRecipes, l.stateTabbedRecipes, 0)
                                 }
-                        }
-                        break state_loop
-
-                default: l.escapeTextLine(l.top().node)
-                }
-        }
-}
-
-func (l *lex) stateInlineRecipe() {
-        st := l.top()
-state_loop:
-        for l.get() {
-                if st.code == 0 && !unicode.IsSpace(l.rune) { // skip spaces after ';'
-                        st.node.pos, st.code = l.pos-1, 1
-                }
-
-                switch {
-                case l.rune == '$':
-                        st = l.push(nodeCall, l.stateDollar, 0)
-                        st.node.pos-- // for the '$'
-                        break state_loop
-                case l.rune == '\n':
-                        if p := l.peek(); p == '\t' || p == '#' {
-                                st = l.push(nodeRecipes, l.stateTabbedRecipes, 0)
-                                break state_loop                                
-                        }
-                        fallthrough
-                case l.rune == rune(0): // end of string
-                        a := st.node
-                        a.end = l.pos
-                        if l.rune != rune(0) {
-                                a.end-- // exclude the '\n' or '#'
-                        }
-
-                        /*
-                        lineno, colno := l.caculateLocationLineColumn(st.node.loc())
-                        fmt.Fprintf(os.Stderr, "%v:%v:%v: stateInlineRecipe: %v\n", l.scope, lineno, colno, st.node.str()) //*/
-
-                        st = l.pop() // pop out the node
-                        st = l.top() // the rule node
-                        st.node.children = append(st.node.children, a)
-
-                        if l.peek() == '#' {
-                                st = l.push(nodeComment, l.stateComment, 0)
-                                st.node.pos-- // for the '#'
                         }
                         break state_loop
 
@@ -926,17 +861,19 @@ func (l *lex) stateTabbedRecipes() { // tab-indented action of a rule
                         fmt.Fprintf(os.Stderr, "%v:%v:%v: stateTabbedRecipes: %v (%v, stack=%v)\n", l.scope, lineno, colno, st.node.str(), l.top().node.kind, len(l.stack)) //*/
 
                 default:
-                        a := st.node // the recipes node
-                        a.end = l.pos
+                        recipes := st.node // the recipes node
+                        recipes.end = l.pos
                         if l.rune == '\n' {
-                                a.end--
+                                recipes.end--
                         } else if l.rune != rune(0) {
                                 l.unget() // put back the non-space character following by a recipe
                         }
 
                         st = l.pop() // pop out the recipes
                         st = l.top() // the rule node
-                        st.node.children = append(st.node.children, a)
+                        st.node.children = append(st.node.children, recipes)
+
+                        //fmt.Printf("recipes: %v\n", recipes.str())
 
                         /*
                         lineno, colno := l.caculateLocationLineColumn(st.node.loc())
@@ -966,6 +903,8 @@ state_loop:
 
                         st = l.top()
                         st.node.children = append(st.node.children, recipe)
+
+                        //fmt.Printf("recipe: (%v) %v\n", st.node.kind, recipe.str())
 
                         /*
                         lineno, colno := l.caculateLocationLineColumn(a.loc())
@@ -1129,7 +1068,7 @@ state_loop:
                                 case '-': /* skip */
                                 case delm:
                                         script := st.node
-                                        script.end = l.backwardNonSpace(l.pos)
+                                        script.end = l.backwardNonSpace(script.pos, l.pos)
 
                                         l.rune, l.pos, st = delm, i+1, l.pop()
 
@@ -1701,13 +1640,8 @@ func (ctx *Context) processNode(n *node) (err error) {
                 r := ns.link(Split(ctx.nodeItems(n.children[0]).Expand(ctx))...)
                 r.prerequisites, r.node = Split(ctx.nodeItems(n.children[1]).Expand(ctx)), n
                 if 2 < len(n.children) {
-                        switch a := n.children[2]; a.kind {
-                        case nodeRecipes:
-                                for _, c := range n.children[2].children {
-                                        r.recipes = append(r.recipes, c)
-                                }
-                        case nodeRecipe:
-                                r.recipes = append(r.recipes, a)
+                        for _, c := range n.children[2].children {
+                                r.recipes = append(r.recipes, c)
                         }
                 }
 

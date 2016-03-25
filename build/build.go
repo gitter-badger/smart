@@ -768,7 +768,10 @@ func (c *defaultTargetChecker) check(ctx *Context, r *rule, m *match) bool {
 }
 
 func (c *checkRuleChecker) check(ctx *Context, r *rule, m *match) bool {
-        // TODO:
+        if c.checkRule != r {
+                errorf("diverged check rule")
+        }
+        
         return false
 }
 
