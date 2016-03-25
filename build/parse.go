@@ -866,14 +866,13 @@ func (l *lex) stateTabbedRecipes() { // tab-indented action of a rule
                         if l.rune == '\n' {
                                 recipes.end--
                         } else if l.rune != rune(0) {
+                                recipes.end--
                                 l.unget() // put back the non-space character following by a recipe
                         }
 
                         st = l.pop() // pop out the recipes
                         st = l.top() // the rule node
                         st.node.children = append(st.node.children, recipes)
-
-                        //fmt.Printf("recipes: %v\n", recipes.str())
 
                         /*
                         lineno, colno := l.caculateLocationLineColumn(st.node.loc())
