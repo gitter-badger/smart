@@ -95,6 +95,16 @@ foobar:!:
 `);     if err != nil { t.Errorf("parse error:", err) }
         if ctx == nil { t.Errorf("nil context") } else {
         }
+        {
+                os.Remove("foo.txt")
+                Update(ctx)
+                if fi, e := os.Stat("foo.txt"); fi == nil || e != nil { t.Errorf("TestBuildRuleTargetChecker: %v", e) }
+        }
+        {
+                os.Remove("foo.txt")
+                Update(ctx, "foo")
+                if fi, e := os.Stat("foo.txt"); fi == nil || e != nil { t.Errorf("TestBuildRuleTargetChecker: %v", e) }
+        }
 
         ctx, err = newTestContext("TestBuildRuleTargetChecker", `
 foo:!: foobar
@@ -105,4 +115,6 @@ foobar:!: ; @echo $@
 `);     if err != nil { t.Errorf("parse error:", err) }
         if ctx == nil { t.Errorf("nil context") } else {
         }
+
+        os.Remove("foo.txt")
 }

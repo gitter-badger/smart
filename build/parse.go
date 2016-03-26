@@ -86,16 +86,6 @@ type checker interface {
         check(ctx *Context, r *rule, m *match) bool
 }
 
-type defaultTargetChecker struct {
-}
-
-type phonyTargetChecker struct {
-}
-
-type checkRuleChecker struct {
-        checkRule *rule
-}
-
 type namespace interface {
         getNamespace(name string) namespace
         getDefineMap() map[string]*define

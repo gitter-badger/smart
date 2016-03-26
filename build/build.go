@@ -7,6 +7,7 @@ import (
         "bytes"
         "fmt"
         "io"
+        //"io/ioutil"
         "os"
         "os/exec"
         "path/filepath"
@@ -30,6 +31,18 @@ var (
                 { "mercurial", os.ModeDir, `^\.hg$` },
                 { "subversion", os.ModeDir, `^\.svn$` },
                 { "cvs", ^os.ModeType, `^CVS$` },
+        }
+
+        onRecipeExecutionFailure = func(err error, c *exec.Cmd) {
+                /*
+                if s, e := ioutil.ReadAll(c.Stderr); e != nil && 0 < len(s) {
+                        fmt.Printf(os.Stderr, "%s", string(s))
+                } else {
+                        fmt.Printf(os.Stderr, "fail to execute `%v'", c.Path)
+                } */
+                fmt.Fprintf(os.Stderr, "error: `%v` %v\n", c.Path, c.Args)
+                fmt.Fprintf(os.Stderr, "error: %v\n", err)
+                os.Exit(-1)
         }
 )
 
@@ -754,10 +767,14 @@ func matchFileName(fn string, rules []*FileMatchRule) *FileMatchRule {
         return nil
 }
 
+type phonyTargetChecker struct {
+}
 func (c *phonyTargetChecker) check(ctx *Context, r *rule, m *match) bool {
         return r.ns.isPhonyTarget(ctx, m.target)
 }
 
+type defaultTargetChecker struct {
+}
 func (c *defaultTargetChecker) check(ctx *Context, r *rule, m *match) bool {
         if fi, err := os.Stat(m.target); err != nil {
                 return true
@@ -767,12 +784,17 @@ func (c *defaultTargetChecker) check(ctx *Context, r *rule, m *match) bool {
         return false
 }
 
+type checkRuleChecker struct {
+        checkRule *rule
+}
 func (c *checkRuleChecker) check(ctx *Context, r *rule, m *match) bool {
         if c.checkRule != r {
                 errorf("diverged check rule")
         }
-        
-        return false
+
+        //cmd := exec.Command("sh", "-c", s)
+
+        return true
 }
 
 type match struct {
@@ -791,6 +813,19 @@ func (r *rule) match(target string) (m *match, matched bool) {
         return
 }
 
+func (r *rule) findPrevRule(m *match) (prev *rule) {
+        prev, _ = r.prev[m.target]
+        return
+}
+
+func (r *rule) check(ctx *Context, m *match) (needsUpdate bool) {
+        for !needsUpdate && r != nil {
+                needsUpdate = r.c.check(ctx, r, m) || needsUpdate
+                r = r.findPrevRule(m)
+        }
+        return needsUpdate
+}
+
 func (r *rule) updateAll(ctx *Context) bool {
         var num = 0
         for _, t := range r.targets {
@@ -801,13 +836,24 @@ func (r *rule) updateAll(ctx *Context) bool {
 }
 
 func (r *rule) update(ctx *Context, m *match) bool {
+        for {
+                if r.node.kind != nodeRuleChecker {
+                        break
+                }
+                if r = r.findPrevRule(m); r == nil {
+                        fmt.Fprintf(os.Stderr, "no rule to update '%v'\n", m.target)
+                        return false
+                }
+        }
+
         type MR struct { m *match; r *rule }
         var list, updatedPrerequisites []*MR
         for _, prerequisite := range r.prerequisites {
                 if m, r := r.ns.findMatchedRule(ctx, prerequisite); m != nil && r != nil {
                         list = append(list, &MR{ m, r })
                 } else {
-                        errorf("no rule for %s\n", prerequisite)
+                        fmt.Fprintf(os.Stderr, "no rule to update '%v'\n", prerequisite)
+                        return false
                 }
         }
 
@@ -818,27 +864,44 @@ func (r *rule) update(ctx *Context, m *match) bool {
         }
 
         // Check if we need to update the target
-        if len(updatedPrerequisites) == 0 && !r.c.check(ctx, r, m) {
+        if len(updatedPrerequisites) == 0 && !r.check(ctx, m) {
                 return false
         }
 
-        ns := ctx.g
+        ec := &ruleExecuteContext{
+                target: m.target, stem: m.stem,
+        }
 
-        // https://www.gnu.org/software/make/manual/html_node/Automatic-Variables.html#Automatic-Variables
-        //   $@ The file name of the target of the rule. If the target is an archive member, then ‘$@’ is the name of the archive file. In a pattern rule that has multiple targets (see Introduction to Pattern Rules), ‘$@’ is the name of whichever target caused the rule’s recipe to be run.
-        //   $% The target member name, when the target is an archive member. See Archives. For example, if the target is foo.a(bar.o) then ‘$%’ is bar.o and ‘$@’ is foo.a. ‘$%’ is empty when the target is not an archive member.
-        //   $< The name of the first prerequisite. If the target got its recipe from an implicit rule, this will be the first prerequisite added by the implicit rule (see Implicit Rules).
-        //   $? The names of all the prerequisites that are newer than the target, with spaces between them. For prerequisites which are archive members, only the named member is used (see Archives).
-        //   $^ The names of all the prerequisites, with spaces between them. For prerequisites which are archive members, only the named member is used (see Archives). A target has only one prerequisite on each other file it depends on, no matter how many times each file is listed as a prerequisite. So if you list a prerequisite more than once for a target, the value of $^ contains just one copy of the name. This list does not contain any of the order-only prerequisites; for those see the ‘$|’ variable, below.
-        //   $+ This is like ‘$^’, but prerequisites listed more than once are duplicated in the order they were listed in the makefile. This is primarily useful for use in linking commands where it is meaningful to repeat library file names in a particular order.
-        //   $| The names of all the order-only prerequisites, with spaces between them.
-        //   $* The stem with which an implicit rule matches (see How Patterns Match). If the target is dir/a.foo.b and the target pattern is a.%.b then the stem is dir/foo. The stem is useful for constructing names of related files.
-        //      In a static pattern rule, the stem is part of the file name that matched the ‘%’ in the target pattern.
-        //      In an explicit rule, there is no stem; so ‘$*’ cannot be determined in that way. Instead, if the target name ends with a recognized suffix (see Old-Fashioned Suffix Rules), ‘$*’ is set to the target name minus the suffix. For example, if the target name is ‘foo.c’, then ‘$*’ is set to ‘foo’, since ‘.c’ is a suffix. GNU make does this bizarre thing only for compatibility with other implementations of make. You should generally avoid using ‘$*’ except in implicit rules or static pattern rules.
-        //      If the target name in an explicit rule does not end with a recognized suffix, ‘$*’ is set to the empty string for that rule.
-        //      
-        //   $(@D) $(@F) $(*D) $(*F) $(%D) $(%F) $(<D) $(<F) $(^D) $(^F) $(+D) $(+F) $(?D) $(?F)
-        //   
+        for _, i := range list {
+                ec.prerequisites = append(ec.prerequisites, i.m.target)
+        }
+
+        return r.execute(ctx, ec)
+}
+
+type ruleExecuteContext struct {
+        target, stem string
+        prerequisites []string
+}
+
+// https://www.gnu.org/software/make/manual/html_node/Automatic-Variables.html#Automatic-Variables
+//   $@ The file name of the target of the rule. If the target is an archive member, then ‘$@’ is the name of the archive file. In a pattern rule that has multiple targets (see Introduction to Pattern Rules), ‘$@’ is the name of whichever target caused the rule’s recipe to be run.
+//   $% The target member name, when the target is an archive member. See Archives. For example, if the target is foo.a(bar.o) then ‘$%’ is bar.o and ‘$@’ is foo.a. ‘$%’ is empty when the target is not an archive member.
+//   $< The name of the first prerequisite. If the target got its recipe from an implicit rule, this will be the first prerequisite added by the implicit rule (see Implicit Rules).
+//   $? The names of all the prerequisites that are newer than the target, with spaces between them. For prerequisites which are archive members, only the named member is used (see Archives).
+//   $^ The names of all the prerequisites, with spaces between them. For prerequisites which are archive members, only the named member is used (see Archives). A target has only one prerequisite on each other file it depends on, no matter how many times each file is listed as a prerequisite. So if you list a prerequisite more than once for a target, the value of $^ contains just one copy of the name. This list does not contain any of the order-only prerequisites; for those see the ‘$|’ variable, below.
+//   $+ This is like ‘$^’, but prerequisites listed more than once are duplicated in the order they were listed in the makefile. This is primarily useful for use in linking commands where it is meaningful to repeat library file names in a particular order.
+//   $| The names of all the order-only prerequisites, with spaces between them.
+//   $* The stem with which an implicit rule matches (see How Patterns Match). If the target is dir/a.foo.b and the target pattern is a.%.b then the stem is dir/foo. The stem is useful for constructing names of related files.
+//      In a static pattern rule, the stem is part of the file name that matched the ‘%’ in the target pattern.
+//      In an explicit rule, there is no stem; so ‘$*’ cannot be determined in that way. Instead, if the target name ends with a recognized suffix (see Old-Fashioned Suffix Rules), ‘$*’ is set to the target name minus the suffix. For example, if the target name is ‘foo.c’, then ‘$*’ is set to ‘foo’, since ‘.c’ is a suffix. GNU make does this bizarre thing only for compatibility with other implementations of make. You should generally avoid using ‘$*’ except in implicit rules or static pattern rules.
+//      If the target name in an explicit rule does not end with a recognized suffix, ‘$*’ is set to the empty string for that rule.
+//      
+//   $(@D) $(@F) $(*D) $(*F) $(%D) $(%F) $(<D) $(<F) $(^D) $(^F) $(+D) $(+F) $(?D) $(?F)
+//   
+func (r *rule) execute(ctx *Context, ec *ruleExecuteContext) bool {
+        ns := ctx.g
+        
         saveIndex, _ := ns.saveDefines(
                 "@", "@D", "@F",
                 "%", "%D", "%F",
@@ -850,61 +913,73 @@ func (r *rule) update(ctx *Context, m *match) bool {
                 "*", "*D", "*F")
         defer ns.restoreDefines(saveIndex)
 
-        ns.Set(ctx, []string{ "@" },  stringitem(m.target))
-        ns.Set(ctx, []string{ "@D" }, stringitem(filepath.Dir(m.target)))
-        ns.Set(ctx, []string{ "*" },  stringitem(m.stem))
-        ns.Set(ctx, []string{ "*D" }, stringitem(filepath.Dir(m.stem)))
+        ns.Set(ctx, []string{ "@" },  stringitem(ec.target))
+        ns.Set(ctx, []string{ "@D" }, stringitem(filepath.Dir(ec.target)))
+        ns.Set(ctx, []string{ "@F" }, stringitem(filepath.Base(ec.target)))
+        ns.Set(ctx, []string{ "*" },  stringitem(ec.stem))
+        ns.Set(ctx, []string{ "*D" }, stringitem(filepath.Dir(ec.stem)))
+        ns.Set(ctx, []string{ "*F" }, stringitem(filepath.Base(ec.stem)))
 
-        var l, ld []Item
-        for n, i := range list {
+        var l, ld, lf []Item
+        for n, prerequisite := range ec.prerequisites {
+                d, f := filepath.Dir(prerequisite), filepath.Base(prerequisite)
                 if n == 0 {
-                        ns.Set(ctx, []string{ "<" },  stringitem(i.m.target))
-                        ns.Set(ctx, []string{ "<D" }, stringitem(filepath.Dir(i.m.target)))
+                        ns.Set(ctx, []string{ "<" },  stringitem(prerequisite))
+                        ns.Set(ctx, []string{ "<D" }, stringitem(d))
+                        ns.Set(ctx, []string{ "<F" }, stringitem(f))
                 }
-                ld = append(ld, stringitem(filepath.Dir(i.m.target)))
-                l = append(l, stringitem(i.m.target))
+                l = append(l, stringitem(prerequisite))
+                ld = append(ld, stringitem(d))
+                lf = append(lf, stringitem(f))
         }
         ns.Set(ctx, []string{ "^" }, l...)
         ns.Set(ctx, []string{ "^D" }, ld...)
+        ns.Set(ctx, []string{ "^F" }, lf...)
 
-        job := new(runActions)
+        job := new(executeRecipes)
         for _, action := range r.recipes {
                 var s string
                 switch a := action.(type) {
                 case string: s = a
                 case *node: s = a.Expand(ctx)
                 }
-                job.actions = append(job.actions, s)
+                job.recipes = append(job.recipes, s)
         }
-        if 1 < *flagJ {
+        if *flagJ <= 1 {
                 job.Action()
         } else {
                 ctx.w.Do(job)
         }
-        return false
+        return true
 }
 
-type runActions struct {
-        actions []string
+type executeRecipes struct {
+        recipes []string
 }
 
-func (job *runActions) Action() worker.Result {
-        for _, s := range job.actions {
-                silent := false
+func (job *executeRecipes) Action() worker.Result {
+        for _, s := range job.recipes {
+                echo := true
                 if s[0] == '@' {
-                        s, silent = s[1:], true
+                        s, echo = s[1:], false
                 }
-
-                cmd := exec.Command("sh", "-c", s)
-                if !silent {
-                        cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
-                        fmt.Printf("%v\n", s)
-                }
-
-                if err := cmd.Run(); err != nil {
-                        errorf("%v", err)
+                if cmd := exec.Command("sh", "-c", s); cmd != nil {
+                        if echo {
+                                fmt.Printf("%v\n", s)
+                                cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
+                        }
+                        if err := cmd.Run(); err != nil {
+                                if onRecipeExecutionFailure != nil {
+                                        onRecipeExecutionFailure(err, cmd)
+                                } else {
+                                        fmt.Fprintf(os.Stderr, "error: %v\n", cmd.Args)
+                                        errorf("%v", err)
+                                }
+                        } else {
+                                //fmt.Printf("rule: %v\n", s)
+                        }
                 } else {
-                        //fmt.Printf("rule: %v\n", s)
+                        errorf("nil command `sh`")
                 }
         }
         return nil
