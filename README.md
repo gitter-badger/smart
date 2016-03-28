@@ -1,5 +1,5 @@
 # Smart (Drafting)
-
+01234567890123456789012345678901234567890123456789012345678901234567890123456789
 **Smart** is a [Semi-Functional Scripting Language]() designed for performing hierachical tasks easily.
 It's written in [Go](http://golang.org) programming language.
 

@@ -792,7 +792,18 @@ func (c *checkRuleChecker) check(ctx *Context, r *rule, m *match) bool {
                 errorf("diverged check rule")
         }
 
-        //cmd := exec.Command("sh", "-c", s)
+        ec := &ruleExecuteContext{
+                target: m.target, stem: m.stem,
+        }
+
+        for _, i := range c.checkRule.prerequisites {
+                ec.prerequisites = append(ec.prerequisites, i)
+        }
+
+        if e := c.checkRule.execute(ctx, ec); e != nil {
+                fmt.Printf("%v\n", e)
+                return false
+        }
 
         return true
 }
@@ -876,7 +887,7 @@ func (r *rule) update(ctx *Context, m *match) bool {
                 ec.prerequisites = append(ec.prerequisites, i.m.target)
         }
 
-        return r.execute(ctx, ec)
+        return r.execute(ctx, ec) == nil
 }
 
 type ruleExecuteContext struct {
@@ -899,7 +910,7 @@ type ruleExecuteContext struct {
 //      
 //   $(@D) $(@F) $(*D) $(*F) $(%D) $(%F) $(<D) $(<F) $(^D) $(^F) $(+D) $(+F) $(?D) $(?F)
 //   
-func (r *rule) execute(ctx *Context, ec *ruleExecuteContext) bool {
+func (r *rule) execute(ctx *Context, ec *ruleExecuteContext) error {
         ns := ctx.g
         
         saveIndex, _ := ns.saveDefines(
@@ -945,16 +956,19 @@ func (r *rule) execute(ctx *Context, ec *ruleExecuteContext) bool {
                 }
                 job.recipes = append(job.recipes, s)
         }
+        /*
         if *flagJ <= 1 {
                 job.Action()
         } else {
                 ctx.w.Do(job)
-        }
-        return true
+        } */
+        job.Action()
+        return job.e
 }
 
 type executeRecipes struct {
         recipes []string
+        e error
 }
 
 func (job *executeRecipes) Action() worker.Result {
@@ -968,12 +982,12 @@ func (job *executeRecipes) Action() worker.Result {
                                 fmt.Printf("%v\n", s)
                                 cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
                         }
-                        if err := cmd.Run(); err != nil {
+                        if job.e = cmd.Run(); job.e != nil {
                                 if onRecipeExecutionFailure != nil {
-                                        onRecipeExecutionFailure(err, cmd)
+                                        onRecipeExecutionFailure(job.e, cmd)
                                 } else {
                                         fmt.Fprintf(os.Stderr, "error: %v\n", cmd.Args)
-                                        errorf("%v", err)
+                                        errorf("%v", job.e)
                                 }
                         } else {
                                 //fmt.Printf("rule: %v\n", s)
@@ -1032,7 +1046,7 @@ func UpdateModules(ctx *Context, cmds ...string) {
 //      smart foobar
 // 
 func Update(ctx *Context, cmds ...string) {
-        ctx.w.StartN(*flagJ); defer ctx.w.StopN(*flagJ)
+        ctx.w.SpawnN(*flagJ); defer ctx.w.KillAll()
 
         if n := len(cmds); n == 0 {
                 if ctx.g.goal == nil {
