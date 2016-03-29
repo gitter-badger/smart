@@ -768,46 +768,6 @@ func matchFileName(fn string, rules []*FileMatchRule) *FileMatchRule {
         return nil
 }
 
-type phonyTargetUpdater struct {
-}
-func (c *phonyTargetUpdater) check(ctx *Context, r *rule, m *match) bool {
-        return r.ns.isPhonyTarget(ctx, m.target)
-}
-func (c *phonyTargetUpdater) update(ctx *Context, r *rule, m *match) bool {
-        //fmt.Printf("phonyTargetUpdater.update: %v\n", m.target)
-
-        err, matchedPrerequisites, _ := r.updatePrerequisites(ctx)
-        if err != nil {
-                fmt.Fprintf(os.Stderr, "%v\n", err)
-                //os.Exit(-1)
-                return false
-        }
-
-        needsExecute := true
-        checkRules := r.ns.getRules(nodeRuleChecker, m.target)
-        if 0 < len(checkRules) {
-                for _, cr := range checkRules {
-                        if needsExecute = cr.c.check(ctx, cr, m); needsExecute {
-                                break
-                        }
-                }
-        }
-
-        if needsExecute {
-                ec := &ruleExecuteContext{
-                        target: m.target, stem: m.stem,
-                }
-
-                for _, mr := range matchedPrerequisites {
-                        ec.prerequisites = append(ec.prerequisites, mr.target)
-                }
-
-                //fmt.Printf("phonyTargetUpdater.update: %v\n", m.target)
-                return r.execute(ctx, ec) == nil
-        }
-        return false
-}
-
 type checkRuleUpdater struct {
         checkRule *rule
 }
@@ -840,6 +800,40 @@ func (c *checkRuleUpdater) update(ctx *Context, r *rule, m *match) bool {
         return false
 }
 
+type phonyTargetUpdater struct {
+}
+func (c *phonyTargetUpdater) check(ctx *Context, r *rule, m *match) bool {
+        return r.ns.isPhonyTarget(ctx, m.target)
+}
+func (c *phonyTargetUpdater) update(ctx *Context, r *rule, m *match) bool {
+        //fmt.Printf("phonyTargetUpdater.update: %v\n", m.target)
+
+        err, matchedPrerequisites, _ := r.updatePrerequisites(ctx)
+        if err != nil {
+                fmt.Fprintf(os.Stderr, "%v\n", err)
+                //os.Exit(-1)
+                return false
+        }
+
+        needsExecute := true
+        checkRules := r.ns.getRules(nodeRuleChecker, m.target)
+        if 0 < len(checkRules) {
+                for _, cr := range checkRules {
+                        if needsExecute = cr.c.check(ctx, cr, m); needsExecute {
+                                break
+                        }
+                }
+        }
+
+        if needsExecute {
+                ec := r.newExecuteContext(ctx, m, matchedPrerequisites)
+
+                //fmt.Printf("phonyTargetUpdater.update: %v\n", m.target)
+                return r.execute(ctx, ec) == nil
+        }
+        return false
+}
+
 type defaultTargetUpdater struct {
 }
 func (c *defaultTargetUpdater) check(ctx *Context, r *rule, m *match) bool {
@@ -865,14 +859,8 @@ func (c *defaultTargetUpdater) update(ctx *Context, r *rule, m *match) bool {
                 return false
         }
 
-        ec := &ruleExecuteContext{
-                target: m.target, stem: m.stem,
-        }
-
-        for _, mr := range matchedPrerequisites {
-                ec.prerequisites = append(ec.prerequisites, mr.target)
-        }
-
+        ec := r.newExecuteContext(ctx, m, matchedPrerequisites)
+        
         //fmt.Printf("execute: %v\n", m.target)
         return r.execute(ctx, ec) == nil
 }
@@ -939,6 +927,16 @@ func (r *rule) updatePrerequisites(ctx *Context) (err error, matchedPrerequisite
                 }
         }
         return
+}
+
+func (r *rule) newExecuteContext(ctx *Context, m *match, matchedPrerequisites []*matchrule) *ruleExecuteContext {
+        ec := &ruleExecuteContext{ target: m.target, stem: m.stem }
+
+        for _, mr := range matchedPrerequisites {
+                ec.prerequisites = append(ec.prerequisites, mr.target)
+        }
+
+        return ec
 }
 
 type ruleExecuteContext struct {
