@@ -1689,7 +1689,7 @@ bar:
                         if s, x := r.prerequisites[1], "bar"; s != x { t.Errorf("prerequisites[0] %v != %v", s, x) }
                 }
                 if n, x := len(r.recipes), 0; n != x { t.Errorf("recipes %d != %d", n, x) }
-                if c, ok := r.c.(*defaultTargetChecker); !ok { t.Errorf("wrong type of checker %v", c) }
+                if c, ok := r.c.(*defaultTargetUpdater); !ok { t.Errorf("wrong type of checker %v", c) }
         }
         if r, ok := ctx.g.rules["foo"]; !ok && r == nil { t.Errorf("'foo' not defined") } else {
                 if n, x := len(r.node.children), 3; n != x { t.Errorf("children %d != %d", n, x) } else {
@@ -1712,7 +1712,7 @@ bar:
                                 if s, x := c.Expand(ctx), "@touch .txt "; s != x { t.Errorf("recipes[0] %v != %v", s, x) }
                         }
                 }
-                if c, ok := r.c.(*defaultTargetChecker); !ok { t.Errorf("wrong type of checker %v", c) }
+                if c, ok := r.c.(*defaultTargetUpdater); !ok { t.Errorf("wrong type of checker %v", c) }
         }
         if r, ok := ctx.g.rules["bar"]; !ok && r == nil { t.Errorf("'bar' not defined") } else {
                 if n, x := len(r.node.children), 3; n != x { t.Errorf("children %d != %d", n, x) } else {
@@ -1738,13 +1738,13 @@ bar:
                         }
                         ctx.Set("@", stringitem(""))
                 }
-                if c, ok := r.c.(*defaultTargetChecker); !ok { t.Errorf("wrong type of checker %v", c) }
+                if c, ok := r.c.(*defaultTargetUpdater); !ok { t.Errorf("wrong type of checker %v", c) }
         }
 
         if v, s := info.String(), fmt.Sprintf(``); v != s { t.Errorf("`%s` != `%s`", v, s) }
 }
 
-func TestToolsetRuleCheckers(t *testing.T) {
+func TestToolsetRuleUpdaters(t *testing.T) {
         if wd, e := os.Getwd(); e != nil || workdir != wd { t.Errorf("%v != %v (%v)", workdir, wd, e) }
 
         info, f := new(bytes.Buffer), builtinInfoFunc; defer func(){ builtinInfoFunc = f }()
@@ -1781,7 +1781,7 @@ foobar: foo bar
                         }
                         ctx.Set("@", stringitem(""))
                 }
-                if c, ok := r.c.(*checkRuleChecker); !ok { t.Errorf("wrong type %v", c) } else {
+                if c, ok := r.c.(*checkRuleUpdater); !ok { t.Errorf("wrong type %v", c) } else {
                         if c.checkRule == nil { t.Errorf("nil check rule") } else {
                                 if c.checkRule != r { t.Errorf("diverged check rule") }
                                 if c.checkRule.c != c { t.Errorf("diverged check rule") }
@@ -1803,7 +1803,7 @@ foobar: foo bar
                                         }
                                         ctx.Set("@", stringitem(""))
                                 }
-                                if c, ok := r.c.(*phonyTargetChecker); !ok { t.Errorf("wrong checker %v", c) } else {
+                                if c, ok := r.c.(*phonyTargetUpdater); !ok { t.Errorf("wrong checker %v", c) } else {
                                 }
                         }
                 }
@@ -1824,7 +1824,7 @@ foobar: foo bar
                         }
                         ctx.Set("@", stringitem(""))
                 }
-                if c, ok := r.c.(*phonyTargetChecker); !ok { t.Errorf("wrong type %v", c) } else {
+                if c, ok := r.c.(*phonyTargetUpdater); !ok { t.Errorf("wrong type %v", c) } else {
                         if n, x := len(r.prev), 1; n != x { t.Errorf("prev: %d != %d", n, x) }
                         if r, ok := r.prev["bar"]; !ok && r == nil { t.Errorf("prev[foo] not defined") } else {
                                 if k, x := r.node.kind, nodeRuleChecker; k != x { t.Errorf("%v != %v", k, x) }
@@ -1842,7 +1842,7 @@ foobar: foo bar
                                         }
                                         ctx.Set("@", stringitem(""))
                                 }
-                                if c, ok := r.c.(*checkRuleChecker); !ok { t.Errorf("wrong checker %v", c) } else {
+                                if c, ok := r.c.(*checkRuleUpdater); !ok { t.Errorf("wrong checker %v", c) } else {
                                         if c.checkRule == nil { t.Errorf("nil check rule") } else {
                                                 if c.checkRule != r { t.Errorf("diverged check rule") }
                                                 if c.checkRule.c != c { t.Errorf("diverged check rule") }
@@ -1872,7 +1872,7 @@ foobar: foo bar
                         }
                         ctx.Set("@", stringitem(""))
                 }
-                if c, ok := r.c.(*defaultTargetChecker); !ok { t.Errorf("wrong type %v", c) }
+                if c, ok := r.c.(*defaultTargetUpdater); !ok { t.Errorf("wrong type %v", c) }
         }
 
         if v, s := info.String(), fmt.Sprintf(``); v != s { t.Errorf("`%s` != `%s`", v, s) }

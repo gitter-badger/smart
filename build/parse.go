@@ -78,12 +78,13 @@ type rule struct {
         targets, prerequisites []string // expanded targets
         recipes []interface{} // *node, string
         ns namespace
-        c checker
+        c checkupdater
         node *node
 }
 
-type checker interface {
+type checkupdater interface {
         check(ctx *Context, r *rule, m *match) bool
+        update(ctx *Context, r *rule, m *match) bool
 }
 
 type namespace interface {
@@ -95,8 +96,9 @@ type namespace interface {
         saveDefines(names ...string) (saveIndex int, m map[string]*define)
         restoreDefines(saveIndex int)
         Set(ctx *Context, ids []string, items ...Item)
-        getGoalRule() (r *rule)
-        setGoalRule(r *rule)
+        getRules(kind nodeType, target string) (rules []*rule)
+        getGoalRule() (target string)
+        setGoalRule(target string)
         link(targets ...string) (r *rule)
 }
 
@@ -104,10 +106,19 @@ type namespaceEmbed struct {
         defines map[string]*define
         saveList []map[string]*define // saveDefines, restoreDefines
         rules map[string]*rule
-        goal *rule
+        goal string
 }
-func (ns *namespaceEmbed) getGoalRule() (r *rule) { return ns.goal }
-func (ns *namespaceEmbed) setGoalRule(r *rule) { ns.goal = r }
+func (ns *namespaceEmbed) getGoalRule() string { return ns.goal }
+func (ns *namespaceEmbed) setGoalRule(target string) { ns.goal = target }
+func (ns *namespaceEmbed) getRules(kind nodeType, target string) (rules []*rule) {
+        for ru, ok := ns.rules[target]; ok && ru != nil; {
+                if ru.node.kind == kind {
+                        rules = append(rules, ru)
+                }
+                ru, ok = ru.prev[target]
+        }
+        return
+}
 func (ns *namespaceEmbed) link(targets ...string) (r *rule) {
         r = &rule{ ns:ns, targets:targets }
         for _, target := range targets {
@@ -121,6 +132,7 @@ func (ns *namespaceEmbed) link(targets ...string) (r *rule) {
         }
         return
 }
+
 func (ns *namespaceEmbed) saveDefines(names ...string) (saveIndex int, m map[string]*define) {
         var ok bool
         m = make(map[string]*define, len(names))
@@ -132,7 +144,6 @@ func (ns *namespaceEmbed) saveDefines(names ...string) (saveIndex int, m map[str
         ns.saveList = append(ns.saveList, m)
         return
 }
-
 func (ns *namespaceEmbed) restoreDefines(saveIndex int) {
         m := ns.saveList[saveIndex]
         ns.saveList = ns.saveList[0:saveIndex]
@@ -202,7 +213,9 @@ func (ns *namespaceEmbed) findMatchedRule(ctx *Context, target string) (m *match
 }
 
 func (ns *namespaceEmbed) isPhonyTarget(ctx *Context, target string) bool {
-        /// TODO: checking phony target
+        if rr, ok := ns.rules[target]; ok && rr != nil {
+                return rr.node.kind == nodeRulePhony
+        }
         return false
 }
 
@@ -1635,15 +1648,17 @@ func (ctx *Context) processNode(n *node) (err error) {
                 }
 
                 // Set goal rule if nil
-                if r.ns.getGoalRule() == nil {
-                        r.ns.setGoalRule(r)
+                if 0 < len(r.targets) {
+                        if g := r.ns.getGoalRule(); g == "" {
+                                r.ns.setGoalRule(r.targets[0])
+                        }
                 }
 
                 switch n.kind {
-                case nodeRulePhony:             r.c = &phonyTargetChecker{}
-                case nodeRuleDoubleColoned:     r.c = &defaultTargetChecker{}
-                case nodeRuleSingleColoned:     r.c = &defaultTargetChecker{}
-                case nodeRuleChecker:           r.c = &checkRuleChecker{ r }
+                case nodeRulePhony:             r.c = &phonyTargetUpdater{}
+                case nodeRuleChecker:           r.c = &checkRuleUpdater{ r }
+                case nodeRuleDoubleColoned:     r.c = &defaultTargetUpdater{}
+                case nodeRuleSingleColoned:     r.c = &defaultTargetUpdater{}
                 default: errorf("unexpected rule type: %v", n.kind)
                 }
 

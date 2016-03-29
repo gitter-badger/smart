@@ -767,27 +767,43 @@ func matchFileName(fn string, rules []*FileMatchRule) *FileMatchRule {
         return nil
 }
 
-type phonyTargetChecker struct {
+type phonyTargetUpdater struct {
 }
-func (c *phonyTargetChecker) check(ctx *Context, r *rule, m *match) bool {
+func (c *phonyTargetUpdater) check(ctx *Context, r *rule, m *match) bool {
         return r.ns.isPhonyTarget(ctx, m.target)
 }
+func (c *phonyTargetUpdater) update(ctx *Context, r *rule, m *match) bool {
+        //fmt.Printf("phonyTargetUpdater.update: %v\n", m.target)
 
-type defaultTargetChecker struct {
-}
-func (c *defaultTargetChecker) check(ctx *Context, r *rule, m *match) bool {
-        if fi, err := os.Stat(m.target); err != nil {
-                return true
-        } else {
-                if fi == nil {}
+        needsExecute := true
+        checkRules := r.ns.getRules(nodeRuleChecker, m.target)
+        if 0 < len(checkRules) {
+                for _, cr := range checkRules {
+                        if needsExecute = cr.c.check(ctx, cr, m); needsExecute {
+                                break
+                        }
+                }
+        }
+
+        if needsExecute {
+                ec := &ruleExecuteContext{
+                        target: m.target, stem: m.stem,
+                }
+
+                //for _, i := range matchedPrerequisites {
+                //        ec.prerequisites = append(ec.prerequisites, i.m.target)
+                //}
+
+                //fmt.Printf("phonyTargetUpdater.update: %v\n", m.target)
+                return r.execute(ctx, ec) == nil
         }
         return false
 }
 
-type checkRuleChecker struct {
+type checkRuleUpdater struct {
         checkRule *rule
 }
-func (c *checkRuleChecker) check(ctx *Context, r *rule, m *match) bool {
+func (c *checkRuleUpdater) check(ctx *Context, r *rule, m *match) bool {
         if c.checkRule != r {
                 errorf("diverged check rule")
         }
@@ -800,12 +816,67 @@ func (c *checkRuleChecker) check(ctx *Context, r *rule, m *match) bool {
                 ec.prerequisites = append(ec.prerequisites, i)
         }
 
+        //fmt.Printf("checkRuleUpdater.check: %v\n", m.target)
         if e := c.checkRule.execute(ctx, ec); e != nil {
-                fmt.Printf("%v\n", e)
+                //fmt.Printf("checkRuleUpdater.check: %v\n", e)
+                return true
+        }
+
+        return false
+}
+func (c *checkRuleUpdater) update(ctx *Context, r *rule, m *match) bool {
+        //fmt.Printf("checkRuleUpdater.update: %v\n", m.target)
+        if prev, ok := r.prev[m.target]; ok {
+                return prev.update(ctx, m)
+        }
+        return false
+}
+
+type defaultTargetUpdater struct {
+}
+func (c *defaultTargetUpdater) check(ctx *Context, r *rule, m *match) bool {
+        if fi, err := os.Stat(m.target); err != nil {
+                return true
+        } else {
+                if fi == nil {}
+        }
+        return false
+}
+func (c *defaultTargetUpdater) update(ctx *Context, r *rule, m *match) bool {
+        //fmt.Printf("defaultTargetUpdater.update: %v\n", m.target)
+        
+        type MR struct { m *match; r *rule }
+        var matchedPrerequisites, updatedPrerequisites []*MR
+        for _, prerequisite := range r.prerequisites {
+                if m, r := r.ns.findMatchedRule(ctx, prerequisite); m != nil && r != nil {
+                        matchedPrerequisites = append(matchedPrerequisites, &MR{ m, r })
+                } else {
+                        fmt.Fprintf(os.Stderr, "no rule to update '%v'\n", prerequisite)
+                        //os.Exit(-1)
+                        return false
+                }
+        }
+        for _, i := range matchedPrerequisites {
+                if ok := i.r.update(ctx, i.m); ok {
+                        updatedPrerequisites = append(updatedPrerequisites, i)
+                }
+        }
+
+        // Check if we need to update the target
+        if len(updatedPrerequisites) == 0 && !r.check(ctx, m) {
                 return false
         }
 
-        return true
+        ec := &ruleExecuteContext{
+                target: m.target, stem: m.stem,
+        }
+
+        for _, i := range matchedPrerequisites {
+                ec.prerequisites = append(ec.prerequisites, i.m.target)
+        }
+
+        //fmt.Printf("execute: %v\n", m.target)
+        return r.execute(ctx, ec) == nil
 }
 
 type match struct {
@@ -837,6 +908,10 @@ func (r *rule) check(ctx *Context, m *match) (needsUpdate bool) {
         return needsUpdate
 }
 
+func (r *rule) update(ctx *Context, m *match) bool {
+        return r.c.update(ctx, r, m)
+}
+
 func (r *rule) updateAll(ctx *Context) bool {
         var num = 0
         for _, t := range r.targets {
@@ -844,50 +919,6 @@ func (r *rule) updateAll(ctx *Context) bool {
                 if r.update(ctx, m) { num++ }
         }
         return 0 < num
-}
-
-func (r *rule) update(ctx *Context, m *match) bool {
-        for {
-                if r.node.kind != nodeRuleChecker {
-                        break
-                }
-                if r = r.findPrevRule(m); r == nil {
-                        fmt.Fprintf(os.Stderr, "no rule to update '%v'\n", m.target)
-                        return false
-                }
-        }
-
-        type MR struct { m *match; r *rule }
-        var list, updatedPrerequisites []*MR
-        for _, prerequisite := range r.prerequisites {
-                if m, r := r.ns.findMatchedRule(ctx, prerequisite); m != nil && r != nil {
-                        list = append(list, &MR{ m, r })
-                } else {
-                        fmt.Fprintf(os.Stderr, "no rule to update '%v'\n", prerequisite)
-                        return false
-                }
-        }
-
-        for _, i := range list {
-                if ok := i.r.update(ctx, i.m); ok {
-                        updatedPrerequisites = append(updatedPrerequisites, i)
-                }
-        }
-
-        // Check if we need to update the target
-        if len(updatedPrerequisites) == 0 && !r.check(ctx, m) {
-                return false
-        }
-
-        ec := &ruleExecuteContext{
-                target: m.target, stem: m.stem,
-        }
-
-        for _, i := range list {
-                ec.prerequisites = append(ec.prerequisites, i.m.target)
-        }
-
-        return r.execute(ctx, ec) == nil
 }
 
 type ruleExecuteContext struct {
@@ -963,14 +994,13 @@ func (r *rule) execute(ctx *Context, ec *ruleExecuteContext) error {
                 ctx.w.Do(job)
         } */
         job.Action()
-        return job.e
+        return job.error
 }
 
 type executeRecipes struct {
         recipes []string
-        e error
+        error error
 }
-
 func (job *executeRecipes) Action() worker.Result {
         for _, s := range job.recipes {
                 echo := true
@@ -982,13 +1012,8 @@ func (job *executeRecipes) Action() worker.Result {
                                 fmt.Printf("%v\n", s)
                                 cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
                         }
-                        if job.e = cmd.Run(); job.e != nil {
-                                if onRecipeExecutionFailure != nil {
-                                        onRecipeExecutionFailure(job.e, cmd)
-                                } else {
-                                        fmt.Fprintf(os.Stderr, "error: %v\n", cmd.Args)
-                                        errorf("%v", job.e)
-                                }
+                        if job.error = cmd.Run(); job.error != nil {
+                                break
                         } else {
                                 //fmt.Printf("rule: %v\n", s)
                         }
@@ -1049,10 +1074,10 @@ func Update(ctx *Context, cmds ...string) {
         ctx.w.SpawnN(*flagJ); defer ctx.w.KillAll()
 
         if n := len(cmds); n == 0 {
-                if ctx.g.goal == nil {
+                if ctx.g.goal == "" {
                         UpdateModules(ctx, cmds...)
-                } else {
-                        ctx.g.goal.updateAll(ctx)
+                } else if g, ok := ctx.g.rules[ctx.g.goal]; ok && g != nil {
+                        g.updateAll(ctx)
                 }
                 return
         }
