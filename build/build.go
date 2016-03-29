@@ -776,6 +776,13 @@ func (c *phonyTargetUpdater) check(ctx *Context, r *rule, m *match) bool {
 func (c *phonyTargetUpdater) update(ctx *Context, r *rule, m *match) bool {
         //fmt.Printf("phonyTargetUpdater.update: %v\n", m.target)
 
+        err, matchedPrerequisites, _ := r.updatePrerequisites(ctx)
+        if err != nil {
+                fmt.Fprintf(os.Stderr, "%v\n", err)
+                //os.Exit(-1)
+                return false
+        }
+
         needsExecute := true
         checkRules := r.ns.getRules(nodeRuleChecker, m.target)
         if 0 < len(checkRules) {
@@ -791,9 +798,9 @@ func (c *phonyTargetUpdater) update(ctx *Context, r *rule, m *match) bool {
                         target: m.target, stem: m.stem,
                 }
 
-                //for _, i := range matchedPrerequisites {
-                //        ec.prerequisites = append(ec.prerequisites, i.m.target)
-                //}
+                for _, mr := range matchedPrerequisites {
+                        ec.prerequisites = append(ec.prerequisites, mr.target)
+                }
 
                 //fmt.Printf("phonyTargetUpdater.update: %v\n", m.target)
                 return r.execute(ctx, ec) == nil
