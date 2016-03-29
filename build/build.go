@@ -5,6 +5,7 @@ package smart
 
 import (
         "bytes"
+        "errors"
         "fmt"
         "io"
         //"io/ioutil"
@@ -845,23 +846,13 @@ func (c *defaultTargetUpdater) check(ctx *Context, r *rule, m *match) bool {
 func (c *defaultTargetUpdater) update(ctx *Context, r *rule, m *match) bool {
         //fmt.Printf("defaultTargetUpdater.update: %v\n", m.target)
         
-        type MR struct { m *match; r *rule }
-        var matchedPrerequisites, updatedPrerequisites []*MR
-        for _, prerequisite := range r.prerequisites {
-                if m, r := r.ns.findMatchedRule(ctx, prerequisite); m != nil && r != nil {
-                        matchedPrerequisites = append(matchedPrerequisites, &MR{ m, r })
-                } else {
-                        fmt.Fprintf(os.Stderr, "no rule to update '%v'\n", prerequisite)
-                        //os.Exit(-1)
-                        return false
-                }
+        err, matchedPrerequisites, updatedPrerequisites := r.updatePrerequisites(ctx)
+        if err != nil {
+                fmt.Fprintf(os.Stderr, "%v\n", err)
+                //os.Exit(-1)
+                return false
         }
-        for _, i := range matchedPrerequisites {
-                if ok := i.r.update(ctx, i.m); ok {
-                        updatedPrerequisites = append(updatedPrerequisites, i)
-                }
-        }
-
+        
         // Check if we need to update the target
         if len(updatedPrerequisites) == 0 && !r.check(ctx, m) {
                 return false
@@ -871,8 +862,8 @@ func (c *defaultTargetUpdater) update(ctx *Context, r *rule, m *match) bool {
                 target: m.target, stem: m.stem,
         }
 
-        for _, i := range matchedPrerequisites {
-                ec.prerequisites = append(ec.prerequisites, i.m.target)
+        for _, mr := range matchedPrerequisites {
+                ec.prerequisites = append(ec.prerequisites, mr.target)
         }
 
         //fmt.Printf("execute: %v\n", m.target)
@@ -882,6 +873,11 @@ func (c *defaultTargetUpdater) update(ctx *Context, r *rule, m *match) bool {
 type match struct {
         target string
         stem string
+}
+
+type matchrule struct {
+        *match
+        rule *rule 
 }
 
 func (r *rule) match(target string) (m *match, matched bool) {
@@ -919,6 +915,23 @@ func (r *rule) updateAll(ctx *Context) bool {
                 if r.update(ctx, m) { num++ }
         }
         return 0 < num
+}
+
+func (r *rule) updatePrerequisites(ctx *Context) (err error, matchedPrerequisites, updatedPrerequisites []*matchrule) {
+        for _, prerequisite := range r.prerequisites {
+                if m, r := r.ns.findMatchedRule(ctx, prerequisite); m != nil && r != nil {
+                        matchedPrerequisites = append(matchedPrerequisites, &matchrule{ m, r })
+                } else {
+                        err = errors.New(fmt.Sprintf("no rule to update '%v'\n", prerequisite))
+                        return
+                }
+        }
+        for _, mr := range matchedPrerequisites {
+                if ok := mr.rule.update(ctx, mr.match); ok {
+                        updatedPrerequisites = append(updatedPrerequisites, mr)
+                }
+        }
+        return
 }
 
 type ruleExecuteContext struct {
