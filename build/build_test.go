@@ -39,7 +39,7 @@ bar.txt:
 	@touch $@ $(info noop: $@.1)
 	@echo $@ >> $@ $(info noop: $@.2)
 foobar.txt: foo.txt
-	@echo $^ > $@
+	@echo $^ > $@ $(info $@,$<,$^,$?)
 `);     if err != nil { t.Errorf("parse error:", err) }
 
         os.Remove("foo.txt")
@@ -94,6 +94,19 @@ noop: bar.txt.2
                 if !t2Foobar.After(t1Foobar) { t.Errorf("!(%v < %v)", t1Foobar, t2Foobar) }
                 if !t1Foobar.Before(t2Foobar) { t.Errorf("!(%v < %v)", t1Foobar, t2Foobar) }
         }
+        if s, x := info.String(), fmt.Sprintf(`noop: foo.txt
+noop: bar.txt.1
+noop: bar.txt.2
+noop: foo.txt
+noop: bar.txt.1
+noop: bar.txt.2
+noop: foo.txt
+noop: bar.txt.1
+noop: bar.txt.2
+noop: foo.txt
+foobar.txt foo.txt foo.txt
+foobar.txt foo.txt foo.txt foo.txt
+`); s != x { t.Errorf("'%s' != '%s'", s, x) }
 
         os.Remove("foo.txt")
         os.Remove("bar.txt")
