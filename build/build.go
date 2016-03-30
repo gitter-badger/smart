@@ -826,9 +826,8 @@ func (c *phonyTargetUpdater) update(ctx *Context, r *rule, m *match) bool {
         }
 
         if needsExecute {
-                ec := r.newExecuteContext(ctx, m, matchedPrerequisites)
-
                 //fmt.Printf("phonyTargetUpdater.update: %v\n", m.target)
+                ec := r.makeExecuteContext(ctx, nil, m, matchedPrerequisites)
                 return r.execute(ctx, ec) == nil
         }
         return false
@@ -837,10 +836,8 @@ func (c *phonyTargetUpdater) update(ctx *Context, r *rule, m *match) bool {
 type defaultTargetUpdater struct {
 }
 func (c *defaultTargetUpdater) check(ctx *Context, r *rule, m *match) bool {
-        if fi, err := os.Stat(m.target); err != nil {
+        if fi, err := os.Stat(m.target); err != nil || fi == nil {
                 return true
-        } else {
-                if fi == nil {}
         }
         return false
 }
@@ -853,16 +850,17 @@ func (c *defaultTargetUpdater) update(ctx *Context, r *rule, m *match) bool {
                 //os.Exit(-1)
                 return false
         }
-        
+
+        fi, err := os.Stat(m.target)
+        ec := r.makeExecuteContext(ctx, fi, m, matchedPrerequisites)
+
         // Check if we need to update the target
-        if len(updatedPrerequisites) == 0 && !r.check(ctx, m) {
-                return false
+        if err != nil || 0 < len(updatedPrerequisites) || 0 < len(ec.newer) {
+                //fmt.Printf("execute: %v\n", m.target)
+                return r.execute(ctx, ec) == nil
         }
 
-        ec := r.newExecuteContext(ctx, m, matchedPrerequisites)
-        
-        //fmt.Printf("execute: %v\n", m.target)
-        return r.execute(ctx, ec) == nil
+        return false
 }
 
 type match struct {
@@ -931,19 +929,33 @@ func (r *rule) updatePrerequisites(ctx *Context) (err error, matchedPrerequisite
         return
 }
 
-func (r *rule) newExecuteContext(ctx *Context, m *match, matchedPrerequisites []*matchrule) *ruleExecuteContext {
+func (r *rule) makeExecuteContext(ctx *Context, ti os.FileInfo, m *match, matchedPrerequisites []*matchrule) *ruleExecuteContext {
         ec := &ruleExecuteContext{ target: m.target, stem: m.stem }
-
         for _, mr := range matchedPrerequisites {
                 ec.prerequisites = append(ec.prerequisites, mr.target)
+                if ti != nil {
+                        if fi, err := os.Stat(mr.target); err == nil {
+                                if fi.ModTime().After(ti.ModTime()) {
+                                        ec.newer = append(ec.newer, mr.target)
+                                }
+                        }
+                }
         }
-
         return ec
+}
+
+func targetDirBaseItems(targets []string) (items, itemsDir, itemsBase Items) {
+        for _, target := range targets {
+                items = append(items, stringitem(target))
+                itemsDir = append(itemsDir, stringitem(filepath.Dir(target)))
+                itemsBase = append(itemsBase, stringitem(filepath.Base(target)))
+        }
+        return
 }
 
 type ruleExecuteContext struct {
         target, stem string
-        prerequisites []string
+        prerequisites, newer []string
 }
 
 // https://www.gnu.org/software/make/manual/html_node/Automatic-Variables.html#Automatic-Variables
@@ -981,23 +993,22 @@ func (r *rule) execute(ctx *Context, ec *ruleExecuteContext) error {
         ns.Set(ctx, []string{ "*" },  stringitem(ec.stem))
         ns.Set(ctx, []string{ "*D" }, stringitem(filepath.Dir(ec.stem)))
         ns.Set(ctx, []string{ "*F" }, stringitem(filepath.Base(ec.stem)))
-
-        var l, ld, lf []Item
-        for n, prerequisite := range ec.prerequisites {
-                d, f := filepath.Dir(prerequisite), filepath.Base(prerequisite)
-                if n == 0 {
-                        ns.Set(ctx, []string{ "<" },  stringitem(prerequisite))
-                        ns.Set(ctx, []string{ "<D" }, stringitem(d))
-                        ns.Set(ctx, []string{ "<F" }, stringitem(f))
-                }
-                l = append(l, stringitem(prerequisite))
-                ld = append(ld, stringitem(d))
-                lf = append(lf, stringitem(f))
+        if 0 < len(ec.prerequisites) {
+                l, ld, lf := targetDirBaseItems(ec.prerequisites)
+                ns.Set(ctx, []string{ "<" },  l[0])
+                ns.Set(ctx, []string{ "<D" }, ld[0])
+                ns.Set(ctx, []string{ "<F" }, lf[0])
+                ns.Set(ctx, []string{ "^" }, l...)
+                ns.Set(ctx, []string{ "^D" }, ld...)
+                ns.Set(ctx, []string{ "^F" }, lf...)
         }
-        ns.Set(ctx, []string{ "^" }, l...)
-        ns.Set(ctx, []string{ "^D" }, ld...)
-        ns.Set(ctx, []string{ "^F" }, lf...)
-
+        if 0 < len(ec.newer) {
+                l, ld, lf := targetDirBaseItems(ec.newer)
+                ns.Set(ctx, []string{ "?" }, l...)
+                ns.Set(ctx, []string{ "?D" }, ld...)
+                ns.Set(ctx, []string{ "?F" }, lf...)
+        }
+        
         job := new(executeRecipes)
         for _, action := range r.recipes {
                 var s string
