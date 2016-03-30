@@ -7,6 +7,7 @@ import (
         "os"
         "fmt"
         "bytes"
+        "time"
         "testing"
 )
 
@@ -37,6 +38,8 @@ foo.txt:; @touch $@ $(info noop: $@)
 bar.txt:
 	@touch $@ $(info noop: $@.1)
 	@echo $@ >> $@ $(info noop: $@.2)
+foobar.txt: foo.txt
+	@echo $^ > $@
 `);     if err != nil { t.Errorf("parse error:", err) }
 
         os.Remove("foo.txt")
@@ -74,8 +77,27 @@ noop: bar.txt.1
 noop: bar.txt.2
 `); s != x { t.Errorf("'%s' != '%s'", s, x) }
 
+        Update(ctx, "foobar.txt")
+        if fiFoo, e := os.Stat("foo.txt"); fiFoo == nil || e != nil { t.Errorf("TestBuildRules: %s", e) } else {
+                var t1Foo, t1Foobar, t2Foo, t2Foobar time.Time
+                if fi, e := os.Stat("foo.txt"); fiFoo == nil || e != nil { t.Errorf("TestBuildRules: %s", e) } else { t1Foo = fi.ModTime() }
+                if fi, e := os.Stat("foobar.txt"); fiFoo == nil || e != nil { t.Errorf("TestBuildRules: %s", e) } else { t1Foobar = fi.ModTime() }
+
+                time.Sleep(1 * time.Second)
+                tt := time.Now() // fiFoo.ModTime().Add(1 * time.Second)
+                if e := os.Chtimes("foo.txt", tt, tt); e != nil { t.Errorf("TestBuildRules: %s", e) }
+
+                Update(ctx, "foobar.txt")
+                if fi, e := os.Stat("foo.txt"); fiFoo == nil || e != nil { t.Errorf("TestBuildRules: %s", e) } else { t2Foo = fi.ModTime() }
+                if fi, e := os.Stat("foobar.txt"); fiFoo == nil || e != nil { t.Errorf("TestBuildRules: %s", e) } else { t2Foobar = fi.ModTime() }
+                if !t1Foo.Before(t2Foo) { t.Errorf("!(%v < %v)", t1Foo, t2Foo) }
+                if !t2Foobar.After(t1Foobar) { t.Errorf("!(%v < %v)", t1Foobar, t2Foobar) }
+                if !t1Foobar.Before(t2Foobar) { t.Errorf("!(%v < %v)", t1Foobar, t2Foobar) }
+        }
+
         os.Remove("foo.txt")
         os.Remove("bar.txt")
+        os.Remove("foobar.txt")
 }
 
 func TestBuildRuleTargetChecker(t *testing.T) {

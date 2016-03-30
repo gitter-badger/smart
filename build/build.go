@@ -893,7 +893,9 @@ func (r *rule) findPrevRule(m *match) (prev *rule) {
 
 func (r *rule) check(ctx *Context, m *match) (needsUpdate bool) {
         for !needsUpdate && r != nil {
-                needsUpdate = r.c.check(ctx, r, m) || needsUpdate
+                if needsUpdate = r.c.check(ctx, r, m); needsUpdate {
+                        break
+                }
                 r = r.findPrevRule(m)
         }
         return needsUpdate
