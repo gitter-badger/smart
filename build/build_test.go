@@ -238,3 +238,233 @@ foo:!:
         os.Remove("foo.txt")
         os.Remove("foobar.txt")
 }
+
+/*
+// intercommand represents a intermdiate action command
+type intercommand interface {
+        Command
+        Targets(prerequisites []*Action) (names []string, needsUpdate bool)
+}
+
+func ComputeInterTargets(d, sre string, prerequisites []*Action) (targets []string, outdates int, outdateMap map[int]int) {
+        re := regexp.MustCompile(sre)
+        outdateMap = map[int]int{}
+        traverse(d, func(fn string, fi os.FileInfo) bool {
+                if !re.MatchString(fn) { return true }
+                i := len(targets)
+                outdateMap[i] = 0
+                targets = append(targets, fn)
+                for _, p := range prerequisites {
+                        if pc, ok := p.Command.(intercommand); ok {
+                                if _, needsUpdate := pc.Targets(p.Prerequisites); needsUpdate {
+                                        outdateMap[i]++
+                                }
+                        } else {
+                                for _, t := range p.Targets {
+                                        if pfi, _ := os.Stat(t); pfi == nil {
+                                                errorf("`%v' not found", t)
+                                        } else if fi.ModTime().Before(pfi.ModTime()) {
+                                                outdateMap[i]++
+                                        }
+                                }
+                        }
+                }
+                outdates += outdateMap[i]
+                return true
+        })
+        return
+}
+
+func ComputeKnownInterTargets(targets []string, prerequisites []*Action) (outdates int, outdateMap map[int]int) {
+        outdateMap = map[int]int{}
+        for i, fn := range targets {
+                fi, e := os.Stat(fn)
+                if e != nil || fi == nil { // Target not existed.
+                        outdateMap[i]++
+                        continue
+                }
+                for _, p := range prerequisites {
+                        if pc, ok := p.Command.(intercommand); ok {
+                                if _, needsUpdate := pc.Targets(p.Prerequisites); needsUpdate {
+                                        outdateMap[i]++
+                                }
+                        } else {
+                                for _, t := range p.Targets {
+                                        if pfi, _ := os.Stat(t); pfi == nil {
+                                                errorf("`%v' not found", t)
+                                        } else if fi.ModTime().Before(pfi.ModTime()) {
+                                                outdateMap[i]++
+                                        }
+                                }
+                        }
+                }
+                outdates += outdateMap[i]
+        }
+        return
+}
+
+// Action performs a command for updating targets
+type Action struct {
+        Targets []string
+        Prerequisites []*Action
+        Command Command
+}
+
+func (a *Action) update() (updated bool, updatedTargets []string) {
+        var targets []string
+        var targetsNeedUpdate bool
+        var isIntercommand bool
+        if a.Command != nil {
+                if c, ok := a.Command.(intercommand); ok {
+                        targets, targetsNeedUpdate = c.Targets(a.Prerequisites)
+                        isIntercommand = true
+                }
+        }
+
+        if !isIntercommand {
+                //fmt.Printf("targets: %v\n", a.targets)
+                targets = append(targets, a.Targets...)
+        }
+
+        var missingTargets, outdatedTargets []int
+        var fis []os.FileInfo
+        for n, s := range targets {
+                if i, _ := os.Stat(s); i != nil {
+                        fis = append(fis, i)
+                } else {
+                        fis = append(fis, nil)
+                        missingTargets = append(missingTargets, n)
+                }
+        }
+
+        if len(fis) != len(targets) {
+                panic("internal unmatched arrays") //errorf(-1, "internal")
+        }
+
+        updatedPreNum := 0
+        prerequisites := []string{}
+        for _, p := range a.Prerequisites {
+                if u, pres := p.update(); u {
+                        prerequisites = append(prerequisites, pres...)
+                        updatedPreNum++
+                } else if pc, ok := p.Command.(intercommand); ok {
+                        pres, nu := pc.Targets(p.Prerequisites)
+                        if nu { errorf("requiring updating %v for %v", pres, targets) }
+                        prerequisites = append(prerequisites, pres...)
+                } else {
+                        prerequisites = append(prerequisites, p.Targets...)
+                        for _, pt := range p.Targets {
+                                if fi, err := os.Stat(pt); err != nil {
+                                        errorf("`%v' not found", pt)
+                                } else {
+                                        for n, i := range fis {
+                                                if i != nil && i.ModTime().Before(fi.ModTime()) {
+                                                        outdatedTargets = append(outdatedTargets, n)
+                                                }
+                                        }
+                                }
+                        }
+                }
+        }
+
+        if a.Command == nil {
+                for n, i := range fis {
+                        if i == nil {
+                                errorf("`%s' not found", targets[n])
+                        }
+                }
+                return
+        }
+
+        if 0 < updatedPreNum || targetsNeedUpdate {
+                updated, updatedTargets = a.execute(targets, fis, prerequisites)
+        } else {
+                var rr []int
+                var request []string
+                var requestfis []os.FileInfo
+
+                rr = append(rr, missingTargets...)
+                rr = append(rr, outdatedTargets...)
+                sort.Ints(rr)
+
+                for n := range rr {
+                        if n == 0 || rr[n-1] != rr[n] {
+                                request = append(request, targets[rr[n]])
+                                requestfis = append(requestfis, fis[rr[n]])
+                        }
+                }
+
+                //fmt.Printf("targets: %v, %v, %v, %v\n", targets, request, len(a.prerequisites), prerequisites)
+                if 0 < len(request) {
+                        updated, updatedTargets = a.execute(request, requestfis, prerequisites)
+                }
+        }
+
+        return
+}
+
+func (a *Action) execute(targets []string, tarfis []os.FileInfo, prerequisites []string) (updated bool, updatedTargets []string) {
+        if updated = a.Command.Execute(targets, prerequisites); updated {
+                var targetsNeedUpdate bool
+                if c, ok := a.Command.(intercommand); ok {
+                        updatedTargets, targetsNeedUpdate = c.Targets(a.Prerequisites)
+                        updated = !targetsNeedUpdate
+                } else {
+                        for _, t := range a.Targets {
+                                if fi, e := os.Stat(t); e != nil || fi == nil {
+                                        errorf("`%s' was not built", t)
+                                } else {
+                                        updatedTargets = append(updatedTargets, t)
+                                }
+                        }
+                }
+        }
+        return
+}
+
+func (a *Action) clean() {
+        errorf("TODO: clean `%v'\n", a.Targets)
+}
+
+func newAction(target string, c Command, pre ...*Action) *Action {
+        a := &Action{
+                Command: c,
+                Targets: []string{ target },
+                Prerequisites: pre,
+        }
+        return a
+}
+
+func NewAction(target string, c Command, pre ...*Action) *Action {
+        return newAction(target, c, pre...)
+}
+
+func NewInterAction(target string, c intercommand, pre ...*Action) *Action {
+        return newAction(target, c, pre...)
+}
+
+func CreateSourceTransformActions(sources []string, namecommand func(src string) (string, Command)) []*Action {
+        var inters []*Action
+        if namecommand == nil {
+                errorf("can't draw source rules (%v)", namecommand)
+        }
+
+        for _, src := range sources {
+                aname, c := namecommand(src)
+                if aname == "" { continue }
+                if aname == src {
+                        errorf("no intermediate name for `%v'", src)
+                }
+
+                if c == nil {
+                        errorf("no command for `%v'", src)
+                }
+
+                asrc := newAction(src, nil)
+                a := newAction(aname, c, asrc)
+                inters = append(inters, a)
+        }
+        return inters
+}
+
+*/
