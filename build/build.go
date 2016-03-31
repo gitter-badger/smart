@@ -496,8 +496,6 @@ type Module struct {
         Using, UsedBy []*Module
         Updated bool // marked as 'true' if module is updated
         Children map[string]*Module
-        //defines map[string]*define
-        //rules map[string]*rule
         declareLoc, commitLoc location // where does it defined and commit (could be nil)
         //x *Context // the context of the module
         l *lex // the lex scope where does it defined (could be nil)
@@ -587,7 +585,7 @@ func (m *Module) createActionIfNil(ctx *Context) bool {
         return m.Action != nil
 }
 
-func (m *Module) update(ctx *Context) {
+func (m *Module) _update(ctx *Context) {
         if m.Action == nil {
                 if *flagV {
                         s, lineno, colno := m.GetCommitLocation()
@@ -605,6 +603,23 @@ func (m *Module) update(ctx *Context) {
                         s, lineno, colno := m.GetDeclareLocation()
                         fmt.Printf("%v:%v:%v:info: module `%v'\n", s, lineno, colno, m.GetName(ctx))
                 }
+        }
+}
+
+func (m *Module) update(ctx *Context) bool {
+        if g, ok := m.rules[m.goal]; ok && g != nil {
+                om := ctx.m; defer func(){ ctx.m = om }(); ctx.m = m
+                g.updateAll(ctx)
+        }
+        return false
+}
+
+func (ctx *Context) update(target string) {
+        if g, ok := ctx.g.rules[target]; ok && g != nil {
+                g.updateAll(ctx)
+        }
+        if m, ok := ctx.modules[target]; ok && m != nil {
+                m.update(ctx)
         }
 }
 
@@ -853,6 +868,13 @@ func (c *defaultTargetUpdater) update(ctx *Context, r *rule, m *match) bool {
 
         fi, err := os.Stat(m.target)
         ec := r.makeExecuteContext(ctx, fi, m, matchedPrerequisites)
+updated_loop:
+        for _, mr := range updatedPrerequisites {
+                for _, s := range ec.newer {
+                        if s == mr.target { continue updated_loop }
+                }
+                ec.newer = append(ec.newer, mr.target)
+        }
 
         // Check if we need to update the target
         if err != nil || 0 < len(updatedPrerequisites) || 0 < len(ec.newer) {
@@ -1055,7 +1077,7 @@ func (job *executeRecipes) Action() worker.Result {
         return nil
 }
 
-func UpdateModules(ctx *Context, cmds ...string) {
+func _UpdateModules(ctx *Context, cmds ...string) {
         // Build the modules
         var i *pendedBuild
         for 0 < len(ctx.moduleBuildList) {
@@ -1105,19 +1127,16 @@ func Update(ctx *Context, cmds ...string) {
         ctx.w.SpawnN(*flagJ); defer ctx.w.KillAll()
 
         if n := len(cmds); n == 0 {
-                if ctx.g.goal == "" {
-                        UpdateModules(ctx, cmds...)
-                } else if g, ok := ctx.g.rules[ctx.g.goal]; ok && g != nil {
-                        g.updateAll(ctx)
-                }
-                return
-        }
-
-        for _, cmd := range cmds {
-                for _, r := range ctx.g.rules {
-                        if m, ok := r.match(cmd); ok {
-                                r.update(ctx, m)
+                if goal := ctx.g.goal; goal == "" {
+                        for _, m := range ctx.moduleOrderList { 
+                                m.update(ctx)
                         }
+                } else {
+                        ctx.update(goal)
+                }
+        } else {
+                for _, cmd := range cmds {
+                        ctx.update(cmd)
                 }
         }
 }
