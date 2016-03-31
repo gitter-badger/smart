@@ -53,9 +53,6 @@ type toolset interface {
         // `args' and `vars' is passed in on the `$(module)' invocation.
         ConfigModule(p *Context, args Items, vars map[string]string)
 
-        // CreateActions creates the current module's action graph
-        CreateActions(p *Context) bool
-
         // UseModule lets a toolset decides how to use a module.
         UseModule(p *Context, o *Module) bool
 
@@ -80,10 +77,6 @@ type BasicToolset struct {
 }
 
 func (tt *BasicToolset) ConfigModule(ctx *Context, args Items, vars map[string]string) {
-}
-
-func (tt *BasicToolset) CreateActions(ctx *Context) bool {
-        return false
 }
 
 func (tt *BasicToolset) UseModule(ctx *Context, o *Module) bool {
@@ -482,17 +475,11 @@ func (tt *templateToolset) ConfigModule(ctx *Context, args Items, vars map[strin
         }
 }
 
-func (tt *templateToolset) CreateActions(ctx *Context) bool {
-        fmt.Printf("todo: TemplateToolset.CreateActions\n")
-        return false
-}
-
 // Module is defined by a $(module) invocation in .smart script.
 type Module struct {
         *namespaceEmbed
         Parent *Module // upper module
         Toolset toolset
-        Action *Action // action for building this module
         Using, UsedBy []*Module
         Updated bool // marked as 'true' if module is updated
         Children map[string]*Module
@@ -541,69 +528,6 @@ func (m *Module) GetSources(ctx *Context) (sources []string) {
                 sources[i] = filepath.Join(m.GetDir(ctx), sources[i])
         }
         return
-}
-
-func (m *Module) createActionIfNil(ctx *Context) bool {
-        s, lineno, colno := m.GetCommitLocation()
-
-        numUsing := len(m.Using)
-        for _, u := range m.Using {
-                if u.createActionIfNil(ctx) { numUsing-- }
-        }
-        if 0 < numUsing {
-                if *flagV || *flagVV {
-                        fmt.Printf("%v:%v:%v: not all dependencies was built (%v, %v/%v)\n", s, lineno, colno, m.GetName(ctx))
-                } else {
-                        fmt.Printf("%v:%v:%v: not all dependencies was built\n", s, lineno, colno)
-                }
-                return false
-        }
-
-        if m.Action != nil {
-                return true
-        }
-
-        if m.Toolset == nil {
-                fmt.Printf("%v:%v:%v: nil toolset (%v)\n", s, lineno, colno, m.GetName(ctx))
-                return false
-        }
-
-        if *flagVV {
-                fmt.Printf("smart: config `%v' (%v)\n", m.GetName(ctx), m.GetDir(ctx))
-        }
-
-        prev := ctx.m
-        ctx.m = m
-
-        if m.Toolset.CreateActions(ctx) {
-                //fmt.Printf("smart: created `%v' (%v)\n", m.Name, m.GetDir())
-        } else if *flagV {
-                fmt.Printf("%v:%v:%v: `%v' not built\n", s, lineno, colno, m.GetName(ctx))
-        }
-
-        ctx.m = prev
-        return m.Action != nil
-}
-
-func (m *Module) _update(ctx *Context) {
-        if m.Action == nil {
-                if *flagV {
-                        s, lineno, colno := m.GetCommitLocation()
-                        fmt.Printf("%v:%v:%v:warning: no action (\"%v\")\n", s, lineno, colno, m.GetName(ctx))
-                }
-                return
-        }
-
-        if updated, _ := m.Action.update(); !updated {
-                if *flagV && *flagVV {
-                        s, lineno, colno := m.GetCommitLocation()
-                        fmt.Printf("%v:%v:%v:info: nothing updated (%v)\n", s, lineno, colno, m.GetName(ctx))
-                }
-                if *flagV && *flagVV {
-                        s, lineno, colno := m.GetDeclareLocation()
-                        fmt.Printf("%v:%v:%v:info: module `%v'\n", s, lineno, colno, m.GetName(ctx))
-                }
-        }
 }
 
 func (m *Module) update(ctx *Context) bool {
@@ -1075,36 +999,6 @@ func (job *executeRecipes) Action() worker.Result {
                 }
         }
         return nil
-}
-
-func _UpdateModules(ctx *Context, cmds ...string) {
-        // Build the modules
-        var i *pendedBuild
-        for 0 < len(ctx.moduleBuildList) {
-                i, ctx.moduleBuildList = &ctx.moduleBuildList[0], ctx.moduleBuildList[1:]
-                if !i.m.createActionIfNil(i.p) {
-                        errorf("nil action (%v)", i.m.GetName(ctx))
-                }
-        }
-
-        var (
-                updateMod, updateDeps func(m *Module)
-        )
-        updateMod = func(m *Module) {
-                updateDeps(m)
-                if !m.Updated {
-                        if *flagV {
-                                fmt.Printf("smart: update `%v'...\n", m.GetName(ctx))
-                        }
-                        m.update(ctx)
-                        m.Updated = true
-                }
-        }
-        updateDeps = func(m *Module) {
-                for _, u := range m.Using { updateMod(u) }
-        }
-
-        for _, m := range ctx.moduleOrderList { updateMod(m) }
 }
 
 // Update updates the specified targets given in `cmds`.
