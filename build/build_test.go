@@ -239,6 +239,81 @@ foo:!:
         os.Remove("foobar.txt")
 }
 
+func TestBuildTemplate(t *testing.T) {
+        if wd, e := os.Getwd(); e != nil || workdir != wd { t.Errorf("%v != %v (%v)", workdir, wd, e) }
+
+        info, f := new(bytes.Buffer), builtinInfoFunc; defer func(){ builtinInfoFunc = f }()
+        builtinInfoFunc = func(ctx *Context, args Items) {
+                fmt.Fprintf(info, "%v\n", args.Expand(ctx))
+        }
+
+        ctx, err := newTestContext("TestBuildTemplate", `
+################
+$(template test)
+
+foobar.txt: foo.txt bar.txt
+	@echo "$(me.a): $^" > $@ $(info 0: $@,$<,$^,$?)
+foo.txt:
+	@touch $@ $(info 1: $@ $(me.a))
+bar.txt:
+	@touch $@ $(info 2: $@ $(me.a))
+	@echo $@ >> $@ $(info 3: $@)
+
+$(commit)
+
+#############
+$(module foo, test)
+
+me.a := aaa
+
+$(commit)
+
+######
+foo:!:
+	@echo "rule 'foo' is also called along with module 'foo'" $(info 4: $@)
+`);     if err != nil { t.Errorf("parse error:", err) }
+
+        os.Remove("bar.txt")
+        os.Remove("foo.txt")
+        os.Remove("foobar.txt")
+        Update(ctx)
+        if s, x := info.String(), fmt.Sprintf(`4: foo
+1: foo.txt aaa
+2: bar.txt aaa
+3: bar.txt
+0: foobar.txt foo.txt foo.txt bar.txt foo.txt bar.txt
+`); s != x { t.Errorf("'%s' != '%s'", s, x) }
+        if fi, e := os.Stat("bar.txt"); fi == nil || e != nil { t.Errorf("TestBuildRules: %s", e) } else {
+                
+        }
+        if fi, e := os.Stat("foo.txt"); fi == nil || e != nil { t.Errorf("TestBuildRules: %s", e) } else {
+        }
+        if fi, e := os.Stat("foobar.txt"); fi == nil || e != nil { t.Errorf("TestBuildRules: %s", e) } else {
+        }
+
+        info.Reset()
+        os.Remove("bar.txt")
+        os.Remove("foo.txt")
+        os.Remove("foobar.txt")
+        Update(ctx, "foo")
+        if s, x := info.String(), fmt.Sprintf(`4: foo
+1: foo.txt aaa
+2: bar.txt aaa
+3: bar.txt
+0: foobar.txt foo.txt foo.txt bar.txt foo.txt bar.txt
+`); s != x { t.Errorf("'%s' != '%s'", s, x) }
+        if fi, e := os.Stat("bar.txt"); fi == nil || e != nil { t.Errorf("TestBuildRules: %s", e) } else {
+        }
+        if fi, e := os.Stat("foo.txt"); fi == nil || e != nil { t.Errorf("TestBuildRules: %s", e) } else {
+        }
+        if fi, e := os.Stat("foobar.txt"); fi == nil || e != nil { t.Errorf("TestBuildRules: %s", e) } else {
+        }
+
+        os.Remove("bar.txt")
+        os.Remove("foo.txt")
+        os.Remove("foobar.txt")
+}
+
 /*
 // intercommand represents a intermdiate action command
 type intercommand interface {
