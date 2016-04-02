@@ -314,6 +314,82 @@ foo:!:
         os.Remove("foobar.txt")
 }
 
+func TestBuildTemplate2(t *testing.T) {
+        if wd, e := os.Getwd(); e != nil || workdir != wd { t.Errorf("%v != %v (%v)", workdir, wd, e) }
+
+        info, f := new(bytes.Buffer), builtinInfoFunc; defer func(){ builtinInfoFunc = f }()
+        builtinInfoFunc = func(ctx *Context, args Items) {
+                fmt.Fprintf(info, "%v\n", args.Expand(ctx))
+        }
+
+        ctx, err := newTestContext("TestBuildTemplate", `
+all: foo bar
+
+$(template test)
+
+$(me.name).txt:
+	@touch $@ $(info 1: $@ $(me.a))
+	@echo $@ >> $@ $(info 2: $@)
+
+$(commit)
+
+$(module foo, test)
+me.a := aaa1
+$(commit)
+
+$(module bar, test)
+me.a := aaa2
+$(commit)
+
+foo:!:
+	@echo "rule 'foo' is also called along with module 'foo'" $(info 3: $@)
+bar:!:
+	@echo "rule 'foo' is also called along with module 'foo'" $(info 4: $@)
+`);     if err != nil { t.Errorf("parse error:", err) }
+
+        os.Remove("bar.txt")
+        os.Remove("foo.txt")
+        Update(ctx)
+        if s, x := info.String(), fmt.Sprintf(`3: foo
+1: foo.txt aaa1
+2: foo.txt
+4: bar
+1: bar.txt aaa2
+2: bar.txt
+`); s != x { t.Errorf("'%s' != '%s'", s, x) }
+        if fi, e := os.Stat("bar.txt"); fi == nil || e != nil { t.Errorf("TestBuildRules: %s", e) } else {
+                // TODO: check content of bar.txt
+        }
+        if fi, e := os.Stat("foo.txt"); fi == nil || e != nil { t.Errorf("TestBuildRules: %s", e) } else {
+                // TODO: check content of foo.txt
+        }
+
+        info.Reset()
+        os.Remove("bar.txt")
+        os.Remove("foo.txt")
+        Update(ctx, "foo")
+        if s, x := info.String(), fmt.Sprintf(`3: foo
+1: foo.txt aaa1
+2: foo.txt
+`); s != x { t.Errorf("'%s' != '%s'", s, x) }
+        if fi, e := os.Stat("foo.txt"); fi == nil || e != nil { t.Errorf("TestBuildRules: %s", e) } else {
+        }
+
+        info.Reset()
+        os.Remove("bar.txt")
+        os.Remove("foo.txt")
+        Update(ctx, "bar")
+        if s, x := info.String(), fmt.Sprintf(`4: bar
+1: bar.txt aaa2
+2: bar.txt
+`); s != x { t.Errorf("'%s' != '%s'", s, x) }
+        if fi, e := os.Stat("bar.txt"); fi == nil || e != nil { t.Errorf("TestBuildRules: %s", e) } else {
+        }
+
+        os.Remove("bar.txt")
+        os.Remove("foo.txt")
+}
+
 /*
 // intercommand represents a intermdiate action command
 type intercommand interface {
