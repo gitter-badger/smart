@@ -259,33 +259,7 @@ immediate ::= immediate
 immediate += deferred or immediate
 immediate != immediate
 
-define immediate
-  deferred
-endef
-
-define immediate =
-  deferred
-endef
-
-define immediate ?=
-  deferred
-endef
-
-define immediate :=
-  immediate
-endef
-
-define immediate ::=
-  immediate
-endef
-
-define immediate +=
-  deferred or immediate
-endef
-
-define immediate !=
-  immediate
-endef
+The directives define/endef are not supported.
 */
 var (
         meDot = "me."

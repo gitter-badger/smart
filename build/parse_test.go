@@ -1915,42 +1915,65 @@ $(module b, test, a, b, c)    $(info b - $(me.dir),$(me.out))
 me.source := b.cpp
 $(commit)$(info b commited)
 `);     if err != nil { t.Errorf("parse error:", err) }
-        if ctx.modules == nil { t.Errorf("nil modules") }
-        if ctx.templates == nil { t.Errorf("nil templates") }
-        if temp, ok := ctx.templates["test"]; !ok || temp == nil { t.Errorf("no test template") } else {
-                if s, x := temp.name, "test"; s != x { t.Errorf("expects %v but %v", s, x) }
-                if n, x := len(temp.declNodes), 6; n != x { t.Errorf("expects %v but %v", x, n) } else {
-                        if c, x := temp.declNodes[0], nodeDefineAppend; c.kind != x { t.Errorf("expects %v but %v", x, c.kind) } else {
-                                if s, x := c.str(), "+="; s != x { t.Errorf("expects %v but %v", x, s) }
-                        }
-                        if c, x := temp.declNodes[1], nodeDefineDeferred; c.kind != x { t.Errorf("expects %v but %v", x, c.kind) } else {
-                                if s, x := c.str(), "="; s != x { t.Errorf("expects %v but %v", x, s) }
-                        }
-                        if c, x := temp.declNodes[2], nodeImmediateText; c.kind != x { t.Errorf("expects %v but %v", x, c.kind) } else {
-                                if s, x := c.str(), `$(info $(me.name): $(~.name) - "$(~.modules)")`; s != x { t.Errorf("expects %v but %v", x, s) }
-                        }
-                        if c, x := temp.declNodes[3], nodeImmediateText; c.kind != x { t.Errorf("expects %v but %v", x, c.kind) } else {
-                                if s, x := c.str(), `$(info $(me.name): dir = "$(me.dir)")`; s != x { t.Errorf("expects %v but %v", x, s) }
-                        }
-                        if c, x := temp.declNodes[4], nodeImmediateText; c.kind != x { t.Errorf("expects %v but %v", x, c.kind) } else {
-                                if s, x := c.str(), `$(info $(me.name): source = "$(me.source)")`; s != x { t.Errorf("expects %v but %v", x, s) }
-                        }
-                        if c, x := temp.declNodes[5], nodeImmediateText; c.kind != x { t.Errorf("expects %v but %v", x, c.kind) } else {
-                                if s, x := c.str(), `$(info $(me.name): before-post)`; s != x { t.Errorf("expects %v but %v", x, s) }
+        if ctx.modules == nil { t.Errorf("nil modules") } else {
+                if m, ok := ctx.modules["a"]; !ok || m == nil { t.Errorf("no module 'a'") } else {
+                        if r, ok := m.rules["a/test"]; !ok || r == nil { t.Errorf("no rule 'a/test': %v", m.rules) } else {
+                                // TODO: test cases
                         }
                 }
-                if n, x := len(temp.postNodes), 4; n != x { t.Errorf("expects %v but %v", x, n) } else {
-                        if c, x := temp.postNodes[0], nodeImmediateText; c.kind != x { t.Errorf("expects %v but %v", x, c.kind) } else {
-                                if s, x := c.str(), ` $(info $(me.name): after-post) `; s != x { t.Errorf("expects %v but %v", x, s) }
+                if m, ok := ctx.modules["b"]; !ok || m == nil { t.Errorf("no module 'a'") } else {
+                        if r, ok := m.rules["b/test"]; !ok || r == nil { t.Errorf("no rule 'b/test': %v", m.rules) } else {
+                                // TODO: test cases
                         }
-                        if c, x := temp.postNodes[1], nodeImmediateText; c.kind != x { t.Errorf("expects %v but %v", x, c.kind) } else {
-                                if s, x := c.str(), `$(info $(me.name): source = "$(me.source)")`; s != x { t.Errorf("expects %v but %v", x, s) }
+                }
+        }
+        if ctx.templates == nil { t.Errorf("nil templates") } else {
+                if temp, ok := ctx.templates["test"]; !ok || temp == nil { t.Errorf("no test template") } else {
+                        if s, x := temp.name, "test"; s != x { t.Errorf("expects %v but %v", s, x) }
+                        if n, x := len(temp.declNodes), 6; n != x { t.Errorf("expects %v but %v", x, n) } else {
+                                if c, x := temp.declNodes[0], nodeDefineAppend; c.kind != x { t.Errorf("expects %v but %v", x, c.kind) } else {
+                                        if s, x := c.str(), "+="; s != x { t.Errorf("expects %v but %v", x, s) }
+                                }
+                                if c, x := temp.declNodes[1], nodeDefineDeferred; c.kind != x { t.Errorf("expects %v but %v", x, c.kind) } else {
+                                        if s, x := c.str(), "="; s != x { t.Errorf("expects %v but %v", x, s) }
+                                }
+                                if c, x := temp.declNodes[2], nodeImmediateText; c.kind != x { t.Errorf("expects %v but %v", x, c.kind) } else {
+                                        if s, x := c.str(), `$(info $(me.name): $(~.name) - "$(~.modules)")`; s != x { t.Errorf("expects %v but %v", x, s) }
+                                }
+                                if c, x := temp.declNodes[3], nodeImmediateText; c.kind != x { t.Errorf("expects %v but %v", x, c.kind) } else {
+                                        if s, x := c.str(), `$(info $(me.name): dir = "$(me.dir)")`; s != x { t.Errorf("expects %v but %v", x, s) }
+                                }
+                                if c, x := temp.declNodes[4], nodeImmediateText; c.kind != x { t.Errorf("expects %v but %v", x, c.kind) } else {
+                                        if s, x := c.str(), `$(info $(me.name): source = "$(me.source)")`; s != x { t.Errorf("expects %v but %v", x, s) }
+                                }
+                                if c, x := temp.declNodes[5], nodeImmediateText; c.kind != x { t.Errorf("expects %v but %v", x, c.kind) } else {
+                                        if s, x := c.str(), `$(info $(me.name): before-post)`; s != x { t.Errorf("expects %v but %v", x, s) }
+                                }
                         }
-                        if c, x := temp.postNodes[2], nodeRuleSingleColoned; c.kind != x { t.Errorf("expects %v but %v", x, c.kind) } else {
-                                if s, x := c.str(), ":"; s != x { t.Errorf("expects %v but %v", x, s) }
-                        }
-                        if c, x := temp.postNodes[3], nodeImmediateText; c.kind != x { t.Errorf("expects %v but %v", x, c.kind) } else {
-                                if s, x := c.str(), `$(info $(me.name): before-commit)`; s != x { t.Errorf("expects %v but %v", x, s) }
+                        if n, x := len(temp.postNodes), 4; n != x { t.Errorf("expects %v but %v", x, n) } else {
+                                if c, x := temp.postNodes[0], nodeImmediateText; c.kind != x { t.Errorf("expects %v but %v", x, c.kind) } else {
+                                        if s, x := c.str(), ` $(info $(me.name): after-post) `; s != x { t.Errorf("expects %v but %v", x, s) }
+                                }
+                                if c, x := temp.postNodes[1], nodeImmediateText; c.kind != x { t.Errorf("expects %v but %v", x, c.kind) } else {
+                                        if s, x := c.str(), `$(info $(me.name): source = "$(me.source)")`; s != x { t.Errorf("expects %v but %v", x, s) }
+                                }
+                                if c, x := temp.postNodes[2], nodeRuleSingleColoned; c.kind != x { t.Errorf("expects %v but %v", x, c.kind) } else {
+                                        if s, x := c.str(), ":"; s != x { t.Errorf("expects %v but %v", x, s) }
+                                        if n, x := len(c.children), 3; n != x { t.Errorf("%v != %v", n, x) } else {
+                                                if c, x := c.children[0], nodeTargets; c.kind != x { t.Errorf("%v != %v", c.kind, x) } else {
+                                                        if s, x := c.str(), "$(me.name)/test"; s != x { t.Errorf("expects %v but %v", x, s) }
+                                                }
+                                                if c, x := c.children[1], nodePrerequisites; c.kind != x { t.Errorf("%v != %v", c.kind, x) } else {
+                                                        if s, x := c.str(), ""; s != x { t.Errorf("expects %v but %v", x, s) }
+                                                }
+                                                if c, x := c.children[2], nodeRecipes; c.kind != x { t.Errorf("%v != %v", c.kind, x) } else {
+                                                        if s, x := c.str(), "; @echo $@ $(me.source)\n"; s != x { t.Errorf("expects '%v' but '%v'", x, s) }
+                                                }
+                                        }
+                                }
+                                if c, x := temp.postNodes[3], nodeImmediateText; c.kind != x { t.Errorf("expects %v but %v", x, c.kind) } else {
+                                        if s, x := c.str(), `$(info $(me.name): before-commit)`; s != x { t.Errorf("expects %v but %v", x, s) }
+                                }
                         }
                 }
         }
