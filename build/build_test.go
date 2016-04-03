@@ -9,6 +9,7 @@ import (
         "bytes"
         "time"
         "testing"
+        "io/ioutil"
 )
 
 func TestTraverse(t *testing.T) {
@@ -434,11 +435,15 @@ bar:!:
 1: bar.txt aaa2
 2: bar.txt
 `); s != x { t.Errorf("'%s' != '%s'", s, x) }
-        if fi, e := os.Stat("bar.txt"); fi == nil || e != nil { t.Errorf("TestBuildRules: %s", e) } else {
-                // TODO: check content of bar.txt
+        if fi, e := os.Stat("bar.txt"); fi == nil || e != nil { t.Errorf("%v", e) } else {
+                if b, e := ioutil.ReadFile("bar.txt"); e != nil { t.Errorf("%v", e) } else {
+                        if s, x := string(b), "bar.txt\n"; s != x { t.Errorf("%v", s) }
+                }
         }
-        if fi, e := os.Stat("foo.txt"); fi == nil || e != nil { t.Errorf("TestBuildRules: %s", e) } else {
-                // TODO: check content of foo.txt
+        if fi, e := os.Stat("foo.txt"); fi == nil || e != nil { t.Errorf("%v", e) } else {
+                if b, e := ioutil.ReadFile("foo.txt"); e != nil { t.Errorf("%v", e) } else {
+                        if s, x := string(b), "foo.txt\n"; s != x { t.Errorf("%v", s) }
+                }
         }
 
         info.Reset()
@@ -449,7 +454,7 @@ bar:!:
 1: foo.txt aaa1
 2: foo.txt
 `); s != x { t.Errorf("'%s' != '%s'", s, x) }
-        if fi, e := os.Stat("foo.txt"); fi == nil || e != nil { t.Errorf("TestBuildRules: %s", e) } else {
+        if fi, e := os.Stat("foo.txt"); fi == nil || e != nil { t.Errorf("%v", e) } else {
         }
 
         info.Reset()
@@ -460,7 +465,7 @@ bar:!:
 1: bar.txt aaa2
 2: bar.txt
 `); s != x { t.Errorf("'%s' != '%s'", s, x) }
-        if fi, e := os.Stat("bar.txt"); fi == nil || e != nil { t.Errorf("TestBuildRules: %s", e) } else {
+        if fi, e := os.Stat("bar.txt"); fi == nil || e != nil { t.Errorf("%v", e) } else {
         }
 
         os.Remove("bar.txt")
