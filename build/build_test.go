@@ -197,12 +197,35 @@ $(commit)
 foo:!:
 	@echo "rule 'foo' is also called along with module 'foo'" $(info 4: $@)
 `);     if err != nil { t.Errorf("parse error:", err) }
+        if ctx.t != nil { t.Errorf("ctx.t: %v", ctx.t) }
+        if ctx.m != nil { t.Errorf("ctx.m: %v", ctx.m) }
+        if n, x := len(ctx.g.rules), 1; n != x { t.Errorf("wrong rules: %v", ctx.g.rules) } else {
+                if r, ok := ctx.g.rules["foo"]; !ok && r == nil { t.Errorf("'all' not defined") } else {
+                        if k, x := r.node.kind, nodeRulePhony; k != x { t.Errorf("%v != %v", k, x) }
+                        if n, x := len(r.node.children), 3; n != x { t.Errorf("children %d != %d", n, x) }
+                        if n, x := len(r.targets), 1; n != x { t.Errorf("targets %d != %d", n, x) } else {
+                                if s, x := r.targets[0], "foo"; s != x { t.Errorf("targets[0] %v != %v", s, x) }
+                        }
+                        if n, x := len(r.prerequisites), 0; n != x { t.Errorf("prerequisites %d != %d", n, x) }
+                        if n, x := len(r.recipes), 1; n != x { t.Errorf("recipes %d != %d", n, x) } else {
+                                ctx.Set("@", stringitem("xxxxx"))
+                                if c, ok := r.recipes[0].(*node); !ok { t.Errorf("recipes[0] '%v' is not node", r.recipes[0]) } else {
+                                        if k, x := c.kind, nodeRecipe; k != x { t.Errorf("recipes[1] %v != %v", k, x) }
+                                        if s, x := c.str(), `@echo "rule 'foo' is also called along with module 'foo'" $(info 4: $@)`; s != x { t.Errorf("recipes[1]: %v != %v", s, x) }
+                                        if s, x := c.Expand(ctx), `@echo "rule 'foo' is also called along with module 'foo'" `; s != x { t.Errorf("recipes[1]: '%v' != '%v'", s, x) }
+                                }
+                                ctx.Set("@", stringitem(""))
+                        }
+                        if c, ok := r.c.(*phonyTargetUpdater); !ok { t.Errorf("wrong type %v", c) }
+                }
+        }
 
         os.Remove("bar.txt")
         os.Remove("foo.txt")
         os.Remove("foobar.txt")
         Update(ctx)
-        if s, x := info.String(), fmt.Sprintf(`4: foo
+        if s, x := info.String(), fmt.Sprintf(`4: xxxxx
+4: foo
 1: foo.txt aaa
 2: bar.txt aaa
 3: bar.txt
@@ -239,7 +262,7 @@ foo:!:
         os.Remove("foobar.txt")
 }
 
-func TestBuildTemplate(t *testing.T) {
+func TestBuildUseTemplate(t *testing.T) {
         if wd, e := os.Getwd(); e != nil || workdir != wd { t.Errorf("%v != %v (%v)", workdir, wd, e) }
 
         info, f := new(bytes.Buffer), builtinInfoFunc; defer func(){ builtinInfoFunc = f }()
@@ -247,7 +270,7 @@ func TestBuildTemplate(t *testing.T) {
                 fmt.Fprintf(info, "%v\n", args.Expand(ctx))
         }
 
-        ctx, err := newTestContext("TestBuildTemplate", `
+        ctx, err := newTestContext("TestBuildUseTemplate", `
 ################
 $(template test)
 
@@ -272,12 +295,39 @@ $(commit)
 foo:!:
 	@echo "rule 'foo' is also called along with module 'foo'" $(info 4: $@)
 `);     if err != nil { t.Errorf("parse error:", err) }
+        if ctx.t != nil { t.Errorf("ctx.t: %v", ctx.t) }
+        if ctx.m != nil { t.Errorf("ctx.m: %v", ctx.m) }
+        if n, x := len(ctx.g.rules), 1; n != x { t.Errorf("wrong rules: %v", ctx.g.rules) } else {
+                if r, ok := ctx.g.rules["foo"]; !ok || r == nil { t.Errorf("'foo' not defined") } else {
+                        if k, x := r.node.kind, nodeRulePhony; k != x { t.Errorf("%v != %v", k, x) }
+                        if n, x := len(r.node.children), 3; n != x { t.Errorf("children %d != %d", n, x) }
+                        if n, x := len(r.targets), 1; n != x { t.Errorf("targets %d != %d", n, x) } else {
+                                if s, x := r.targets[0], "foo"; s != x { t.Errorf("targets[0] %v != %v", s, x) }
+                        }
+                        if n, x := len(r.prerequisites), 0; n != x { t.Errorf("prerequisites %d != %d", n, x) }
+                        if n, x := len(r.recipes), 1; n != x { t.Errorf("recipes %d != %d", n, x) } else {
+                                ctx.Set("@", stringitem("xxxxx"))
+                                if c, ok := r.recipes[0].(*node); !ok { t.Errorf("recipes[0] '%v' is not node", r.recipes[0]) } else {
+                                        if k, x := c.kind, nodeRecipe; k != x { t.Errorf("recipes[1] %v != %v", k, x) }
+                                        if s, x := c.str(), `@echo "rule 'foo' is also called along with module 'foo'" $(info 4: $@)`; s != x { t.Errorf("recipes[1]: %v != %v", s, x) }
+                                        if s, x := c.Expand(ctx), `@echo "rule 'foo' is also called along with module 'foo'" `; s != x { t.Errorf("recipes[1]: '%v' != '%v'", s, x) }
+                                }
+                                ctx.Set("@", stringitem(""))
+                        }
+                        if c, ok := r.c.(*phonyTargetUpdater); !ok { t.Errorf("wrong type %v", c) }
+                }
+        }
+        if n, x := len(ctx.modules), 1; n != x { t.Errorf("wrong modules: %v", ctx.modules) } else {
+                if m, ok := ctx.modules["foo"]; !ok || m == nil { t.Errorf("foo not defined: %v", ctx.modules) } else {
+                }
+        }
 
         os.Remove("bar.txt")
         os.Remove("foo.txt")
         os.Remove("foobar.txt")
         Update(ctx)
-        if s, x := info.String(), fmt.Sprintf(`4: foo
+        if s, x := info.String(), fmt.Sprintf(`4: xxxxx
+4: foo
 1: foo.txt aaa
 2: bar.txt aaa
 3: bar.txt
@@ -314,7 +364,7 @@ foo:!:
         os.Remove("foobar.txt")
 }
 
-func TestBuildTemplate2(t *testing.T) {
+func TestBuildUseTemplate2(t *testing.T) {
         if wd, e := os.Getwd(); e != nil || workdir != wd { t.Errorf("%v != %v (%v)", workdir, wd, e) }
 
         info, f := new(bytes.Buffer), builtinInfoFunc; defer func(){ builtinInfoFunc = f }()
@@ -322,7 +372,7 @@ func TestBuildTemplate2(t *testing.T) {
                 fmt.Fprintf(info, "%v\n", args.Expand(ctx))
         }
 
-        ctx, err := newTestContext("TestBuildTemplate", `
+        ctx, err := newTestContext("TestBuildUseTemplate2", `
 all: foo bar
 
 $(template test)
@@ -346,6 +396,33 @@ foo:!:
 bar:!:
 	@echo "rule 'foo' is also called along with module 'foo'" $(info 4: $@)
 `);     if err != nil { t.Errorf("parse error:", err) }
+        if n, x := len(ctx.g.rules), 3; n != x { t.Errorf("wrong rules: %v", ctx.g.rules) } else {
+                if r, ok := ctx.g.rules["all"]; !ok && r == nil { t.Errorf("'all' not defined") } else {
+                        // TODO: ...
+                }
+                if r, ok := ctx.g.rules["foo"]; !ok && r == nil { t.Errorf("'foo' not defined") } else {
+                        // TODO: ...
+                }
+                if r, ok := ctx.g.rules["bar"]; !ok && r == nil { t.Errorf("'bar' not defined") } else {
+                        // TODO: ...
+                }
+        }
+        if n, x := len(ctx.modules), 2; n != x { t.Errorf("wrong modules: %v", ctx.modules) } else {
+                if m, ok := ctx.modules["foo"]; !ok || m == nil { t.Errorf("foo not defined: %v", ctx.modules) } else {
+                        if n, x := len(m.rules), 1; n != x { t.Errorf("wrong rules: %v", m.rules) } else {
+                                if r, ok := m.rules["foo.txt"]; !ok && r == nil { t.Errorf("'foo.txt' not defined") } else {
+                                        // TODO: ...
+                                }
+                        }
+                }
+                if m, ok := ctx.modules["bar"]; !ok || m == nil { t.Errorf("foo not defined: %v", ctx.modules) } else {
+                        if n, x := len(m.rules), 1; n != x { t.Errorf("wrong rules: %v", m.rules) } else {
+                                if r, ok := m.rules["bar.txt"]; !ok && r == nil { t.Errorf("'foo.txt' not defined") } else {
+                                        // TODO: ...
+                                }
+                        }
+                }
+        }
 
         os.Remove("bar.txt")
         os.Remove("foo.txt")

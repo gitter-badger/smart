@@ -312,24 +312,26 @@ func builtinCommit(ctx *Context, loc location, args Items) (is Items) {
                         return
                 }
                 ctx.templates[ctx.t.name] = ctx.t
-                ctx.t = nil
-        case ctx.m != nil: // committing a module
+                ctx.t = nil // must unset the 't'
+                
+        case ctx.t == nil && ctx.m != nil: // committing a module
                 if *flagVV {
                         lineno, colno := ctx.l.caculateLocationLineColumn(loc)
                         verbose("commit (%v:%v:%v)", ctx.l.scope, lineno, colno)
                 }
 
-                ctx.m.commitLoc = loc
-                ctx.moduleBuildList = append(ctx.moduleBuildList, pendedBuild{ctx.m, ctx, args})
-
                 if ctx.m.Toolset != nil {
                         ctx.m.Toolset.CommitModule(ctx, args)
                 }
                 
+                ctx.m.commitLoc = loc
+                ctx.moduleBuildList = append(ctx.moduleBuildList, pendedBuild{ctx.m, ctx, args})
                 if i := len(ctx.moduleStack)-1; 0 <= i {
                         up := ctx.moduleStack[i]
                         ctx.m.Parent = up
                         ctx.moduleStack, ctx.m = ctx.moduleStack[0:i], up
+                } else {
+                        ctx.m = nil // must unset the 'm'
                 }
         }
         return

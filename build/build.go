@@ -789,7 +789,7 @@ func (job *executeRecipes) Action() worker.Result {
 
 // Update updates the specified targets given in `cmds`.
 //
-// Example:
+// Example (TODO):
 //      
 //      # Updates global target 'foo.txt'
 //      smart -g foo.txt
