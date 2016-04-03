@@ -295,13 +295,14 @@ func builtinModule(ctx *Context, loc location, args Items) (is Items) {
                                 rest = append(rest, a)
                         }
                 }
-                toolset.ConfigModule(ctx, rest, vars)
+                toolset.DeclModule(ctx, rest, vars)
         }
         return
 }
 
 func builtinCommit(ctx *Context, loc location, args Items) (is Items) {
-        if ctx.t != nil {
+        switch {
+        case ctx.t != nil: // committing a template
                 if ctx.m != nil {
                         errorf("declared template inside module")
                         return
@@ -310,36 +311,27 @@ func builtinCommit(ctx *Context, loc location, args Items) (is Items) {
                         errorf("template '%s' already declared", ctx.t.name)
                         return
                 }
-
-                t := ctx.t
-                ctx.templates[t.name] = t
+                ctx.templates[ctx.t.name] = ctx.t
                 ctx.t = nil
-                return
+        case ctx.m != nil: // committing a module
+                if *flagVV {
+                        lineno, colno := ctx.l.caculateLocationLineColumn(loc)
+                        verbose("commit (%v:%v:%v)", ctx.l.scope, lineno, colno)
+                }
+
+                ctx.m.commitLoc = loc
+                ctx.moduleBuildList = append(ctx.moduleBuildList, pendedBuild{ctx.m, ctx, args})
+
+                if ctx.m.Toolset != nil {
+                        ctx.m.Toolset.CommitModule(ctx, args)
+                }
+                
+                if i := len(ctx.moduleStack)-1; 0 <= i {
+                        up := ctx.moduleStack[i]
+                        ctx.m.Parent = up
+                        ctx.moduleStack, ctx.m = ctx.moduleStack[0:i], up
+                }
         }
-
-        if ctx.m == nil {
-                errorf("no module defined")
-                return
-        }
-
-        if *flagVV {
-                lineno, colno := ctx.l.caculateLocationLineColumn(loc)
-                //verbose("commit `%v' (%v:%v:%v)", ctx.m.GetName(ctx), ctx.l.scope, lineno, colno)
-                verbose("commit (%v:%v:%v)", ctx.l.scope, lineno, colno)
-        }
-
-        ctx.m.commitLoc = loc
-        ctx.moduleBuildList = append(ctx.moduleBuildList, pendedBuild{ctx.m, ctx, args})
-
-        i := len(ctx.moduleStack)-1
-        if 0 <= i {
-                up := ctx.moduleStack[i]
-                ctx.m.Parent = up
-                ctx.moduleStack, ctx.m = ctx.moduleStack[0:i], up
-        } else {
-                ctx.m = nil
-        }
-
         return
 }
 

@@ -262,7 +262,6 @@ immediate != immediate
 The directives define/endef are not supported.
 */
 var (
-        meDot = "me."
         nodeTypeNames = []string {
                 nodeComment:                    "comment",
                 nodeEscape:                     "escape",
@@ -342,8 +341,9 @@ func (n *node) len() int {
         return n.end - n.pos
 }
 
-func (n *node) str() string {
-        return string(n.l.s[n.pos:n.end])
+func (n *node) str() (s string) {
+        if a, b := n.pos, n.end; a < b { s = string(n.l.s[a:b]) }
+        return
 }
 
 func (n *node) loc() location {
@@ -1219,9 +1219,10 @@ func (ctx *Context) With(m *Module, work func()) {
         work()
 }
 
+/*
 func (ctx *Context) CallWith(m *Module, name string, args ...Item) (is Items) {
         return ctx.callWith(ctx.l.location(), m, name, args...)
-}
+} */
 
 func (ctx *Context) Call(name string, args ...Item) (is Items) {
         return ctx.call(ctx.l.location(), name, args...)
@@ -1256,10 +1257,11 @@ func (ctx *Context) setWithDetails(hasPrefix bool, prefix string, parts []string
                 var loc = ctx.l.location()
                 lineno, colno := ctx.l.caculateLocationLineColumn(loc)
                 if hasPrefix {
-                        errorf("%v:%v:%v: no namespace for '%s:%s'", ctx.l.scope, lineno, colno, prefix, strings.Join(parts, "."))
+                        fmt.Fprintf(os.Stderr, "%v:%v:%v: missing '%s:%s'\n", ctx.l.scope, lineno, colno, prefix, strings.Join(parts, "."))
                 } else {
-                        errorf("%v:%v:%v: no namespace for '%s'", ctx.l.scope, lineno, colno, strings.Join(parts, "."))
+                        fmt.Fprintf(os.Stderr, "%v:%v:%v: missing '%s'\n", ctx.l.scope, lineno, colno, strings.Join(parts, "."))
                 }
+                //errorf("unknown namespace '%s'", strings.Join(parts, "."))
         }
 }
 
@@ -1305,13 +1307,14 @@ func (ctx *Context) callWithDetails(loc location, hasPrefix bool, prefix string,
         return
 }
 
+/*
 func (ctx *Context) callWith(loc location, m *Module, name string, args ...Item) (is Items) {
         o := ctx.m
         ctx.m = m
-        is = ctx.call(loc, meDot+name, args...)
+        is = ctx.call(loc, "me."+name, args...)
         ctx.m = o
         return
-}
+} */
 
 // getDefine returns a define for hierarchy names like `tool:m1.m2.var`, `m1.m2.var`, etc.
 func (ctx *Context) getDefine(name string) (d *define, hasPrefix bool, prefix string, parts []string) {
@@ -1496,6 +1499,9 @@ func (ctx *Context) nodeItems(n *node) (is Items) {
                         b, _ := ctx.multipart(n)
                         s = b.String()
                 } else {
+                        if n.end < n.pos {
+                                //fmt.Printf("%v: %v, %v: %v\n", n.kind, n.pos, n.end, string(n.l.s[n.pos:n.pos+9]))
+                        }
                         s = n.str()
                 }
                 is = Items{ stringitem(s) }

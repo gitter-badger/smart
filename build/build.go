@@ -49,9 +49,12 @@ var (
 
 // toolset represents a toolchain like gcc and related utilities.
 type toolset interface {
-        // ConfigModule setup the current module being processed.
+        // DeclModule setup the current module being processed.
         // `args' and `vars' is passed in on the `$(module)' invocation.
-        ConfigModule(p *Context, args Items, vars map[string]string)
+        DeclModule(p *Context, args Items, vars map[string]string)
+
+        // CommitModule setup the current module being committed.
+        CommitModule(p *Context, args Items)
 
         // UseModule lets a toolset decides how to use a module.
         UseModule(p *Context, o *Module) bool
@@ -76,7 +79,10 @@ func RegisterToolset(name string, ts toolset) {
 type BasicToolset struct {
 }
 
-func (tt *BasicToolset) ConfigModule(ctx *Context, args Items, vars map[string]string) {
+func (tt *BasicToolset) DeclModule(ctx *Context, args Items, vars map[string]string) {
+}
+
+func (tt *BasicToolset) CommitModule(ctx *Context, args Items) {
 }
 
 func (tt *BasicToolset) UseModule(ctx *Context, o *Module) bool {
@@ -237,10 +243,17 @@ func (tt *templateToolset) getNamespace() namespace {
         return tt.template.namespaceEmbed
 }
 
-func (tt *templateToolset) ConfigModule(ctx *Context, args Items, vars map[string]string) {
-        //fmt.Printf("todo: TemplateToolset.ConfigModule %v\n", args.Join(ctx, ","))
-        //fmt.Printf("TemplateToolset.ConfigModule '%v'\n", ctx.m.GetName(ctx))
+func (tt *templateToolset) DeclModule(ctx *Context, args Items, vars map[string]string) {
         for _, n := range tt.declNodes {
+                if e := ctx.processNode(n); e != nil {
+                        //errorf("%v", e)
+                        break
+                }
+        }
+}
+
+func (tt *templateToolset) CommitModule(ctx *Context, args Items) {
+        for _, n := range tt.postNodes {
                 if e := ctx.processNode(n); e != nil {
                         //errorf("%v", e)
                         break
