@@ -635,7 +635,7 @@ func (r *rule) check(ctx *Context, m *match) (needsUpdate bool) {
 func (r *rule) update(ctx *Context, m *match) (updated bool) {
         updated = r.c.update(ctx, r, m)
 
-        // TODO: update in the namespace instead!
+        // TODO: update in the namespace instead, supporting multipart names (a.b.c)
         if m, ok := ctx.modules[m.target]; ok && m != nil {
                 updated = m.update(ctx) || updated
         }
