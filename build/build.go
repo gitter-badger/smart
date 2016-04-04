@@ -316,21 +316,22 @@ func (m *Module) GetSources(ctx *Context) (sources []string) {
         return
 }
 
-func (m *Module) update(ctx *Context) bool {
+func (m *Module) update(ctx *Context) (updated bool) {
         if g, ok := m.rules[m.goal]; ok && g != nil {
                 om := ctx.m; defer func(){ ctx.m = om }(); ctx.m = m
-                g.updateAll(ctx)
+                updated = g.updateAll(ctx)
         }
-        return false
+        return
 }
 
-func (ctx *Context) update(target string) {
+func (ctx *Context) update(target string) (updated bool) {
         if g, ok := ctx.g.rules[target]; ok && g != nil {
-                g.updateAll(ctx)
+                updated = g.updateAll(ctx)
         }
         if m, ok := ctx.modules[target]; ok && m != nil {
-                m.update(ctx)
+                updated = m.update(ctx) || updated
         }
+        return
 }
 
 type FileMatchRule struct {
@@ -588,7 +589,7 @@ updated_loop:
 
         // Check if we need to update the target
         if err != nil || 0 < len(updatedPrerequisites) || 0 < len(ec.newer) {
-                //fmt.Printf("execute: %v\n", m.target)
+                //fmt.Printf("defaultTargetUpdater.update: execute: %v\n", m.target)
                 return r.execute(ctx, ec) == nil
         }
 
@@ -631,8 +632,14 @@ func (r *rule) check(ctx *Context, m *match) (needsUpdate bool) {
         return needsUpdate
 }
 
-func (r *rule) update(ctx *Context, m *match) bool {
-        return r.c.update(ctx, r, m)
+func (r *rule) update(ctx *Context, m *match) (updated bool) {
+        updated = r.c.update(ctx, r, m)
+
+        // TODO: update in the namespace instead!
+        if m, ok := ctx.modules[m.target]; ok && m != nil {
+                updated = m.update(ctx) || updated
+        }
+        return
 }
 
 func (r *rule) updateAll(ctx *Context) bool {

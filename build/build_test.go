@@ -397,6 +397,7 @@ foo:!:
 bar:!:
 	@echo "rule 'foo' is also called along with module 'foo'" $(info 4: $@)
 `);     if err != nil { t.Errorf("parse error:", err) }
+        if s, x := ctx.g.goal, "all"; s != x { t.Errorf("%v != %v", s, x) }
         if n, x := len(ctx.g.rules), 3; n != x { t.Errorf("wrong rules: %v", ctx.g.rules) } else {
                 if r, ok := ctx.g.rules["all"]; !ok && r == nil { t.Errorf("'all' not defined") } else {
                         // TODO: ...
@@ -410,6 +411,7 @@ bar:!:
         }
         if n, x := len(ctx.modules), 2; n != x { t.Errorf("wrong modules: %v", ctx.modules) } else {
                 if m, ok := ctx.modules["foo"]; !ok || m == nil { t.Errorf("foo not defined: %v", ctx.modules) } else {
+                        if s, x := m.goal, "foo.txt"; s != x { t.Errorf("%v != %v", s, x) }
                         if n, x := len(m.rules), 1; n != x { t.Errorf("wrong rules: %v", m.rules) } else {
                                 if r, ok := m.rules["foo.txt"]; !ok && r == nil { t.Errorf("'foo.txt' not defined") } else {
                                         // TODO: ...
@@ -417,6 +419,7 @@ bar:!:
                         }
                 }
                 if m, ok := ctx.modules["bar"]; !ok || m == nil { t.Errorf("foo not defined: %v", ctx.modules) } else {
+                        if s, x := m.goal, "bar.txt"; s != x { t.Errorf("%v != %v", s, x) }
                         if n, x := len(m.rules), 1; n != x { t.Errorf("wrong rules: %v", m.rules) } else {
                                 if r, ok := m.rules["bar.txt"]; !ok && r == nil { t.Errorf("'foo.txt' not defined") } else {
                                         // TODO: ...
@@ -424,7 +427,8 @@ bar:!:
                         }
                 }
         }
-
+        
+        info.Reset()
         os.Remove("bar.txt")
         os.Remove("foo.txt")
         Update(ctx)
