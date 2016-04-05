@@ -1,7 +1,7 @@
 # Smart (Drafting)
 
-**Smart** is a [Semi-Functional Scripting Language]() designed for performing
-hierachical tasks easily. It's written in [Go](http://golang.org) programming
+**Smart** is a [Semi-Functional Scripting Language]() designed to perform
+recursive tasks easily. It's written in [Go](http://golang.org) programming
 language.
 
 [![GoDoc](https://godoc.org/github.com/duzy/smart/build?status.svg)](http://godoc.org/github.com/duzy/smart/build)
