@@ -24,6 +24,8 @@ var (
 
         toolsets = map[string]*toolsetStub{}
 
+        initScript []string
+
         generalMetaFiles = []*FileMatchRule{
                 { "backup", os.ModeDir |^ os.ModeType, `[^~]*~$` },
                 //{ "git", os.ModeDir |^ os.ModeType, `\.git(ignore)?` },
@@ -68,28 +70,9 @@ type toolsetStub struct {
         toolset toolset
 }
 
-func RegisterToolset(name string, ts toolset) {
-        if _, has := toolsets[name]; has {
-                panic("toolset already registered: "+name)
-        }
-
-        toolsets[name] = &toolsetStub{ name:name, toolset:ts };
+func AppendInit(script string) {
+        initScript = append(initScript, script)
 }
-
-type BasicToolset struct {
-}
-
-func (tt *BasicToolset) DeclModule(ctx *Context, args Items, vars map[string]string) {
-}
-
-func (tt *BasicToolset) CommitModule(ctx *Context, args Items) {
-}
-
-func (tt *BasicToolset) UseModule(ctx *Context, o *Module) bool {
-        return false
-}
-
-func (tt *BasicToolset) getNamespace() namespace { return nil }
 
 func IsIA32Command(s string) bool {
         buf := new(bytes.Buffer)
@@ -236,11 +219,14 @@ type template struct {
 
 type templateToolset struct {
         *template
-        BasicToolset
 }
 
 func (tt *templateToolset) getNamespace() namespace {
         return tt.template.namespaceEmbed
+}
+
+func (tt *templateToolset) UseModule(p *Context, o *Module) bool {
+        return false
 }
 
 func (tt *templateToolset) DeclModule(ctx *Context, args Items, vars map[string]string) {
