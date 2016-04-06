@@ -14,8 +14,7 @@ import (
 func init() {
         AppendInit(`# Execute Shell Command
 $(template shell)
-start:!: $(me.depends)
-	@$(me.command) $(me.args)
+start:!: $(me.depends) ; $(me.command) $(me.args)
 $(commit)
 `)
 }

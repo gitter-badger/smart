@@ -833,9 +833,12 @@ func Build(vars map[string]string, cmds ...string) (ctx *Context) {
         )
         if d = *flagC; d == "" { d = "." }
 
-        s := []byte{} // TODO: needs init script
+        init := new(bytes.Buffer)
+        for _, s := range initScript {
+                init.WriteString(s)
+        }
 
-        ctx, err = NewContext("init", s, vars)
+        ctx, err = NewContext("init", init.Bytes(), vars)
         if err != nil {
                 fmt.Printf("smart: %v\n", err)
                 return
@@ -859,3 +862,4 @@ func Build(vars map[string]string, cmds ...string) (ctx *Context) {
         Update(ctx, cmds...)
         return
 }
+

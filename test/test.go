@@ -52,8 +52,6 @@ func RunToolsetTestCase(t *testing.T, tp, tn string, tf func(t *testing.T)) {
         if e := os.Chdir(tc); e != nil { t.Errorf("Chdir: %v", e); return }
         fmt.Printf("test: Entering directory `%v'\n", tc)
 
-        //ResetModules()
-
         tf(t)
 
         fmt.Printf("test: Leaving directory `%v'\n", tc)

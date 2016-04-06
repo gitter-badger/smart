@@ -1,4 +1,3 @@
-# -*- makefile-gmake -*-
 $(module touch-foobar, shell, touch)
 me.targets := foobar
 me.args := foobar
