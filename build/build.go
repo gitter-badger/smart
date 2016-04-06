@@ -22,8 +22,6 @@ import (
 var (
         workdir, _ = os.Getwd()
 
-        toolsets = map[string]*toolsetStub{}
-
         initScript []string
 
         generalMetaFiles = []*FileMatchRule{
@@ -49,6 +47,7 @@ var (
         }
 )
 
+// TODO: put this into namespace
 // toolset represents a toolchain like gcc and related utilities.
 type toolset interface {
         // DeclModule setup the current module being processed.
@@ -63,11 +62,6 @@ type toolset interface {
 
         // getNamespace returns toolset namespace (internal)
         getNamespace() namespace
-}
-
-type toolsetStub struct {
-        name string
-        toolset toolset
 }
 
 func AppendInit(script string) {

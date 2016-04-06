@@ -1342,8 +1342,8 @@ func (ctx *Context) getNamespaceWithDetails(hasPrefix bool, prefix string, parts
         num := len(parts)
 
         if hasPrefix {
-                if s, ok := toolsets[prefix]; ok && s != nil {
-                        ns = s.toolset.getNamespace()
+                if t, ok := ctx.templates[prefix]; ok && t != nil {
+                        ns = t.namespaceEmbed
                 } else {
                         lineno, colno := ctx.l.caculateLocationLineColumn(ctx.l.location())
                         fmt.Fprintf(os.Stderr, "%v:%v:%v:warning: undefined toolset prefix `%s'\n",
