@@ -2,5 +2,8 @@
 *.o
 *.so
 ./foo
+/shell/foobar
+/shell/fooo
+/shell/foo
 out
 temp.txt

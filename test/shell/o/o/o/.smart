@@ -1,5 +1,6 @@
-# -*- makefile-gmake -*-
-$(module touch-o-o-o-foo, shell, touch)
-me.targets := foo
-me.args := foo
+# Declare a new module.
+$(module touch-o-o-o-foo, shell)
+me.targets := fooo
+me.command := touch
+me.args := fooo
 $(commit)
