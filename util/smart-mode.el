@@ -48,7 +48,7 @@
      makefile-match-function-end nil nil
      (1 'makefile-shell prepend t))
 
-   ;; $(template ...), $(module ...)
+   ;; $(template ...) $(module ...)
    '("[^$]\\$[({]\\(template\\|module\\|use\\)[ \t]\\([^,)}]+\\)"
      (1 font-lock-builtin-face prepend)
      (2 font-lock-string-face prepend))
