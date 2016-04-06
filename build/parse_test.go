@@ -13,25 +13,6 @@ import (
         "path/filepath"
 )
 
-type testToolset struct {
-        BasicToolset
-        tag string
-        ns namespaceEmbed
-}
-
-func (tt *testToolset) getNamespace() namespace { return &tt.ns }
-
-func newTestToolset(tag string) (ts *testToolset) {
-        ts = &testToolset{
-                tag:tag, ns:namespaceEmbed{
-                        defines: make(map[string]*define),
-                        rules: make(map[string]*rule),
-                },
-        }
-        ts.ns.defines["name"] = &define{ name:tag, value:Items{ stringitem("test-"+tag) } }
-        return
-}
-
 func newTestLex(file, s string) (l *lex) {
         l = &lex{ parseBuffer:&parseBuffer{ scope:file, s:[]byte(s) }, pos:0, }
         return
@@ -1467,10 +1448,10 @@ func TestMultipartNames(t *testing.T) {
                 fmt.Fprintf(info, "%v\n", args.Expand(ctx))
         }
 
-        ts := newTestToolset("test")
-        toolsets["test"] = &toolsetStub{ name:"test", toolset:ts }
-
         ctx, err := newTestContext("TestMultipartNames", `
+$(template test)
+$(commit)
+
 $(= test:foo, f o o)
 #$(= test:foo.bar,  foo bar)
 
@@ -1502,13 +1483,6 @@ $(info $(test.a.foo))
         if s, x := ctx.Call("test.foo").Expand(ctx), "FOOO"; s != x { t.Errorf("expects '%s' but '%s'", x, s) }
         if s, x := ctx.Call("test.a.foo").Expand(ctx), "FOOOO"; s != x { t.Errorf("expects '%s' but '%s'", x, s) }
         if s, x := ctx.Call("test.a.bar").Expand(ctx), "bar"; s != x { t.Errorf("expects '%s' but '%s'", x, s) }
-        if d, b := ts.ns.defines["foo"]; !b { t.Errorf("expects 'foo'") } else {
-                if x, s := " f o o", d.value.Expand(ctx); s != x { t.Errorf("expects '%s' but '%s'", x, s) }
-        }
-        /*
-        if d, b := ts.ns.defines["foo.bar"]; !b { t.Errorf("expects 'foo.bar'") } else {
-                if x, s := "  foo bar", d.value.Expand(ctx); s != x { t.Errorf("expects '%s' but '%s'", x, s) }
-        } */
 
         if v, s := info.String(), fmt.Sprintf(`[ f]
 [ f test:foobar  o  o]
@@ -1520,8 +1494,6 @@ a
 FOOO
 FOOOO
 `); v != s { t.Errorf("`%s` != `%s`", v, s) }
-
-        delete(toolsets, "test")
 }
 
 func TestContinualInCall(t *testing.T) {
@@ -1643,11 +1615,15 @@ func TestToolsetVariables(t *testing.T) {
         ndk = filepath.Dir(ndk)
         sdk = filepath.Dir(filepath.Dir(sdk))
 
-        toolsets["test-sdk"] = &toolsetStub{ name:"test-sdk", toolset:newTestToolset("sdk") }
-        toolsets["test-ndk"] = &toolsetStub{ name:"test-ndk", toolset:newTestToolset("ndk") }
-        toolsets["test-shell"] = &toolsetStub{ name:"test-shell", toolset:newTestToolset("shell") }
-
         _, err := newTestContext("TestToolsetVariables", `
+$(template test-ndk)
+$(commit)
+$(template test-sdk)
+me.support = xxxx
+$(commit)
+$(template test-shell)
+$(commit)
+
 $(info $(test-shell:name))
 $(info $(test-sdk:name))
 $(info $(test-sdk:support a,b,c))
@@ -1658,9 +1634,6 @@ test-sdk
 
 test-ndk
 `); v != s { t.Errorf("`%s` != `%s`", v, s) }
-        delete(toolsets, "test-sdk")
-        delete(toolsets, "test-ndk")
-        delete(toolsets, "test-shell")
 }
 
 func TestToolsetRules(t *testing.T) {
