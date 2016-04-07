@@ -23,6 +23,8 @@ var (
         workdir, _ = os.Getwd()
 
         initScript []string
+        hooksMap = HooksMap{
+        }
 
         generalMetaFiles = []*FileMatchRule{
                 { "backup", os.ModeDir |^ os.ModeType, `[^~]*~$` },
@@ -64,8 +66,27 @@ type toolset interface {
         getNamespace() namespace
 }
 
-func AppendInit(script string) {
-        initScript = append(initScript, script)
+type HooksMap map[string]HookTable
+type HookTable map[string]Hook
+type Hook func(ctx *Context, args Items) Items
+
+func AppendInit(hm HooksMap, script string) (err error) {
+        if hm != nil {
+                for k, _ := range hm {
+                        if v, ok := hooksMap[k]; ok && v != nil { 
+                                s := fmt.Sprintf("%v already taken", k)
+                                err = errors.New(s)
+                                return
+                        }
+                }
+                for k, h := range hm {
+                        hooksMap[k] = h
+                }
+        }
+        if script != "" {
+                initScript = append(initScript, script)
+        }
+        return
 }
 
 func IsIA32Command(s string) bool {
@@ -298,7 +319,20 @@ func (m *Module) GetSources(ctx *Context) (sources []string) {
 
 func (m *Module) update(ctx *Context) (updated bool) {
         if g, ok := m.rules[m.goal]; ok && g != nil {
-                om := ctx.m; defer func(){ ctx.m = om }(); ctx.m = m
+                owd, err := os.Getwd()
+                if err != nil { errorf("get working directory: %v", err) }
+                if err = os.Chdir(m.GetDir(ctx)); err != nil {
+                        errorf("change working directory: %v", err)
+                }
+                om := ctx.m
+                defer func(){ 
+                        if err = os.Chdir(owd); err != nil {
+                                errorf("change working directory: %v", err)
+                        }
+                        ctx.m = om
+                }()
+
+                ctx.m = m // change current working module 
                 updated = g.updateAll(ctx)
         }
         return

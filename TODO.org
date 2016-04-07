@@ -1,0 +1,22 @@
+#+TITLE: TODO
+#+AUTHOR: Duzy Chan
+#+EMAIL: code@duzy.info
+#+TODO: TODO VERIFY DONE
+#+LaTeX_CLASS: article
+#+LaTeX_CLASS_OPTIONS: [colorlinks=true,urlcolor=blue,secnums]
+* Enhance the parser for better syntax semantic [0/2]
+** TODO Remove immediate-text
+** TODO Add statements support [0/4]
+*** TODO *include* statement
+*** TODO *template* statement
+*** TODO *module* statement
+*** TODO *use* statement
+** TODO Semantic supports for multi-part names
+
+   Examples *$(name.sub.var)*, *$(test:name.sub.var)*
+
+* Enhance functional programming features [0/1]
+
+  Make it more like `Lisp` programming language.
+
+** TODO *let*

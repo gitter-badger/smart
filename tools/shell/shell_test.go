@@ -5,6 +5,7 @@ package smart
 
 import (
         "os"
+        //"bytes"
         "testing"
         . "github.com/duzy/smart/build"
         . "github.com/duzy/smart/test"
@@ -19,6 +20,12 @@ func testCleanFiles(t *testing.T) {
 func testToolsetShell(t *testing.T) {
         testCleanFiles(t)
 
+        /*
+        info, f := new(bytes.Buffer), builtinInfoFunc; defer func(){ builtinInfoFunc = f }()
+        builtinInfoFunc = func(ctx *Context, args Items) {
+                fmt.Fprintf(info, "%v\n", args.Expand(ctx))
+        } */
+        
         ctx := Build(make(map[string]string))
         modules := ctx.GetModules()
 
@@ -38,6 +45,8 @@ func testToolsetShell(t *testing.T) {
         if m.GetName(ctx) != "touch-o-o-o-foo" { t.Errorf("expecting touch-o-o-o-foo but %v", m.GetName(ctx)); return }
         if fi, e := os.Stat("o/o/o/fooo"); fi == nil || e != nil { t.Errorf("failed: %v", e); return }
 
+        //if s := info.String(); s != `touch-foobar` { t.Errorf("info: '%s'", s) }
+        
         testCleanFiles(t)
 }
 

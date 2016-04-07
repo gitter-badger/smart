@@ -1,14 +1,13 @@
 # Declare a new module.
 $(module touch-foobar, shell)
-me.targets := foobar
 me.command := touch
 me.args := foobar
 $(use touch-foo)
+$(info me.name: $(shell:exec echo $(me.name)))
 $(commit)
 
 # Declare another module.
 $(module touch-foo, shell)
-me.targets := foo
 me.command := touch
 me.args := foo
 $(commit)

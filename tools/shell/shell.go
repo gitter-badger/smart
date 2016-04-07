@@ -4,17 +4,39 @@
 package smart
 
 import (
-        //"os"
-        //"fmt"
-        //"strings"
-        //"path/filepath"
+        "bytes"
+        "os/exec"
         . "github.com/duzy/smart/build"
 )
 
 func init() {
-        AppendInit(`# Execute Shell Command
+        e := AppendInit(HooksMap{
+                "shell": HookTable{
+                        "exec": hookExec,
+                },
+        }, `# Execute Shell Command
 $(template shell)
-start:!: $(me.depends) ; @$(me.command) $(me.args)
+start:!: $(me.depends)
+	@$(me.command) $(me.args)
 $(commit)
 `)
+        if e != nil {
+                panic(e)
+        }
+}
+
+func hookExec(ctx *Context, args Items) (res Items) {
+        cmd := exec.Command("sh", "-c", args.Expand(ctx))
+        if cmd != nil {
+                stdout, stderr := new(bytes.Buffer), new(bytes.Buffer)
+                cmd.Stdout, cmd.Stderr = stdout, stderr
+                if err := cmd.Run(); err != nil {
+                        // TODO: report errors
+                        return
+                }
+                res = append(res, StringItem(stdout.String()))
+        } else {
+                // TODO: report errors
+        }
+        return
 }
