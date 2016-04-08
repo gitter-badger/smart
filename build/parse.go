@@ -1880,22 +1880,27 @@ func processNodeRule(ctx *Context, n *node) (err error) {
 }
 
 func processNodeInclude(ctx *Context, n *node) (err error) {
+        fmt.Printf("todo: %v %v\n", n.kind, n.children)
         return
 }
 
 func processNodeTemplate(ctx *Context, n *node) (err error) {
+        fmt.Printf("todo: %v %v\n", n.kind, n.children)
         return
 }
 
 func processNodeModule(ctx *Context, n *node) (err error) {
+        fmt.Printf("todo: %v %v\n", n.kind, n.children)
         return
 }
 
 func processNodeCommit(ctx *Context, n *node) (err error) {
+        fmt.Printf("todo: %v %v\n", n.kind, n.children)
         return
 }
 
 func processNodePost(ctx *Context, n *node) (err error) {
+        fmt.Printf("todo: %v %v\n", n.kind, n.children)
         return
 }
 
