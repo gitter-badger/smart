@@ -262,6 +262,27 @@ var (
                 "commit":       nodeCommit,
                 "post":         nodePost,
         }
+
+        processors = map[nodeType]func(ctx *Context, n *node)(err error){
+                nodeComment:                    processNodeComment,
+                nodeImmediateText:              processNodeImmediateText,
+                nodeCall:                       processNodeCall,
+                nodeDefineQuestioned:           processNodeDefineQuestioned,
+                nodeDefineDeferred:             processNodeDefineDeferred,
+                nodeDefineSingleColoned:        processNodeDefineSingleColoned,
+                nodeDefineDoubleColoned:        processNodeDefineDoubleColoned,
+                nodeDefineAppend:               processNodeDefineAppend,
+                nodeDefineNot:                  processNodeDefineNot,
+                nodeRulePhony:                  processNodeRule,
+                nodeRuleChecker:                processNodeRule,
+                nodeRuleDoubleColoned:          processNodeRule,
+                nodeRuleSingleColoned:          processNodeRule,
+                nodeInclude:            processNodeInclude,
+                nodeTemplate:           processNodeTemplate,
+                nodeModule:             processNodeModule,
+                nodeCommit:             processNodeCommit,
+                nodePost:               processNodePost,
+        }
 )
 
 /*
@@ -1696,88 +1717,10 @@ func (ctx *Context) processNode(n *node) (err error) {
                 }
         }
 
-        switch n.kind {
-        case nodeCall:
-                if s := strings.TrimSpace(ctx.nodeItems(n).Expand(ctx)); s != "" {
-                        lineno, colno := ctx.l.caculateLocationLineColumn(n.loc())
-                        fmt.Fprintf(os.Stderr, "%v:%v:%v: illigal: '%v'\n", ctx.l.scope, lineno, colno, s)
-                }
-
-        case nodeImmediateText:
-                if s := strings.TrimSpace(ctx.nodeItems(n).Expand(ctx)); s != "" {
-                        lineno, colno := ctx.l.caculateLocationLineColumn(n.loc())
-                        fmt.Fprintf(os.Stderr, "%v:%v:%v: syntax error: '%v'\n", ctx.l.scope, lineno, colno, s)
-                }
-
-        case nodeDefineQuestioned:
-                scoped, name, parts := ctx.expandNameNode(n.children[0])
-                if is := ctx.callWithDetails(n.loc(), scoped, name, parts); is.IsEmpty(ctx) {
-                        ctx.setWithDetails(scoped, name, parts, n)
-                }
-
-        case nodeDefineDeferred:
-                scoped, name, parts := ctx.expandNameNode(n.children[0])
-                ctx.setWithDetails(scoped, name, parts, n)
-
-        case nodeDefineSingleColoned: fallthrough
-        case nodeDefineDoubleColoned:
-                scoped, name, parts := ctx.expandNameNode(n.children[0])
-                ctx.setWithDetails(scoped, name, parts, ctx.nodeItems(n.children[1])...)
-
-        case nodeDefineAppend:
-                scoped, name, parts := ctx.expandNameNode(n.children[0])
-                if d := ctx.getDefineWithDetails(scoped, name, parts); d != nil {
-                        d.value = append(d.value, n.children[1])
-                } else {
-                        value := ctx.nodeItems(n.children[1])
-                        ctx.setWithDetails(scoped, name, parts, value...)
-                }
-
-        case nodeDefineNot:
-                panic("'!=' not implemented")
-
-        case nodeRulePhony: fallthrough
-        case nodeRuleChecker: fallthrough
-        case nodeRuleDoubleColoned: fallthrough
-        case nodeRuleSingleColoned:
-                var ns namespace
-                if ctx.m == nil {
-                        ns = ctx.g
-                } else {
-                        ns = ctx.m
-                }
-
-                r := ns.link(Split(ctx.nodeItems(n.children[0]).Expand(ctx))...)
-                r.prerequisites, r.node = Split(ctx.nodeItems(n.children[1]).Expand(ctx)), n
-                if 2 < len(n.children) {
-                        for _, c := range n.children[2].children {
-                                r.recipes = append(r.recipes, c)
-                        }
-                }
-
-                // Set goal rule if nil
-                if 0 < len(r.targets) {
-                        if g := r.ns.getGoalRule(); g == "" {
-                                r.ns.setGoalRule(r.targets[0])
-                        }
-                }
-
-                switch n.kind {
-                case nodeRulePhony:             r.c = &phonyTargetUpdater{}
-                case nodeRuleChecker:           r.c = &checkRuleUpdater{ r }
-                case nodeRuleDoubleColoned:     r.c = &defaultTargetUpdater{}
-                case nodeRuleSingleColoned:     r.c = &defaultTargetUpdater{}
-                default: errorf("unexpected rule type: %v", n.kind)
-                }
-
-                /*
-                lineno, colno := ctx.l.caculateLocationLineColumn(n.loc())
-                fmt.Fprintf(os.Stderr, "%v:%v:%v: %v\n", ctx.l.scope, lineno, colno, n.kind) //*/
-
-        default:
+        if f, ok := processors[n.kind]; ok && f != nil {
+                err = f(ctx, n)
+        } else {
                 panic(fmt.Sprintf("'%v' not implemented", n.kind))
-
-        case nodeComment:
         }
         return
 }
@@ -1837,6 +1780,122 @@ func (ctx *Context) include(fn string) (err error) {
         if s, err = ioutil.ReadAll(f); err == nil {
                 err = ctx.append(fn, s)
         }
+        return
+}
+
+func processNodeComment(ctx *Context, n *node) (err error) {
+        return
+}
+
+func processNodeCall(ctx *Context, n *node) (err error) {
+        if s := strings.TrimSpace(ctx.nodeItems(n).Expand(ctx)); s != "" {
+                lineno, colno := ctx.l.caculateLocationLineColumn(n.loc())
+                fmt.Fprintf(os.Stderr, "%v:%v:%v: illigal: '%v'\n", ctx.l.scope, lineno, colno, s)
+        }
+        return
+}
+
+func processNodeImmediateText(ctx *Context, n *node) (err error) {
+        if s := strings.TrimSpace(ctx.nodeItems(n).Expand(ctx)); s != "" {
+                lineno, colno := ctx.l.caculateLocationLineColumn(n.loc())
+                fmt.Fprintf(os.Stderr, "%v:%v:%v: syntax error: '%v'\n", ctx.l.scope, lineno, colno, s)
+        }
+        return
+}
+
+func processNodeDefineQuestioned(ctx *Context, n *node) (err error) {
+        scoped, name, parts := ctx.expandNameNode(n.children[0])
+        if is := ctx.callWithDetails(n.loc(), scoped, name, parts); is.IsEmpty(ctx) {
+                ctx.setWithDetails(scoped, name, parts, n)
+        }
+        return
+}
+
+func processNodeDefineDeferred(ctx *Context, n *node) (err error) {
+        scoped, name, parts := ctx.expandNameNode(n.children[0])
+        ctx.setWithDetails(scoped, name, parts, n)
+        return
+}
+
+func processNodeDefineSingleColoned(ctx *Context, n *node) (err error) {
+        scoped, name, parts := ctx.expandNameNode(n.children[0])
+        ctx.setWithDetails(scoped, name, parts, ctx.nodeItems(n.children[1])...)
+        return
+}
+
+func processNodeDefineDoubleColoned(ctx *Context, n *node) (err error) {
+        return processNodeDefineSingleColoned(ctx, n)
+}
+
+func processNodeDefineAppend(ctx *Context, n *node) (err error) {
+        scoped, name, parts := ctx.expandNameNode(n.children[0])
+        if d := ctx.getDefineWithDetails(scoped, name, parts); d != nil {
+                d.value = append(d.value, n.children[1])
+        } else {
+                value := ctx.nodeItems(n.children[1])
+                ctx.setWithDetails(scoped, name, parts, value...)
+        }
+        return
+}
+
+func processNodeDefineNot(ctx *Context, n *node) (err error) {
+        panic("'!=' not implemented")
+}
+
+func processNodeRule(ctx *Context, n *node) (err error) {
+        var ns namespace
+        if ctx.m == nil {
+                ns = ctx.g
+        } else {
+                ns = ctx.m
+        }
+
+        r := ns.link(Split(ctx.nodeItems(n.children[0]).Expand(ctx))...)
+        r.prerequisites, r.node = Split(ctx.nodeItems(n.children[1]).Expand(ctx)), n
+        if 2 < len(n.children) {
+                for _, c := range n.children[2].children {
+                        r.recipes = append(r.recipes, c)
+                }
+        }
+
+        // Set goal rule if nil
+        if 0 < len(r.targets) {
+                if g := r.ns.getGoalRule(); g == "" {
+                        r.ns.setGoalRule(r.targets[0])
+                }
+        }
+
+        switch n.kind {
+        case nodeRulePhony:             r.c = &phonyTargetUpdater{}
+        case nodeRuleChecker:           r.c = &checkRuleUpdater{ r }
+        case nodeRuleDoubleColoned:     r.c = &defaultTargetUpdater{}
+        case nodeRuleSingleColoned:     r.c = &defaultTargetUpdater{}
+        default: errorf("unexpected rule type: %v", n.kind)
+        }
+
+        /*
+        lineno, colno := ctx.l.caculateLocationLineColumn(n.loc())
+        fmt.Fprintf(os.Stderr, "%v:%v:%v: %v\n", ctx.l.scope, lineno, colno, n.kind) //*/
+        return
+}
+
+func processNodeInclude(ctx *Context, n *node) (err error) {
+        return
+}
+
+func processNodeTemplate(ctx *Context, n *node) (err error) {
+        return
+}
+
+func processNodeModule(ctx *Context, n *node) (err error) {
+        return
+}
+
+func processNodeCommit(ctx *Context, n *node) (err error) {
+        return
+}
+
+func processNodePost(ctx *Context, n *node) (err error) {
         return
 }
 
