@@ -16,10 +16,12 @@ func init() {
                 },
         }, `# Execute Shell Command
 $(template shell)
-$(info using: $(me.using))
 start:!: $(me.depends)
 	@$(me.command) $(me.args)
 $(commit)
+
+include xx, yy, zz
+include xx
 `)
         if e != nil {
                 panic(e)

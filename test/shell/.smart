@@ -11,3 +11,4 @@ $(module touch-foo, shell)
 me.command := touch
 me.args := foo
 $(commit)
+

@@ -47,6 +47,12 @@ var (
         }
 )
 
+func SetBuiltinInfoFunc(f func(ctx *Context, args Items)) func(ctx *Context, args Items) {
+        previous := builtinInfoFunc
+        builtinInfoFunc = f
+        return previous
+}
+
 func builtinDir(ctx *Context, loc location, args Items) (is Items) {
         for _, a := range args {
                 is = append(is, stringitem(filepath.Dir(a.Expand(ctx))))

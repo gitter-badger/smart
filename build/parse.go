@@ -247,6 +247,21 @@ const (
         nodeRecipe
         nodeCall
         nodeSpeak               // $(speak dialect, ...)
+        nodeInclude             // include filename
+        nodeTemplate            // template name, parameters
+        nodeModule              // module name, temp, parameters
+        nodeCommit              // commit
+        nodePost                // post
+)
+
+var (
+        statements = map[string]nodeType{
+                "include":      nodeInclude,
+                "template":     nodeTemplate,
+                "module":       nodeModule,
+                "commit":       nodeCommit,
+                "post":         nodePost,
+        }
 )
 
 /*
@@ -288,6 +303,11 @@ var (
                 nodeRecipe:                     "recipe",
                 nodeCall:                       "call",
                 nodeSpeak:                      "speak",
+                nodeInclude:                    "include",
+                nodeTemplate:                   "template",
+                nodeModule:                     "module",
+                nodeCommit:                     "commit",
+                nodePost:                       "post",
         }
 )
 
@@ -407,13 +427,47 @@ func (l *lex) peek() (r rune) {
 }
 
 func (l *lex) peekN(n int) (rs []rune) {
-        for pos := l.pos; 0 < n; n-- {
-                if pos < len(l.s) {
+        for pos, end := l.pos, len(l.s); 0 < n; n-- {
+                if pos < end {
                         r, l := utf8.DecodeRune(l.s[pos:])
                         rs, pos = append(rs, r), pos+l
                 }
         }
         return
+}
+
+func (l *lex) lookat(s string, pp *int) bool {
+        end := len(l.s)
+        for _, sr := range s {
+                if *pp < end {
+                        r, n := utf8.DecodeRune(l.s[*pp:])
+                        *pp = *pp + n
+                        
+                        if sr != r {
+                                return false
+                        }
+                }
+        }
+        return true
+}
+
+func (l *lex) looking(s string, pp *int) bool {
+        if l.rune == rune(s[0]) {
+                return l.lookat(s[1:], pp)
+        }
+        return false
+}
+
+func (l *lex) lookingInlineSpaces(pp *int) bool {
+        beg, end := *pp, len(l.s)
+        for *pp < end {
+                if r, n := utf8.DecodeRune(l.s[*pp:]); r != '\n' && unicode.IsSpace(r) {
+                        *pp = *pp + n
+                } else {
+                        break
+                }
+        }
+        return beg < *pp
 }
 
 func (l *lex) get() bool {
@@ -574,8 +628,27 @@ state_loop:
 
 // stateLineHeadText process line-head text
 func (l *lex) stateLineHeadText() {
+        st := l.top()
 state_loop:
         for l.get() {
+                if st.code == 0 {
+                        for s, t := range statements {
+                                if pos := l.pos; l.looking(s, &pos) {
+                                        if ss := pos; l.lookingInlineSpaces(&ss) {
+                                                //fmt.Printf("looked: %v (%v): %v\n", s, t, string(l.s[pos:]))
+                                                st.node.kind, st.node.end, l.pos = t, pos, ss
+                                                if l.peek() == '\n' {
+                                                        l.pop() // end of statement
+                                                        l.nodes = append(l.nodes, st.node)
+                                                } else {
+                                                        l.push(nodeArg, l.stateStatementArg, 0)
+                                                }
+                                                break state_loop
+                                        }
+                                }
+                        }
+                }
+
                 switch {
                 case l.rune == '$':
                         st := l.push(nodeCall, l.stateDollar, 0)
@@ -645,6 +718,53 @@ state_loop:
 
                 default: l.escapeTextLine(l.top().node)
                 }
+                
+                if st.code == 0 {
+                        st.code = 1 // 1 indicates not the first char anymore
+                }
+        }
+}
+
+func (l *lex) stateStatementArg() {
+        st := l.top() // Must be a nodeArg
+        //fmt.Printf("statement: %v: %v\n", st.node.kind, string(l.s[l.pos:]))
+state_loop:
+        for l.get() {
+                if st.code == 0 {
+                        if l.rune != '\n' && unicode.IsSpace(l.rune) {
+                                continue
+                        } else {
+                                st.node.pos = l.pos - 1
+                        }
+                }
+                
+                switch {
+                case l.rune == '$':
+                        l.push(nodeCall, l.stateDollar, 0).node.pos-- // 'pos--' for the '$'
+                        break state_loop
+                case l.rune == '\\':
+                        l.escapeTextLine(st.node)
+                case l.rune == ',': fallthrough
+                case l.rune == '\n':
+                        arg := st.node
+                        arg.end = l.pos - 1
+                        l.pop()
+
+                        st = l.top()
+                        st.node.children = append(st.node.children, arg)
+                        if l.rune == '\n' {
+                                l.pop() // end of statement
+                                l.nodes = append(l.nodes, st.node)
+                                //fmt.Printf("%v: %v %v\n", st.node.kind, st.node.str(), st.node.children)
+                        } else {
+                                l.push(nodeArg, l.stateStatementArg, 0)
+                        }
+                        break state_loop
+                }
+
+                if st.code == 0 {
+                        st.code = 1
+                }                
         }
 }
 
@@ -1655,7 +1775,7 @@ func (ctx *Context) processNode(n *node) (err error) {
                 fmt.Fprintf(os.Stderr, "%v:%v:%v: %v\n", ctx.l.scope, lineno, colno, n.kind) //*/
 
         default:
-                panic(n.kind.String()+" not implemented")
+                panic(fmt.Sprintf("'%v' not implemented", n.kind))
 
         case nodeComment:
         }
