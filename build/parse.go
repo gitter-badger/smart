@@ -277,11 +277,11 @@ var (
                 nodeRuleChecker:                processNodeRule,
                 nodeRuleDoubleColoned:          processNodeRule,
                 nodeRuleSingleColoned:          processNodeRule,
-                nodeInclude:            processNodeInclude,
-                nodeTemplate:           processNodeTemplate,
-                nodeModule:             processNodeModule,
-                nodeCommit:             processNodeCommit,
-                nodePost:               processNodePost,
+                nodeInclude:                    processNodeInclude,
+                nodeTemplate:                   processNodeTemplate,
+                nodeModule:                     processNodeModule,
+                nodeCommit:                     processNodeCommit,
+                nodePost:                       processNodePost,
         }
 )
 
