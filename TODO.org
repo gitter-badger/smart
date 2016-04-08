@@ -15,8 +15,19 @@
 
    Examples *$(name.sub.var)*, *$(test:name.sub.var)*
 
+* Reworking *use* and *$(me.using)*
+
+  See tools/shell
+
+** Methods to query modules and module information.
+
+   
+
 * Enhance functional programming features [0/1]
 
   Make it more like _Lisp_ programming language.
 
 ** TODO *let*
+** TODO *for*, *foreach*
+
+   $(foreach $(list),"This is item $2: $1")
