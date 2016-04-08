@@ -17,6 +17,6 @@
 
 * Enhance functional programming features [0/1]
 
-  Make it more like `Lisp` programming language.
+  Make it more like _Lisp_ programming language.
 
 ** TODO *let*

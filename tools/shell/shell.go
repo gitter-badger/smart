@@ -16,6 +16,7 @@ func init() {
                 },
         }, `# Execute Shell Command
 $(template shell)
+$(info using: $(me.using))
 start:!: $(me.depends)
 	@$(me.command) $(me.args)
 $(commit)

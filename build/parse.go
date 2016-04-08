@@ -1290,19 +1290,27 @@ func (ctx *Context) callWithDetails(loc location, hasPrefix bool, prefix string,
 
         if ns := ctx.getNamespaceWithDetails(hasPrefix, prefix, parts); ns != nil {
                 if m := ns.getDefineMap(); m != nil && 0 < n {
-                        sym := parts[n-1]
-                        if d, ok := m[sym]; ok && d != nil {
-                                is = d.value
+                        sym, hooked := parts[n-1], false
+                        if hasPrefix {
+                                if ht, ok := hooksMap[prefix]; ok && ht != nil {
+                                        if h, ok := ht[sym]; ok && h != nil {
+                                                is, hooked = h(ctx, args), true
+                                        }
+                                }
+                        }
+                        if !hooked {
+                                if d, ok := m[sym]; ok && d != nil {
+                                        is = d.value
+                                }
                         }
                 }
         } else {
-                /*
                 lineno, colno := ctx.l.caculateLocationLineColumn(loc)
                 if hasPrefix {
-                        errorf("%v:%v:%v: no namespace for '%s:%s'", ctx.l.scope, lineno, colno, prefix, strings.Join(parts, "."))
+                        fmt.Fprintf(os.Stderr, "%v:%v:%v: no namespace for '%s:%s'", ctx.l.scope, lineno, colno, prefix, strings.Join(parts, "."))
                 } else {
-                        errorf("%v:%v:%v: no namespace for '%s'", ctx.l.scope, lineno, colno, strings.Join(parts, "."))
-                } */
+                        fmt.Fprintf(os.Stderr, "%v:%v:%v: no namespace for '%s'", ctx.l.scope, lineno, colno, strings.Join(parts, "."))
+                }
         }
         return
 }

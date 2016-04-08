@@ -476,6 +476,40 @@ bar:!:
         os.Remove("foo.txt")
 }
 
+func TestBuildTemplateHooks(t *testing.T) {
+        if wd, e := os.Getwd(); e != nil || workdir != wd { t.Errorf("%v != %v (%v)", workdir, wd, e) }
+
+        info, f := new(bytes.Buffer), builtinInfoFunc; defer func(){ builtinInfoFunc = f }()
+        builtinInfoFunc = func(ctx *Context, args Items) {
+                fmt.Fprintf(info, "%v\n", args.Expand(ctx))
+        }
+
+        hooksMap["test"] = HookTable{
+                "some": func(ctx *Context, args Items) (res Items) {
+                        res = append(res, stringitem("some"))
+                        res = append(res, args...)
+                        return
+                },
+        }
+
+        ctx, err := newTestContext("TestBuildTemplateHooks", `
+$(template test)
+$(info $(test:some $(me.a),.,.,$(me.a)))
+$(post)
+$(info $(test:some $(me.a),.,.,$(me.a)))
+$(commit)
+
+$(module foo, test)
+me.a := aaa
+$(commit)
+`);     if err != nil { t.Errorf("parse error:", err) }
+        if s, x := ctx.g.goal, ""; s != x { t.Errorf("%v != %v", s, x) }
+        Update(ctx, "foo") // invoke the "foo" module
+        if s, x := info.String(), "some . .\nsome aaa . . aaa\n"; s != x { t.Errorf("'%s' != '%s'", s, x) }
+
+        delete(hooksMap, "test")
+}
+
 /*
 // intercommand represents a intermdiate action command
 type intercommand interface {
