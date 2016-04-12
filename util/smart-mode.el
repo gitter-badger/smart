@@ -54,7 +54,7 @@
      (2 font-lock-string-face prepend))
 
    ;; $(commit ...)
-   '("[^$]\\$[({]\\(commit\\)[ \t)}]"
+   '("[^$]\\$[({]\\(commit\\|post\\)[ \t)}]"
      1 font-lock-builtin-face prepend)
    ))
 

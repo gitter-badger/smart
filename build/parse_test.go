@@ -1449,8 +1449,8 @@ func TestMultipartNames(t *testing.T) {
         }
 
         ctx, err := newTestContext("TestMultipartNames", `
-$(template test)
-$(commit)
+template test
+commit
 
 $(= test:foo, f o o)
 #$(= test:foo.bar,  foo bar)
@@ -1458,16 +1458,17 @@ $(= test:foo, f o o)
 $(= test:foobar, f)     $(info [$(test:foobar 1,2,3)])
 $(+= test:foobar, o, o) $(info [$(test:foobar 1,2,3)])
 
-$(module test)
+module test
 me.foo = fooo
 $(info $(me.foo))
 
-$(module a)
+module a
 me.foo = foooo
 $(info $(me.foo))
-$(commit) # test.a
+commit # test.a
+
 me.a.bar = bar
-$(commit) # test
+commit # test
 
 $(info $(test.foo))
 $(info $(test.a.foo))
@@ -1530,12 +1531,13 @@ func TestModuleVariables(t *testing.T) {
         }
 
         ctx, err := newTestContext("TestModuleVariables", `
-$(module test)
+module test
 $(info $(me) $(me.name) $(me.dir))
 $(info $(me.export.nothing))
-$(commit)
+commit
+
 $(info $(test.name) $(test.dir))
-#$(module test) ## error
+#module test ## error
 `);     if err != nil { t.Errorf("parse error:", err) }
 
         if ctx.modules == nil { t.Errorf("nil modules") }
@@ -1570,7 +1572,7 @@ func TestModuleTargets(t *testing.T) {
         }
 
         ctx, err := newTestContext("TestModuleTargets", `
-$(module test)
+module test
 
 ## test.foo
 foo:
@@ -1579,7 +1581,7 @@ foo:
 foobar: foo
 	@echo "$..$@ : $<"
 
-$(commit)
+commit
 `);     if err != nil { t.Errorf("parse error:", err) }
 
         if ctx.modules == nil { t.Errorf("nil modules") }
@@ -1616,13 +1618,15 @@ func TestToolsetVariables(t *testing.T) {
         sdk = filepath.Dir(filepath.Dir(sdk))
 
         _, err := newTestContext("TestToolsetVariables", `
-$(template test-ndk)
-$(commit)
-$(template test-sdk)
+template test-ndk
+commit
+
+template test-sdk
 me.support = xxxx
-$(commit)
-$(template test-shell)
-$(commit)
+commit
+
+template test-shell
+commit
 
 $(info $(test-shell:name))
 $(info $(test-sdk:name))
@@ -1862,7 +1866,7 @@ func TestDefineToolset(t *testing.T) {
 
         ctx, err := newTestContext("TestDefineToolset", `
 ### Defining the toolset template
-$(template test)
+template test
 
 ~.modules += $(me.name)
 
@@ -1877,16 +1881,24 @@ $(info $(me.name): source = "$(me.source)")
 
 $(me.name)/test:; @echo $@ $(me.source)
 
-$(info $(me.name): before-commit) $(commit) $(info after-commit)
+$(info $(me.name): before-commit) 
+commit
+$(info after-commit)
 
 ### Using the new toolset template
-$(module a, test, a, b, c)    $(info a - $(me.dir),$(me.out))
+module a, test, a, b, c
+$(info a - $(me.dir),$(me.out))
 me.source := a.cpp
-$(commit)$(info a commited)
+commit
 
-$(module b, test, a, b, c)    $(info b - $(me.dir),$(me.out))
+$(info a commited)
+
+module b, test, a, b, c
+$(info b - $(me.dir),$(me.out))
 me.source := b.cpp
-$(commit)$(info b commited)
+commit
+
+$(info b commited)
 `);     if err != nil { t.Errorf("parse error:", err) }
         if ctx.modules == nil { t.Errorf("nil modules") } else {
                 if m, ok := ctx.modules["a"]; !ok || m == nil { t.Errorf("no module 'a'") } else {

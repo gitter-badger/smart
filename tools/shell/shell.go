@@ -15,13 +15,10 @@ func init() {
                         "exec": hookExec,
                 },
         }, `# Execute Shell Command
-$(template shell)
+template shell
 start:!: $(me.depends)
 	@$(me.command) $(me.args)
-$(commit)
-
-include xx, yy, zz
-include xx
+commit
 `)
         if e != nil {
                 panic(e)

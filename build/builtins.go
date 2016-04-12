@@ -14,12 +14,12 @@ type builtin func(ctx *Context, loc location, args Items) Items
 
 var (
         builtins = map[string]builtin {
-                "template":     builtinTemplate,
-                "module":       builtinModule,
-                "commit":       builtinCommit,
+                //"template":     builtinTemplate,
+                //"module":       builtinModule,
+                //"commit":       builtinCommit,
+                //"use":          builtinUse,
                 "dir":          builtinDir,
                 "info":         builtinInfo,
-                "use":          builtinUse,
 
                 "upper":        builtinUpper,
                 "lower":        builtinLower,

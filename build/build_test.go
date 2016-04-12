@@ -182,7 +182,7 @@ func TestBuildModules(t *testing.T) {
         }
 
         ctx, err := newTestContext("TestBuildModules", `
-$(module foo)
+module foo
 
 me.a := aaa
 
@@ -193,7 +193,7 @@ foo.txt:
 bar.txt:
 	@touch $@ $(info 2: $@ $(me.a))
 	@echo $@ >> $@ $(info 3: $@)
-$(commit)
+commit
 
 foo:!:
 	@echo "rule 'foo' is also called along with module 'foo'" $(info 4: $@)
@@ -273,7 +273,7 @@ func TestBuildUseTemplate(t *testing.T) {
 
         ctx, err := newTestContext("TestBuildUseTemplate", `
 ################
-$(template test)
+template test
 
 foobar.txt: foo.txt bar.txt
 	@echo "$(me.a): $^" > $@ $(info 0: $@,$<,$^,$?)
@@ -283,14 +283,14 @@ bar.txt:
 	@touch $@ $(info 2: $@ $(me.a))
 	@echo $@ >> $@ $(info 3: $@)
 
-$(commit)
+commit
 
 #############
-$(module foo, test)
+module foo, test
 
 me.a := aaa
 
-$(commit)
+commit
 
 ######
 foo:!:
@@ -376,21 +376,21 @@ func TestBuildUseTemplate2(t *testing.T) {
         ctx, err := newTestContext("TestBuildUseTemplate2", `
 all: foo bar
 
-$(template test)
+template test
 
 $(me.name).txt:
 	@touch $@ $(info 1: $@ $(me.a))
 	@echo $@ >> $@ $(info 2: $@)
 
-$(commit)
+commit
 
-$(module foo, test)
+module foo, test
 me.a := aaa1
-$(commit)
+commit
 
-$(module bar, test)
+module bar, test
 me.a := aaa2
-$(commit)
+commit
 
 foo:!:
 	@echo "rule 'foo' is also called along with module 'foo'" $(info 3: $@)
@@ -493,17 +493,37 @@ func TestBuildTemplateHooks(t *testing.T) {
         }
 
         ctx, err := newTestContext("TestBuildTemplateHooks", `
-$(template test)
+template test
 $(info $(test:some $(me.a),.,.,$(me.a)))
-$(post)
+post 
 $(info $(test:some $(me.a),.,.,$(me.a)))
-$(commit)
+commit
 
-$(module foo, test)
+module foo, test
 me.a := aaa
-$(commit)
+commit
 `);     if err != nil { t.Errorf("parse error:", err) }
         if s, x := ctx.g.goal, ""; s != x { t.Errorf("%v != %v", s, x) }
+        if n, x := len(ctx.templates), 1; n != x { t.Errorf("wrong templates: %v", ctx.templates) } else {
+                if temp, ok := ctx.templates["test"]; !ok || temp == nil { t.Errorf("test not defined: %v", ctx.templates) } else {
+                        if temp.post == nil { t.Errorf("post is nil") } else {
+                                if n, x := len(temp.post.children), 0; n != x { t.Errorf("%v != %v", n, x) }
+                        }
+                        if n, x := len(temp.declNodes), 1; n != x { t.Errorf("%v != %v", n, x) } else {
+                                c := temp.declNodes[0]
+                                if s, x := c.str(), `$(info $(test:some $(me.a),.,.,$(me.a)))`; s != x { t.Errorf("%v != %v", s, x) }
+                        }
+                        if n, x := len(temp.postNodes), 1; n != x { t.Errorf("%v != %v", n, x) } else {
+                                c := temp.postNodes[0]
+                                if s, x := c.str(), `$(info $(test:some $(me.a),.,.,$(me.a)))`; s != x { t.Errorf("%v != %v", s, x) }
+                        }
+                }
+        }
+        if n, x := len(ctx.modules), 1; n != x { t.Errorf("wrong modules: %v", ctx.modules) } else {
+                if m, ok := ctx.modules["foo"]; !ok || m == nil { t.Errorf("foo not defined: %v", ctx.modules) } else {
+                }
+        }
+        
         Update(ctx, "foo") // invoke the "foo" module
         if s, x := info.String(), "some . .\nsome aaa . . aaa\n"; s != x { t.Errorf("'%s' != '%s'", s, x) }
 

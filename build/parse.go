@@ -15,6 +15,7 @@ import (
         //"path/filepath"
         //"reflect"
         "strings"
+        "path/filepath"
         "github.com/duzy/worker"
 )
 
@@ -482,8 +483,9 @@ func (l *lex) looking(s string, pp *int) bool {
 func (l *lex) lookingInlineSpaces(pp *int) bool {
         beg, end := *pp, len(l.s)
         for *pp < end {
-                if r, n := utf8.DecodeRune(l.s[*pp:]); r != '\n' && unicode.IsSpace(r) {
+                if r, n := utf8.DecodeRune(l.s[*pp:]); unicode.IsSpace(r) {
                         *pp = *pp + n
+                        if r == '\n' { break }
                 } else {
                         break
                 }
@@ -655,6 +657,7 @@ state_loop:
                 if st.code == 0 {
                         for s, t := range statements {
                                 if pos := l.pos; l.looking(s, &pos) {
+                                        //fmt.Printf("stateLineHeadText: %v (%v)\n", string(l.rune), s)
                                         if ss := pos; l.lookingInlineSpaces(&ss) {
                                                 //fmt.Printf("looked: %v (%v): %v\n", s, t, string(l.s[pos:]))
                                                 st.node.kind, st.node.end, l.pos = t, pos, ss
@@ -1661,6 +1664,13 @@ func (ctx *Context) nodeItems(n *node) (is Items) {
         return
 }
 
+func (ctx *Context) nodesItems(nodes... *node) (is Items) {
+        for _, n := range nodes {
+                is = is.Concat(ctx, ctx.nodeItems(n)...)
+        }
+        return
+}
+                
 func (ctx *Context) ItemsStrings(a ...Item) (s []string) {
         for _, i := range a {
                 s = append(s, i.Expand(ctx))
@@ -1712,15 +1722,24 @@ func (ctx *Context) processTempNode(n *node) bool {
 
 func (ctx *Context) processNode(n *node) (err error) {
         if ctx.t != nil {
-                if ctx.processTempNode(n) {
-                        return
+                switch n.kind {
+                case nodeCommit:
+                        processTemplateCommit(ctx, n)
+                case nodePost:
+                        processTemplatePost(ctx, n)
+                default:
+                        if ctx.t.post != nil {
+                                ctx.t.postNodes = append(ctx.t.postNodes, n)
+                        } else {
+                                ctx.t.declNodes = append(ctx.t.declNodes, n)
+                        }
                 }
-        }
-
-        if f, ok := processors[n.kind]; ok && f != nil {
-                err = f(ctx, n)
         } else {
-                panic(fmt.Sprintf("'%v' not implemented", n.kind))
+                if f, ok := processors[n.kind]; ok && f != nil {
+                        err = f(ctx, n)
+                } else {
+                        panic(fmt.Sprintf("'%v' not implemented", n.kind))
+                }
         }
         return
 }
@@ -1885,22 +1904,217 @@ func processNodeInclude(ctx *Context, n *node) (err error) {
 }
 
 func processNodeTemplate(ctx *Context, n *node) (err error) {
-        fmt.Printf("todo: %v %v\n", n.kind, n.children)
+        var (
+                args, loc = ctx.nodesItems(n.children...), n.loc()
+        )
+        if ctx.t != nil {
+                errorf("template already defined (%v)", args)
+        } else {
+                if ctx.m != nil {
+                        s, lineno, colno := ctx.m.GetDeclareLocation()
+                        fmt.Printf("%v:%v:%v:warning: declare template in module\n", s, lineno, colno)
+
+                        lineno, colno = ctx.l.caculateLocationLineColumn(loc)
+                        fmt.Fprintf(os.Stderr, "%v:%v:%v: ", ctx.l.scope, lineno, colno)
+
+                        errorf("declare template inside module")
+                        return
+                }
+
+                name := strings.TrimSpace(args[0].Expand(ctx))
+                if name == "" {
+                        lineno, colno := ctx.l.caculateLocationLineColumn(loc)
+                        fmt.Fprintf(os.Stderr, "%v:%v:%v: empty template name", ctx.l.scope, lineno, colno)
+                        errorf("empty template name")
+                        return
+                }
+
+                if t, ok := ctx.templates[name]; ok && t != nil {
+                        //lineno, colno := ctx.l.caculateLocationLineColumn(t.loc)
+                        //fmt.Fprintf(os.Stderr, "%v:%v:%v: %s already declared", ctx.l.scope, lineno, colno, ctx.t.name)
+                        errorf("template '%s' already declared", name)
+                        return
+                }
+
+                ctx.t = &template{
+                        name:name,
+                        namespaceEmbed: &namespaceEmbed{
+                                defines: make(map[string]*define, 8),
+                                rules: make(map[string]*rule, 4),
+                        },
+                }
+
+                ctx.t.Set(ctx, []string{ "name" }, StringItem(name))
+        }
         return
 }
 
 func processNodeModule(ctx *Context, n *node) (err error) {
-        fmt.Printf("todo: %v %v\n", n.kind, n.children)
+        var (
+                name, exportName, toolsetName string
+                args, loc = ctx.nodesItems(n.children...), n.loc()
+        )
+        if 0 < len(args) { name = strings.TrimSpace(args[0].Expand(ctx)) }
+        if 1 < len(args) { toolsetName = strings.TrimSpace(args[1].Expand(ctx)) }
+        if name == "" {
+                errorf("module name is required")
+                return
+        }
+        if name == "me" {
+                errorf("module name 'me' is reserved")
+                return
+        }
+
+        exportName = "export"
+
+        var toolset toolset
+        if toolsetName == "" {
+                // Discard empty toolset.
+        } else if t, ok := ctx.templates[toolsetName]; ok && t != nil {
+                toolset = &templateToolset{ template:t }
+        }
+
+        var (
+                m *Module
+                has bool
+        )
+        if m, has = ctx.modules[name]; !has && m == nil {
+                m = &Module{
+                        l: nil,
+                        Toolset: toolset,
+                        Children: make(map[string]*Module, 2),
+                        namespaceEmbed: &namespaceEmbed{
+                                defines: make(map[string]*define, 8),
+                                rules: make(map[string]*rule, 4),
+                        },
+                }
+                ctx.modules[name] = m
+                ctx.moduleOrderList = append(ctx.moduleOrderList, m)
+        } else if m.l != nil /*(m.Toolset != nil && toolsetName != "") && (m.Kind != "" || kind != "")*/ {
+                s := ctx.l.scope
+                lineno, colno := ctx.l.caculateLocationLineColumn(loc)
+                fmt.Printf("%v:%v:%v: '%v' already declared\n", s, lineno, colno, name)
+
+                s, lineno, colno = m.GetDeclareLocation()
+                fmt.Printf("%v:%v:%v:warning: previous '%v'\n", s, lineno, colno, name)
+
+                errorf("module already declared")
+        }
+
+        // Reset the current module pointer.
+        upper := ctx.m
+        if upper != nil {
+                upper.Children[name] = m
+        }
+
+        ctx.m = m
+
+        // Reset the lex and location (because it could be created by $(use))
+        if m.l == nil {
+                m.l, m.declareLoc, m.Toolset = ctx.l, loc, toolset
+                if upper != nil {
+                        ctx.moduleStack = append(ctx.moduleStack, upper)
+                }
+        }
+
+        if x, ok := m.Children[exportName]; !ok {
+                x = &Module{
+                        l: m.l,
+                        Parent: m,
+                        Children: make(map[string]*Module),
+                        namespaceEmbed: &namespaceEmbed{
+                                defines: make(map[string]*define, 4),
+                                rules: make(map[string]*rule),
+                        },
+                }
+                m.Children[exportName] = x
+        }
+
+        if fi, e := os.Stat(ctx.l.scope); e == nil && fi != nil && !fi.IsDir() {
+                ctx.Set("me.dir", stringitem(filepath.Dir(ctx.l.scope)))
+        } else {
+                ctx.Set("me.dir", stringitem(workdir))
+        }
+        ctx.Set("me.name", stringitem(name))
+        ctx.Set("me.export.name", stringitem(exportName))
+
+        if toolset != nil {
+                // parsed arguments in forms like "PLATFORM=android-9"
+                /*
+                var a []string
+                if 2 < len(args) { a = args[2:] }
+                vars, rest := splitVarArgs(a) */
+                var rest Items
+                vars := make(map[string]string, 4)
+                for _, a := range args[2:] {
+                        s := a.Expand(ctx)
+                        if i := strings.Index(s, "="); 0 < i /* false if '=foo' */ {
+                                vars[strings.TrimSpace(s[0:i])] = strings.TrimSpace(s[i+1:])
+                        } else {
+                                rest = append(rest, a)
+                        }
+                }
+                toolset.DeclModule(ctx, rest, vars)
+        }
+        return
+}
+
+func processTemplateCommit(ctx *Context, n *node) (err error) {
+        if ctx.m != nil {
+                errorf("declared template inside module")
+                return
+        }
+        if t, ok := ctx.templates[ctx.t.name]; ok && t != nil {
+                errorf("template '%s' already declared", ctx.t.name)
+                return
+        }
+        ctx.templates[ctx.t.name] = ctx.t
+        ctx.t = nil // must unset the 't'
+        return
+}
+
+func processTemplatePost(ctx *Context, n *node) (err error) {
+        fmt.Printf("%v: %v\n", n.kind, n.children)
+        if ctx.t != nil {
+                ctx.t.post = n
+        } else {
+                errorf("template is nil")
+        }
         return
 }
 
 func processNodeCommit(ctx *Context, n *node) (err error) {
-        fmt.Printf("todo: %v %v\n", n.kind, n.children)
+        if ctx.m == nil {
+                panic("nil module")
+        }
+        
+        var (
+                args, loc = ctx.nodesItems(n.children...), n.loc()
+        )
+        
+        if *flagVV {
+                lineno, colno := ctx.l.caculateLocationLineColumn(loc)
+                verbose("commit (%v:%v:%v)", ctx.l.scope, lineno, colno)
+        }
+
+        if ctx.m.Toolset != nil {
+                ctx.m.Toolset.CommitModule(ctx, args)
+        }
+        
+        ctx.m.commitLoc = loc
+        ctx.moduleBuildList = append(ctx.moduleBuildList, pendedBuild{ctx.m, ctx, args})
+        if i := len(ctx.moduleStack)-1; 0 <= i {
+                up := ctx.moduleStack[i]
+                ctx.m.Parent = up
+                ctx.moduleStack, ctx.m = ctx.moduleStack[0:i], up
+        } else {
+                ctx.m = nil // must unset the 'm'
+        }
         return
 }
 
 func processNodePost(ctx *Context, n *node) (err error) {
-        fmt.Printf("todo: %v %v\n", n.kind, n.children)
+        // TODO: 
         return
 }
 
