@@ -665,6 +665,7 @@ state_loop:
                                                         l.pop() // end of statement
                                                         l.nodes = append(l.nodes, st.node)
                                                 } else {
+                                                        fmt.Printf("stateLineHeadText: %v (%v)\n", st.node.kind, st.node.str())
                                                         l.push(nodeArg, l.stateStatementArg, 0)
                                                 }
                                                 break state_loop
@@ -790,6 +791,7 @@ state_loop:
                         st.code = 1
                 }                
         }
+        fmt.Printf("Statement: %v: %v\n", st.node.kind, st.node.str())
 }
 
 func (l *lex) stateDefine() {
