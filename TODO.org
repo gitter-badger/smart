@@ -6,11 +6,13 @@
 #+LaTeX_CLASS_OPTIONS: [colorlinks=true,urlcolor=blue,secnums]
 * Enhance the parser for better syntax semantic [0/2]
 ** TODO Remove immediate-text
-** TODO Add statements support [0/4]
+** TODO Add statements support [0/6]
 *** TODO *include* statement
-*** TODO *template* statement
-*** TODO *module* statement
-*** TODO *use* statement
+*** VERIFY *template* statement
+*** VERIFY *module* statement
+*** VERIFY *post* statement
+*** VERIFY *commit* statement
+*** VERIFY *use* statement
 ** TODO Semantic supports for multi-part names
 
    Examples *$(name.sub.var)*, *$(test:name.sub.var)*

@@ -284,7 +284,7 @@ var (
                 nodeTemplate:                   processNodeTemplate,
                 nodeModule:                     processNodeModule,
                 nodeCommit:                     processNodeCommit,
-                nodePost:                       processNodePost,
+                //nodePost:                       processNodePost,
                 nodeUse:                        processNodeUse,
         }
 
@@ -2076,10 +2076,11 @@ func processNodeCommit(ctx *Context, n *node) (err error) {
         return
 }
 
+/*
 func processNodePost(ctx *Context, n *node) (err error) {
         if ctx.t == nil { errorf("not in a template") }
         return
-}
+} */
 
 func processNodeUse(ctx *Context, n *node) (err error) {
         if ctx.m == nil { errorf("no module defined") }
