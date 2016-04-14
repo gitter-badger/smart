@@ -498,7 +498,7 @@ $(info $(test:some $(me.a),.,.,$(me.a)))
 post 
 $(info $(test:some $(me.a),.,.,$(me.a)))
 commit
-
+$(nothing)
 module foo, test
 me.a := aaa
 commit

@@ -483,9 +483,10 @@ func (l *lex) looking(s string, pp *int) bool {
 func (l *lex) lookingInlineSpaces(pp *int) bool {
         beg, end := *pp, len(l.s)
         for *pp < end {
-                if r, n := utf8.DecodeRune(l.s[*pp:]); unicode.IsSpace(r) {
+                if r, n := utf8.DecodeRune(l.s[*pp:]); r == '\n' {
+                        return true
+                } else if unicode.IsSpace(r) {
                         *pp = *pp + n
-                        if r == '\n' { break }
                 } else {
                         break
                 }
@@ -659,13 +660,13 @@ state_loop:
                                 if pos := l.pos; l.looking(s, &pos) {
                                         //fmt.Printf("stateLineHeadText: %v (%v)\n", string(l.rune), s)
                                         if ss := pos; l.lookingInlineSpaces(&ss) {
-                                                //fmt.Printf("looked: %v (%v): %v\n", s, t, string(l.s[pos:]))
                                                 st.node.kind, st.node.end, l.pos = t, pos, ss
+                                                //fmt.Printf("looked: %v (%v): '%v' '%v'\n", s, t, string(l.s[pos:ss]), string(l.s[ss]))
                                                 if l.peek() == '\n' {
                                                         l.pop() // end of statement
                                                         l.nodes = append(l.nodes, st.node)
                                                 } else {
-                                                        fmt.Printf("stateLineHeadText: %v (%v)\n", st.node.kind, st.node.str())
+                                                        //fmt.Printf("stateLineHeadText: %v (%v)\n", st.node.kind, st.node.str())
                                                         l.push(nodeArg, l.stateStatementArg, 0)
                                                 }
                                                 break state_loop
@@ -791,7 +792,7 @@ state_loop:
                         st.code = 1
                 }                
         }
-        fmt.Printf("Statement: %v: %v\n", st.node.kind, st.node.str())
+        //fmt.Printf("Statement: %v: %v (%v)\n", st.node.kind, st.node.str(), st.node.children)
 }
 
 func (l *lex) stateDefine() {
@@ -2076,7 +2077,7 @@ func processTemplateCommit(ctx *Context, n *node) (err error) {
 }
 
 func processTemplatePost(ctx *Context, n *node) (err error) {
-        fmt.Printf("%v: %v\n", n.kind, n.children)
+        //fmt.Printf("processTemplatePost: %v\n", n.children)
         if ctx.t != nil {
                 ctx.t.post = n
         } else {

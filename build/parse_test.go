@@ -1876,7 +1876,9 @@ me.out = $(me.dir)/out
 $(info $(me.name): $(~.name) - "$(~.modules)")
 $(info $(me.name): dir = "$(me.dir)")
 $(info $(me.name): source = "$(me.source)")
-$(info $(me.name): before-post) $(post) $(info $(me.name): after-post) # 'post' is a declaration that we're going to intersect the module 
+$(info $(me.name): before-post)
+post
+$(info $(me.name): after-post) # 'post' is a declaration that we're going to intersect the module 
 $(info $(me.name): source = "$(me.source)")
 
 $(me.name)/test:; @echo $@ $(me.source)
@@ -1937,7 +1939,7 @@ $(info b commited)
                         }
                         if n, x := len(temp.postNodes), 4; n != x { t.Errorf("expects %v but %v", x, n) } else {
                                 if c, x := temp.postNodes[0], nodeImmediateText; c.kind != x { t.Errorf("expects %v but %v", x, c.kind) } else {
-                                        if s, x := c.str(), ` $(info $(me.name): after-post) `; s != x { t.Errorf("expects %v but %v", x, s) }
+                                        if s, x := c.str(), `$(info $(me.name): after-post) `; s != x { t.Errorf("expects %v but %v", x, s) }
                                 }
                                 if c, x := temp.postNodes[1], nodeImmediateText; c.kind != x { t.Errorf("expects %v but %v", x, c.kind) } else {
                                         if s, x := c.str(), `$(info $(me.name): source = "$(me.source)")`; s != x { t.Errorf("expects %v but %v", x, s) }
@@ -1957,7 +1959,7 @@ $(info b commited)
                                         }
                                 }
                                 if c, x := temp.postNodes[3], nodeImmediateText; c.kind != x { t.Errorf("expects %v but %v", x, c.kind) } else {
-                                        if s, x := c.str(), `$(info $(me.name): before-commit)`; s != x { t.Errorf("expects %v but %v", x, s) }
+                                        if s, x := c.str(), `$(info $(me.name): before-commit) `; s != x { t.Errorf("expects %v but %v", x, s) }
                                 }
                         }
                 }
