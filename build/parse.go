@@ -253,6 +253,7 @@ const (
         nodeModule              // module name, temp, parameters
         nodeCommit              // commit
         nodePost                // post
+        nodeUse                 // use name
 )
 
 var (
@@ -262,6 +263,7 @@ var (
                 "module":       nodeModule,
                 "commit":       nodeCommit,
                 "post":         nodePost,
+                "use":          nodeUse,
         }
 
         processors = map[nodeType]func(ctx *Context, n *node)(err error){
@@ -283,22 +285,21 @@ var (
                 nodeModule:                     processNodeModule,
                 nodeCommit:                     processNodeCommit,
                 nodePost:                       processNodePost,
+                nodeUse:                        processNodeUse,
         }
-)
 
-/*
-Variable definitions are parsed as follows:
+        /*
+        Variable definitions are parsed as follows:
 
-immediate = deferred
-immediate ?= deferred
-immediate := immediate
-immediate ::= immediate
-immediate += deferred or immediate
-immediate != immediate
+        immediate = deferred
+        immediate ?= deferred
+        immediate := immediate
+        immediate ::= immediate
+        immediate += deferred or immediate
+        immediate != immediate
 
-The directives define/endef are not supported.
-*/
-var (
+        The directives define/endef are not supported.
+        */
         nodeTypeNames = []string {
                 nodeComment:                    "comment",
                 nodeEscape:                     "escape",
@@ -330,6 +331,7 @@ var (
                 nodeModule:                     "module",
                 nodeCommit:                     "commit",
                 nodePost:                       "post",
+                nodeUse:                        "use",
         }
 )
 
@@ -1681,48 +1683,6 @@ func (ctx *Context) ItemsStrings(a ...Item) (s []string) {
         return
 }
 
-func (ctx *Context) processTempNode(n *node) bool {
-        if n.kind == nodeImmediateText {
-                for i, c := range n.children {
-                        if c.kind == nodeCall {
-                                switch s := c.children[0].str(); s {
-                                case "post":
-                                        if ctx.t.post != nil {
-                                                errorf("already posted")
-                                                return true
-                                        }
-                                        nn := &node{
-                                                l:n.l, kind:n.kind, pos:n.pos,
-                                                end:c.pos-1, children: n.children[0:i],
-                                        }
-                                        ctx.t.post = c
-                                        ctx.t.declNodes = append(ctx.t.declNodes, nn)
-                                        if i+1 < len(n.children) {
-                                                n.pos, n.children = c.end, n.children[i+1:]
-                                                ctx.processTempNode(n)
-                                        }
-                                        return true
-                                        
-                                case "commit":
-                                        nn := &node{
-                                                l:n.l, kind:n.kind, pos:n.pos,
-                                                end:c.pos-1, children: n.children[0:i],
-                                        }
-                                        ctx.t.postNodes, ctx.t.commit = append(ctx.t.postNodes, nn), c
-                                        n.children, n.pos = n.children[i:], c.end
-                                        return false
-                                }
-                        }
-                }
-        }
-        if ctx.t.post != nil {
-                ctx.t.postNodes = append(ctx.t.postNodes, n)
-        } else {
-                ctx.t.declNodes = append(ctx.t.declNodes, n)
-        }
-        return true
-}
-
 func (ctx *Context) processNode(n *node) (err error) {
         if ctx.t != nil {
                 switch n.kind {
@@ -2117,7 +2077,44 @@ func processNodeCommit(ctx *Context, n *node) (err error) {
 }
 
 func processNodePost(ctx *Context, n *node) (err error) {
-        // TODO: 
+        if ctx.t == nil { errorf("not in a template") }
+        return
+}
+
+func processNodeUse(ctx *Context, n *node) (err error) {
+        if ctx.m == nil { errorf("no module defined") }
+
+        var (
+                args = ctx.nodesItems(n.children...)
+        )
+        
+        for _, a := range args {
+                s := strings.TrimSpace(a.Expand(ctx))
+                if m, ok := ctx.modules[s]; ok {
+                        ctx.m.Using = append(ctx.m.Using, m)
+                        m.UsedBy = append(m.UsedBy, ctx.m)
+                        if ctx.m.Toolset != nil {
+                                ctx.m.Toolset.UseModule(ctx, m)
+                        }
+                } else {
+                        m = &Module{
+                                // Use 'nil' to indicate this module is created by
+                                // '$(use)' and not really declared yet.
+                                l: nil,
+                                UsedBy: []*Module{ ctx.m },
+                                Children: make(map[string]*Module, 2),
+                                namespaceEmbed: &namespaceEmbed{
+                                        defines: make(map[string]*define, 8),
+                                        rules: make(map[string]*rule, 4),
+                                },
+                        }
+                        ctx.m.Using = append(ctx.m.Using, m)
+                        ctx.modules[s] = m
+                        if ctx.m.Toolset != nil {
+                                ctx.m.Toolset.UseModule(ctx, m)
+                        }
+                }
+        }
         return
 }
 

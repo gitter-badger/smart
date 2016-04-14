@@ -1,6 +1,6 @@
 # Declare a new module.
-$(module touch-o-o-o-foo, shell)
+module touch-o-o-o-foo, shell
 me.targets := fooo
 me.command := touch
 me.args := fooo
-$(commit)
+commit
