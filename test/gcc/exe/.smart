@@ -1,9 +1,8 @@
-# -*- makefile -*-
-$(module foo_gcc_exe, gcc, exe)
+module foo_gcc_exe, gcc, exe
 
 me.sources = foo.c
 me.includes = .
 
-$(use foo_shared, foo_static)
+use foo_shared, foo_static
 
-$(commit)
+commit

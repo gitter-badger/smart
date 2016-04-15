@@ -1,9 +1,8 @@
-# -*- makefile -*-
-$(module foo_shared, gcc, shared)
+module foo_shared, gcc, shared
 
 me.sources := foo.c
 #me.export.libdirs := out/foo_shared
 #me.export.libs := foo_shared
 me.export.libs := out/foo_shared/foo_shared.so
 
-$(commit)
+commit
