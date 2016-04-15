@@ -19,7 +19,7 @@ import (
         "github.com/duzy/worker"
 )
 
-type Item interface{
+type Item interface {
         // Expand the item to string
         Expand(ctx *Context) string
 
@@ -284,7 +284,7 @@ var (
                 nodeTemplate:                   processNodeTemplate,
                 nodeModule:                     processNodeModule,
                 nodeCommit:                     processNodeCommit,
-                //nodePost:                       processNodePost,
+                //nodePost:                     
                 nodeUse:                        processNodeUse,
         }
 
@@ -2076,44 +2076,20 @@ func processNodeCommit(ctx *Context, n *node) (err error) {
         return
 }
 
-/*
-func processNodePost(ctx *Context, n *node) (err error) {
-        if ctx.t == nil { errorf("not in a template") }
-        return
-} */
-
-func processNodeUse(ctx *Context, n *node) (err error) {
+func processNodeUse(ctx *Context, n *node) (err error) {       
         if ctx.m == nil { errorf("no module defined") }
 
         var (
                 args = ctx.nodesItems(n.children...)
+                name = "using"
         )
-        
-        for _, a := range args {
-                s := strings.TrimSpace(a.Expand(ctx))
-                if m, ok := ctx.modules[s]; ok {
-                        ctx.m.Using = append(ctx.m.Using, m)
-                        m.UsedBy = append(m.UsedBy, ctx.m)
-                        if ctx.m.Toolset != nil {
-                                ctx.m.Toolset.UseModule(ctx, m)
-                        }
-                } else {
-                        m = &Module{
-                                // Use 'nil' to indicate this module is created by
-                                // '$(use)' and not really declared yet.
-                                l: nil,
-                                UsedBy: []*Module{ ctx.m },
-                                Children: make(map[string]*Module, 2),
-                                namespaceEmbed: &namespaceEmbed{
-                                        defines: make(map[string]*define, 8),
-                                        rules: make(map[string]*rule, 4),
-                                },
-                        }
-                        ctx.m.Using = append(ctx.m.Using, m)
-                        ctx.modules[s] = m
-                        if ctx.m.Toolset != nil {
-                                ctx.m.Toolset.UseModule(ctx, m)
-                        }
+
+        if d, ok := ctx.m.defines[name]; ok && d != nil {
+                d.value = append(d.value, args...)
+        } else {
+                ctx.m.defines[name] = &define{
+                        loc:ctx.CurrentLocation(),
+                        name:name, value:args,
                 }
         }
         return

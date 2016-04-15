@@ -48,6 +48,10 @@ func testToolsetShell(t *testing.T) {
 
         if s, x := info.String(), `test: me.name: touch-foobar
 
+test: touch-foobar: using: 
+test: touch-foobar: using: touch-foo
+test: touch-foobar: args: touch: start 
+test: touch-foo: args: touch: start 
 `; s != x { t.Errorf("%v != %v", s, x) }
         
         testCleanFiles(t)

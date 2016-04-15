@@ -267,7 +267,7 @@ type Module struct {
         *namespaceEmbed
         Parent *Module // upper module
         Toolset toolset
-        Using, UsedBy []*Module
+        //Using, UsedBy []*Module
         Updated bool // marked as 'true' if module is updated
         Children map[string]*Module
         declareLoc, commitLoc location // where does it defined and commit (could be nil)
