@@ -485,7 +485,7 @@ func (l *lex) looking(s string, pp *int) bool {
 func (l *lex) lookingInlineSpaces(pp *int) bool {
         beg, end := *pp, len(l.s)
         for *pp < end {
-                if r, n := utf8.DecodeRune(l.s[*pp:]); r == '\n' {
+                if r, n := utf8.DecodeRune(l.s[*pp:]); r == '\n' || r == '#' {
                         return true
                 } else if unicode.IsSpace(r) {
                         *pp = *pp + n
@@ -664,7 +664,7 @@ state_loop:
                                         if ss := pos; l.lookingInlineSpaces(&ss) {
                                                 st.node.kind, st.node.end, l.pos = t, pos, ss
                                                 //fmt.Printf("looked: %v (%v): '%v' '%v'\n", s, t, string(l.s[pos:ss]), string(l.s[ss]))
-                                                if l.peek() == '\n' {
+                                                if r := l.peek(); r == '\n' || r == '#' {
                                                         l.pop() // end of statement
                                                         l.nodes = append(l.nodes, st.node)
                                                 } else {

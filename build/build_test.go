@@ -495,7 +495,7 @@ func TestBuildTemplateHooks(t *testing.T) {
         ctx, err := newTestContext("TestBuildTemplateHooks", `
 template test
 $(info $(test:some $(me.a),.,.,$(me.a)))
-post 
+post # ------------
 $(info $(test:some $(me.a),.,.,$(me.a)))
 commit
 $(nothing)
