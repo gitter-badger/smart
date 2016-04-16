@@ -17,6 +17,8 @@ func init() {
 template gcc
 start:!: $(me.depends) $(me.using)
 	@$(me.command) $(me.args)
+post
+$(info $(me.using))
 commit
 `)
         if e != nil {
