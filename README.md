@@ -22,7 +22,7 @@ of a [semi-functional]() paradigm by comparing to
 start:!: foo
 
 # Declare a module `foo`.
-module foo
+module foo, gcc
 
 me.sources := foo.c
 me.export.includes := -I$(me.dir)
