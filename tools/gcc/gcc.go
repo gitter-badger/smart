@@ -15,10 +15,11 @@ func init() {
                 },
         }, `# Execute Shell Command
 template gcc
-start:!: $(me.depends) $(me.using)
-	@$(me.command) $(me.args)
+
+target: 
+	@echo "todo: $(me.name) ($(me.workdir))"
+
 post
-$(info $(me.using))
 commit
 `)
         if e != nil {

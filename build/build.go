@@ -320,17 +320,24 @@ func (m *Module) update(ctx *Context) (updated bool) {
         if g, ok := m.rules[m.goal]; ok && g != nil {
                 owd, err := os.Getwd()
                 if err != nil { errorf("get working directory: %v", err) }
-                if err = os.Chdir(m.GetDir(ctx)); err != nil {
-                        errorf("change working directory: %v", err)
+                
+                wd := m.Get(ctx, "workdir")
+                if wd != owd {
+                        if err = os.Chdir(wd); err != nil {
+                                errorf("change working directory: %v", err)
+                        }
                 }
+                
                 om := ctx.m
                 defer func(){ 
-                        if err = os.Chdir(owd); err != nil {
-                                errorf("change working directory: %v", err)
+                        if wd != owd {
+                                if err = os.Chdir(owd); err != nil {
+                                        errorf("change working directory: %v", err)
+                                }
                         }
                         ctx.m = om
                 }()
-
+                
                 ctx.m = m // change current working module 
                 updated = g.updateAll(ctx)
         }
@@ -791,10 +798,8 @@ func (job *executeRecipes) Action() worker.Result {
                         s, echo = s[1:], false
                 }
                 if cmd := exec.Command("sh", "-c", s); cmd != nil {
-                        if echo {
-                                fmt.Printf("%v\n", s)
-                                cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
-                        }
+                        cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
+                        if echo { fmt.Printf("%v\n", s) }
                         if job.error = cmd.Run(); job.error != nil {
                                 break
                         } else {

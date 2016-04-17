@@ -1993,9 +1993,18 @@ func processNodeModule(ctx *Context, n *node) (err error) {
                 m.Children[exportName] = x
         }
 
+        wd, err := os.Getwd()
+        if err != nil { 
+                errorf("getting working directory: %v", err) 
+        }
+
         if fi, e := os.Stat(ctx.l.scope); e == nil && fi != nil && !fi.IsDir() {
-                ctx.Set("me.dir", stringitem(filepath.Dir(ctx.l.scope)))
+                dir := filepath.Dir(ctx.l.scope)
+                wd = filepath.Join(wd, dir)
+                ctx.Set("me.workdir", stringitem(wd))
+                ctx.Set("me.dir", stringitem(dir))
         } else {
+                ctx.Set("me.workdir", stringitem(wd))
                 ctx.Set("me.dir", stringitem(workdir))
         }
         ctx.Set("me.name", stringitem(name))
