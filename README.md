@@ -22,7 +22,7 @@ of a [semi-functional]() paradigm by comparing to
 start:!: foo
 
 # Declare a module `foo`.
-$(module foo)
+module foo
 
 me.sources := foo.c
 me.export.includes := -I$(me.dir)
@@ -35,7 +35,7 @@ $(me.dir)/libfoo.a: $(me.dir)/foo.o
 $(me.dir)/foo.o: $(me.dir)/foo.c
 	@gcc -c -o $@ $<
 
-$(commit)
+commit
 ```
 
 Why
