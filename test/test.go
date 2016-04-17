@@ -30,14 +30,15 @@ func ComputeTestRunParams() (vars map[string]string, cmds []string) {
         return
 }
 
-func Runcmd(name string, args ...string) string {
+func Runcmd(name string, args ...string) (string, error) {
         var buf bytes.Buffer
         cmd := exec.Command(name, args...)
         cmd.Stdout, cmd.Stderr = &buf, &buf
         if err := cmd.Run(); err != nil {
-                fmt.Printf("test: (run: %v) %v\n", name, err)
+                //fmt.Printf("test: (run: %v) %v\n", name, err)
+                return "", err
         }
-        return buf.String()
+        return buf.String(), nil
 }
 
 func RunToolsetTestCase(t *testing.T, tp, tn string, tf func(t *testing.T)) {

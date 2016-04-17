@@ -1953,7 +1953,7 @@ func processNodeModule(ctx *Context, n *node) (err error) {
                 }
                 ctx.modules[name] = m
                 ctx.moduleOrderList = append(ctx.moduleOrderList, m)
-        } else if m.l != nil /*(m.Toolset != nil && toolsetName != "") && (m.Kind != "" || kind != "")*/ {
+        } else if m.l != nil {
                 s := ctx.l.scope
                 lineno, colno := ctx.l.caculateLocationLineColumn(loc)
                 fmt.Printf("%v:%v:%v: '%v' already declared\n", s, lineno, colno, name)
