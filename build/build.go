@@ -267,7 +267,7 @@ type Module struct {
         *namespaceEmbed
         Parent *Module // upper module
         Toolset toolset
-        Updated bool // marked as 'true' if module is updated
+        Updating, Updated bool // marked as 'true' if module is updated
         Children map[string]*Module
         declareLoc, commitLoc location // where does it defined and commit (could be nil)
         //x *Context // the context of the module
@@ -306,9 +306,8 @@ func (m *Module) Get(ctx *Context, name string) (s string) {
 
 func (m *Module) GetName(ctx *Context) string { return m.Get(ctx, "name") }
 func (m *Module) GetDir(ctx *Context) string { return m.Get(ctx, "dir") }
-
 func (m *Module) GetSources(ctx *Context) (sources []string) {
-        sources = Split(m.Get(ctx, "sources")) // Split(ctx.callWith(m.commitLoc, m, "sources"))
+        sources = Split(m.Get(ctx, "sources"))
         for i := range sources {
                 if filepath.IsAbs(sources[i]) { continue }
                 sources[i] = filepath.Join(m.GetDir(ctx), sources[i])
@@ -316,35 +315,40 @@ func (m *Module) GetSources(ctx *Context) (sources []string) {
         return
 }
 
-func (m *Module) update(ctx *Context) (updated bool) {
-        if g, ok := m.rules[m.goal]; ok && g != nil {
-                owd, err := os.Getwd()
-                if err != nil { errorf("get working directory: %v", err) }
-                
-                wd := m.Get(ctx, "workdir")
-                if wd != owd {
-                        if err = os.Chdir(wd); err != nil {
-                                errorf("change working directory: %v", err)
-                        }
-                }
-                
-                om := ctx.m
-                defer func(){ 
+func (m *Module) update(ctx *Context) bool {
+        fmt.Printf("Module.update: %s\n", m.goal)
+        if !m.Updating && !m.Updated {
+                if g, ok := m.rules[m.goal]; ok && g != nil {
+                        owd, err := os.Getwd()
+                        if err != nil { errorf("get working directory: %v", err) }
+                        
+                        wd := m.Get(ctx, "workdir")
                         if wd != owd {
-                                if err = os.Chdir(owd); err != nil {
+                                if err = os.Chdir(wd); err != nil {
                                         errorf("change working directory: %v", err)
                                 }
                         }
-                        ctx.m = om
-                }()
-                
-                ctx.m = m // change current working module 
-                updated = g.updateAll(ctx)
+                        
+                        om := ctx.m
+                        defer func(){ 
+                                if wd != owd {
+                                        if err = os.Chdir(owd); err != nil {
+                                                errorf("change working directory: %v", err)
+                                        }
+                                }
+                                ctx.m = om
+                        }()
+                        
+                        ctx.m = m // change current working module 
+                        m.Updating = true
+                        m.Updated = g.updateAll(ctx)
+                }
         }
-        return
+        return m.Updated
 }
 
 func (ctx *Context) update(target string) (updated bool) {
+        fmt.Printf("Context.update: %s\n", target)
         if g, ok := ctx.g.rules[target]; ok && g != nil {
                 updated = g.updateAll(ctx)
         }
