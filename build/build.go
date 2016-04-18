@@ -316,7 +316,7 @@ func (m *Module) GetSources(ctx *Context) (sources []string) {
 }
 
 func (m *Module) update(ctx *Context) bool {
-        fmt.Printf("Module.update: %s\n", m.goal)
+        //fmt.Printf("Module.update: %s\n", m.goal)
         if !m.Updating && !m.Updated {
                 if g, ok := m.rules[m.goal]; ok && g != nil {
                         owd, err := os.Getwd()
@@ -348,7 +348,7 @@ func (m *Module) update(ctx *Context) bool {
 }
 
 func (ctx *Context) update(target string) (updated bool) {
-        fmt.Printf("Context.update: %s\n", target)
+        //fmt.Printf("Context.update: %s\n", target)
         if g, ok := ctx.g.rules[target]; ok && g != nil {
                 updated = g.updateAll(ctx)
         }
