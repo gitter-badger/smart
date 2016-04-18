@@ -9,21 +9,20 @@ import (
         . "github.com/duzy/smart/build"
 )
 
-func init() {
-        e := AppendInit(HooksMap{
+var hc = MustHookup(
+        HooksMap{
                 "shell": HookTable{
                         "exec": hookExec,
                 },
         }, `# Execute Shell Command
 template shell
+
 start:!: $(me.depends) $(me.using)
 	@$(me.command) $(me.args)
+
 commit
 `)
-        if e != nil {
-                panic(e)
-        }
-}
+
 
 func hookExec(ctx *Context, args Items) (res Items) {
         cmd := exec.Command("sh", "-c", args.Expand(ctx))

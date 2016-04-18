@@ -5,29 +5,29 @@ package smart
 
 import (
         //"path/filepath"
+        "fmt"
         . "github.com/duzy/smart/build"
 )
 
-func init() {
-        e := AppendInit(HooksMap{
-                "shell": HookTable{
-                        "exec": hookExec,
+var hc = MustHookup(
+        HooksMap{
+                "gcc": HookTable{
+                        "objects": hookObjects,
                 },
-        }, `# Execute Shell Command
+        }, `# Build GCC Projects
 template gcc
 
-target: 
+$(me.name): $(gcc:objects $(me.sources))
 	@echo "todo: $(me.name) ($(me.workdir))"
+
+
 
 post
 commit
 `)
-        if e != nil {
-                panic(e)
-        }
-}
 
-func hookExec(ctx *Context, args Items) (res Items) {
+func hookObjects(ctx *Context, args Items) (res Items) {
+        fmt.Printf("objects: %v\n", args)
         /*
         cmd := exec.Command("sh", "-c", args.Expand(ctx))
         if cmd != nil {
