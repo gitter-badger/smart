@@ -288,7 +288,7 @@ type Module struct {
         *namespaceEmbed
         Parent *Module // upper module
         Toolset toolset
-        Updating, Updated bool // marked as 'true' if module is updated
+        Updating bool // marked as 'true' if module is updating
         Children map[string]*Module
         declareLoc, commitLoc location // where does it defined and commit (could be nil)
         //x *Context // the context of the module
@@ -336,9 +336,9 @@ func (m *Module) GetSources(ctx *Context) (sources []string) {
         return
 }
 
-func (m *Module) update(ctx *Context) bool {
+func (m *Module) update(ctx *Context) (updated bool) {
         //fmt.Printf("Module.update: %s\n", m.goal)
-        if !m.Updating && !m.Updated {
+        if !m.Updating {
                 if g, ok := m.rules[m.goal]; ok && g != nil {
                         owd, err := os.Getwd()
                         if err != nil { errorf("get working directory: %v", err) }
@@ -361,11 +361,13 @@ func (m *Module) update(ctx *Context) bool {
                         }()
                         
                         ctx.m = m // change current working module 
+
                         m.Updating = true
-                        m.Updated = g.updateAll(ctx)
+                        updated = g.updateAll(ctx)
+                        m.Updating = false
                 }
         }
-        return m.Updated
+        return
 }
 
 func (ctx *Context) update(target string) (updated bool) {
@@ -701,7 +703,7 @@ func (r *rule) updatePrerequisites(ctx *Context) (err error, matchedPrerequisite
                 if m, r := r.ns.findMatchedRule(ctx, prerequisite); m != nil && r != nil {
                         matchedPrerequisites = append(matchedPrerequisites, &matchrule{ m, r })
                 } else {
-                        err = errors.New(fmt.Sprintf("no rule to update '%v'\n", prerequisite))
+                        err = errors.New(fmt.Sprintf("no rule to update '%v'", prerequisite))
                         return
                 }
         }

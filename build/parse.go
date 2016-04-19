@@ -208,6 +208,7 @@ func (ns *namespaceEmbed) findMatchedRule(ctx *Context, target string) (m *match
                         r = rr
                 }
         } else {
+                fmt.Printf("%v, %v\n", target, ns.rules)
                 /// TODO: perform pattern match for a perfect rule
         }
         return

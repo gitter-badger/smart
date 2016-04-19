@@ -4,8 +4,9 @@
 package smart
 
 import (
-        //"path/filepath"
-        "fmt"
+        //"fmt"
+        "strings"
+        "path/filepath"
         . "github.com/duzy/smart/build"
 )
 
@@ -14,32 +15,31 @@ var hc = MustHookup(
                 "gcc": HookTable{
                         "objects": hookObjects,
                 },
-        }, `# Build GCC Projects
+        },
+        `# Build GCC Projects
 template gcc
 
-$(me.name): $(gcc:objects $(me.sources))
-	@echo "todo: $(me.name) ($(me.workdir))"
-
-
-
 post
+
+$(me.name): $(gcc:objects)
+	@echo "todo: $^ -> $(me.name) ($(me.workdir))"
+
+%.o: %.c   ; gcc -o $@ $<
+%.o: %.cpp ; g++ -o $@ $<
+
 commit
 `)
 
-func hookObjects(ctx *Context, args Items) (res Items) {
-        fmt.Printf("objects: %v\n", args)
-        /*
-        cmd := exec.Command("sh", "-c", args.Expand(ctx))
-        if cmd != nil {
-                stdout, stderr := new(bytes.Buffer), new(bytes.Buffer)
-                cmd.Stdout, cmd.Stderr = stdout, stderr
-                if err := cmd.Run(); err != nil {
-                        // TODO: report errors
-                        return
-                }
-                res = append(res, StringItem(stdout.String()))
-        } else {
-                // TODO: report errors
-        } */
+func hookObjects(ctx *Context, args Items) (objects Items) {
+        if len(args) == 0 {
+                args = ctx.Call("me.sources")
+        }
+        for _, a := range args {
+                // FIXME: split 'a'
+                src := a.Expand(ctx)
+                ext := filepath.Ext(src)
+                obj := strings.TrimSuffix(src, ext) + ".o"
+                objects = append(objects, StringItem(obj))
+        }
         return
 }

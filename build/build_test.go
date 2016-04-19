@@ -196,7 +196,7 @@ bar.txt:
 commit
 
 foo:!:
-	@echo "rule 'foo' is also called along with module 'foo'" $(info 4: $@)
+	@echo "rule 'foo' is updated along with module 'foo'" $(info 4: $@)
 `);     if err != nil { t.Errorf("parse error:", err) }
         if ctx.t != nil { t.Errorf("ctx.t: %v", ctx.t) }
         if ctx.m != nil { t.Errorf("ctx.m: %v", ctx.m) }
@@ -212,8 +212,8 @@ foo:!:
                                 ctx.Set("@", stringitem("xxxxx"))
                                 if c, ok := r.recipes[0].(*node); !ok { t.Errorf("recipes[0] '%v' is not node", r.recipes[0]) } else {
                                         if k, x := c.kind, nodeRecipe; k != x { t.Errorf("recipes[1] %v != %v", k, x) }
-                                        if s, x := c.str(), `@echo "rule 'foo' is also called along with module 'foo'" $(info 4: $@)`; s != x { t.Errorf("recipes[1]: %v != %v", s, x) }
-                                        if s, x := c.Expand(ctx), `@echo "rule 'foo' is also called along with module 'foo'" `; s != x { t.Errorf("recipes[1]: '%v' != '%v'", s, x) }
+                                        if s, x := c.str(), `@echo "rule 'foo' is updated along with module 'foo'" $(info 4: $@)`; s != x { t.Errorf("recipes[1]: %v != %v", s, x) }
+                                        if s, x := c.Expand(ctx), `@echo "rule 'foo' is updated along with module 'foo'" `; s != x { t.Errorf("recipes[1]: '%v' != '%v'", s, x) }
                                 }
                                 ctx.Set("@", stringitem(""))
                         }

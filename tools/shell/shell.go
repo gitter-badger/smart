@@ -14,7 +14,8 @@ var hc = MustHookup(
                 "shell": HookTable{
                         "exec": hookExec,
                 },
-        }, `# Execute Shell Command
+        },
+        `# Execute Shell Command
 template shell
 
 start:!: $(me.depends) $(me.using)
