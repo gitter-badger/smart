@@ -291,8 +291,8 @@ type Module struct {
         Updating bool // marked as 'true' if module is updating
         Children map[string]*Module
         declareLoc, commitLoc location // where does it defined and commit (could be nil)
-        //x *Context // the context of the module
         l *lex // the lex scope where does it defined (could be nil)
+        //x *Context // the context of the module
 }
 
 func (m *Module) getNamespace(name string) (ns namespace) {

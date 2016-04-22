@@ -208,7 +208,7 @@ func (ns *namespaceEmbed) findMatchedRule(ctx *Context, target string) (m *match
                         r = rr
                 }
         } else {
-                fmt.Printf("%v, %v\n", target, ns.rules)
+                fmt.Printf("findMatchedRule: %v, %v\n", target, ns.rules)
                 /// TODO: perform pattern match for a perfect rule
         }
         return
@@ -2013,10 +2013,6 @@ func processNodeModule(ctx *Context, n *node) (err error) {
 
         if toolset != nil {
                 // parsed arguments in forms like "PLATFORM=android-9"
-                /*
-                var a []string
-                if 2 < len(args) { a = args[2:] }
-                vars, rest := splitVarArgs(a) */
                 var rest Items
                 vars := make(map[string]string, 4)
                 for _, a := range args[2:] {
