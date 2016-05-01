@@ -74,13 +74,24 @@ type define struct {
         loc location
 }
 
+type rulekind int
+
+const (
+        ruleFileTarget rulekind = iota
+        rulePercentPattern
+        ruleRegexPattern // *
+        ruleGlobPattern // *
+)
+
 type rule struct {
         prev map[string]*rule // previously defined rules of a specific target
-        targets, prerequisites []string // expanded targets
+        targets []string // expanded strings (target names or patterns)
+        prerequisites []string // expanded strings (could be patterns)
         recipes []interface{} // *node, string
         ns namespace
         c checkupdater
         node *node
+        kind rulekind
 }
 
 type checkupdater interface {
@@ -91,7 +102,8 @@ type checkupdater interface {
 type namespace interface {
         getNamespace(name string) namespace
         getDefineMap() map[string]*define
-        getRuleMap() map[string]*rule
+        //getRuleMap() map[string]*rule
+        //addPattern(r *rule)
         findMatchedRule(ctx *Context, target string) (m *match, r *rule)
         isPhonyTarget(ctx *Context, target string) bool
         saveDefines(names ...string) (saveIndex int, m map[string]*define)
@@ -106,13 +118,14 @@ type namespace interface {
 type namespaceEmbed struct {
         defines map[string]*define
         saveList []map[string]*define // saveDefines, restoreDefines
-        rules map[string]*rule
+        files map[string]*rule
+        patts map[string]*rule
         goal string
 }
 func (ns *namespaceEmbed) getGoalRule() string { return ns.goal }
 func (ns *namespaceEmbed) setGoalRule(target string) { ns.goal = target }
 func (ns *namespaceEmbed) getRules(kind nodeType, target string) (rules []*rule) {
-        for ru, ok := ns.rules[target]; ok && ru != nil; {
+        for ru, ok := ns.files[target]; ok && ru != nil; {
                 if ru.node.kind == kind {
                         rules = append(rules, ru)
                 }
@@ -123,13 +136,32 @@ func (ns *namespaceEmbed) getRules(kind nodeType, target string) (rules []*rule)
 func (ns *namespaceEmbed) link(targets ...string) (r *rule) {
         r = &rule{ ns:ns, targets:targets }
         for _, target := range targets {
-                if prev, ok := ns.rules[target]; ok && prev != nil {
+                var prev *rule
+
+                switch {
+                case strings.Contains(target, "%"):
+                        prev, _ = ns.patts[target]
+                        r.kind = rulePercentPattern
+                default:
+                        prev, _ = ns.files[target]
+                        r.kind = ruleFileTarget
+                }
+                
+                if prev != nil {
                         if r.prev == nil {
                                 r.prev = make(map[string]*rule)
                         }
                         r.prev[target] = prev
                 }
-                ns.rules[target] = r
+                
+                switch r.kind {
+                case ruleFileTarget: 
+                        ns.files[target] = r
+                case rulePercentPattern: fallthrough
+                case ruleRegexPattern:   fallthrough
+                case ruleGlobPattern:
+                        ns.patts[target] = r
+                }
         }
         return
 }
@@ -198,24 +230,25 @@ func (ns *namespaceEmbed) getDefineMap() map[string]*define {
         return ns.defines
 }
 
+/*
 func (ns *namespaceEmbed) getRuleMap() map[string]*rule {
-        return ns.rules
-}
+        return ns.files
+} */
 
 func (ns *namespaceEmbed) findMatchedRule(ctx *Context, target string) (m *match, r *rule) {
-        if rr, ok := ns.rules[target]; ok && rr != nil {
+        if rr, ok := ns.files[target]; ok && rr != nil {
                 if m, ok = rr.match(target); ok && m != nil {
                         r = rr
                 }
         } else {
-                fmt.Printf("findMatchedRule: %v, %v\n", target, ns.rules)
+                fmt.Printf("findMatchedRule: %v, %v\n", target, ns.files)
                 /// TODO: perform pattern match for a perfect rule
         }
         return
 }
 
 func (ns *namespaceEmbed) isPhonyTarget(ctx *Context, target string) bool {
-        if rr, ok := ns.rules[target]; ok && rr != nil {
+        if rr, ok := ns.files[target]; ok && rr != nil {
                 return rr.node.kind == nodeRulePhony
         }
         return false
@@ -1904,7 +1937,8 @@ func processNodeTemplate(ctx *Context, n *node) (err error) {
                         name:name,
                         namespaceEmbed: &namespaceEmbed{
                                 defines: make(map[string]*define, 8),
-                                rules: make(map[string]*rule, 4),
+                                files: make(map[string]*rule, 4),
+                                patts: make(map[string]*rule, 2),
                         },
                 }
 
@@ -1949,7 +1983,8 @@ func processNodeModule(ctx *Context, n *node) (err error) {
                         Children: make(map[string]*Module, 2),
                         namespaceEmbed: &namespaceEmbed{
                                 defines: make(map[string]*define, 8),
-                                rules: make(map[string]*rule, 4),
+                                files: make(map[string]*rule, 4),
+                                patts: make(map[string]*rule, 2),
                         },
                 }
                 ctx.modules[name] = m
@@ -1988,7 +2023,8 @@ func processNodeModule(ctx *Context, n *node) (err error) {
                         Children: make(map[string]*Module),
                         namespaceEmbed: &namespaceEmbed{
                                 defines: make(map[string]*define, 4),
-                                rules: make(map[string]*rule),
+                                files: make(map[string]*rule, 4),
+                                patts: make(map[string]*rule, 2),
                         },
                 }
                 m.Children[exportName] = x
@@ -2108,7 +2144,8 @@ func NewContext(scope string, s []byte, vars map[string]string) (ctx *Context, e
                 l: &lex{ parseBuffer:&parseBuffer{ scope:scope, s: s }, pos: 0 },
                 g: &namespaceEmbed{
                         defines: make(map[string]*define, len(vars) + 16),
-                        rules: make(map[string]*rule, 8),
+                        files: make(map[string]*rule, 8),
+                        patts: make(map[string]*rule, 2),
                 },
                 w: worker.New(),
         }

@@ -130,7 +130,7 @@ foo:?:
 foobar:!:
 `);     if err != nil { t.Errorf("parse error:", err) }
         if ctx == nil { t.Errorf("nil context") } else {
-                if r, ok := ctx.g.rules["foo"]; !ok { t.Errorf("rule 'foo' not defined") } else {
+                if r, ok := ctx.g.files["foo"]; !ok { t.Errorf("rule 'foo' not defined") } else {
                         if n := len(r.targets); n != 1 { t.Errorf("incorrect number of targets: %v %v", n, r.targets) } else {
                                 if g := ctx.g.getGoalRule(); g != r.targets[0] { t.Errorf("wrong goal rule: %v", g) }
                         }
@@ -200,8 +200,8 @@ foo:!:
 `);     if err != nil { t.Errorf("parse error:", err) }
         if ctx.t != nil { t.Errorf("ctx.t: %v", ctx.t) }
         if ctx.m != nil { t.Errorf("ctx.m: %v", ctx.m) }
-        if n, x := len(ctx.g.rules), 1; n != x { t.Errorf("wrong rules: %v", ctx.g.rules) } else {
-                if r, ok := ctx.g.rules["foo"]; !ok && r == nil { t.Errorf("'all' not defined") } else {
+        if n, x := len(ctx.g.files), 1; n != x { t.Errorf("wrong rules: %v", ctx.g.files) } else {
+                if r, ok := ctx.g.files["foo"]; !ok && r == nil { t.Errorf("'all' not defined") } else {
                         if k, x := r.node.kind, nodeRulePhony; k != x { t.Errorf("%v != %v", k, x) }
                         if n, x := len(r.node.children), 3; n != x { t.Errorf("children %d != %d", n, x) }
                         if n, x := len(r.targets), 1; n != x { t.Errorf("targets %d != %d", n, x) } else {
@@ -298,8 +298,8 @@ foo:!:
 `);     if err != nil { t.Errorf("parse error:", err) }
         if ctx.t != nil { t.Errorf("ctx.t: %v", ctx.t) }
         if ctx.m != nil { t.Errorf("ctx.m: %v", ctx.m) }
-        if n, x := len(ctx.g.rules), 1; n != x { t.Errorf("wrong rules: %v", ctx.g.rules) } else {
-                if r, ok := ctx.g.rules["foo"]; !ok || r == nil { t.Errorf("'foo' not defined") } else {
+        if n, x := len(ctx.g.files), 1; n != x { t.Errorf("wrong rules: %v", ctx.g.files) } else {
+                if r, ok := ctx.g.files["foo"]; !ok || r == nil { t.Errorf("'foo' not defined") } else {
                         if k, x := r.node.kind, nodeRulePhony; k != x { t.Errorf("%v != %v", k, x) }
                         if n, x := len(r.node.children), 3; n != x { t.Errorf("children %d != %d", n, x) }
                         if n, x := len(r.targets), 1; n != x { t.Errorf("targets %d != %d", n, x) } else {
@@ -398,30 +398,30 @@ bar:!:
 	@echo "rule 'foo' is also called along with module 'foo'" $(info 4: $@)
 `);     if err != nil { t.Errorf("parse error:", err) }
         if s, x := ctx.g.goal, "all"; s != x { t.Errorf("%v != %v", s, x) }
-        if n, x := len(ctx.g.rules), 3; n != x { t.Errorf("wrong rules: %v", ctx.g.rules) } else {
-                if r, ok := ctx.g.rules["all"]; !ok && r == nil { t.Errorf("'all' not defined") } else {
+        if n, x := len(ctx.g.files), 3; n != x { t.Errorf("wrong rules: %v", ctx.g.files) } else {
+                if r, ok := ctx.g.files["all"]; !ok && r == nil { t.Errorf("'all' not defined") } else {
                         // TODO: ...
                 }
-                if r, ok := ctx.g.rules["foo"]; !ok && r == nil { t.Errorf("'foo' not defined") } else {
+                if r, ok := ctx.g.files["foo"]; !ok && r == nil { t.Errorf("'foo' not defined") } else {
                         // TODO: ...
                 }
-                if r, ok := ctx.g.rules["bar"]; !ok && r == nil { t.Errorf("'bar' not defined") } else {
+                if r, ok := ctx.g.files["bar"]; !ok && r == nil { t.Errorf("'bar' not defined") } else {
                         // TODO: ...
                 }
         }
         if n, x := len(ctx.modules), 2; n != x { t.Errorf("wrong modules: %v", ctx.modules) } else {
                 if m, ok := ctx.modules["foo"]; !ok || m == nil { t.Errorf("foo not defined: %v", ctx.modules) } else {
                         if s, x := m.goal, "foo.txt"; s != x { t.Errorf("%v != %v", s, x) }
-                        if n, x := len(m.rules), 1; n != x { t.Errorf("wrong rules: %v", m.rules) } else {
-                                if r, ok := m.rules["foo.txt"]; !ok && r == nil { t.Errorf("'foo.txt' not defined") } else {
+                        if n, x := len(m.files), 1; n != x { t.Errorf("wrong rules: %v", m.files) } else {
+                                if r, ok := m.files["foo.txt"]; !ok && r == nil { t.Errorf("'foo.txt' not defined") } else {
                                         // TODO: ...
                                 }
                         }
                 }
                 if m, ok := ctx.modules["bar"]; !ok || m == nil { t.Errorf("foo not defined: %v", ctx.modules) } else {
                         if s, x := m.goal, "bar.txt"; s != x { t.Errorf("%v != %v", s, x) }
-                        if n, x := len(m.rules), 1; n != x { t.Errorf("wrong rules: %v", m.rules) } else {
-                                if r, ok := m.rules["bar.txt"]; !ok && r == nil { t.Errorf("'foo.txt' not defined") } else {
+                        if n, x := len(m.files), 1; n != x { t.Errorf("wrong rules: %v", m.files) } else {
+                                if r, ok := m.files["bar.txt"]; !ok && r == nil { t.Errorf("'foo.txt' not defined") } else {
                                         // TODO: ...
                                 }
                         }

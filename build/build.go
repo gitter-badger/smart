@@ -339,7 +339,7 @@ func (m *Module) GetSources(ctx *Context) (sources []string) {
 func (m *Module) update(ctx *Context) (updated bool) {
         //fmt.Printf("Module.update: %s\n", m.goal)
         if !m.Updating {
-                if g, ok := m.rules[m.goal]; ok && g != nil {
+                if g, ok := m.files[m.goal]; ok && g != nil {
                         owd, err := os.Getwd()
                         if err != nil { errorf("get working directory: %v", err) }
                         
@@ -372,7 +372,7 @@ func (m *Module) update(ctx *Context) (updated bool) {
 
 func (ctx *Context) update(target string) (updated bool) {
         //fmt.Printf("Context.update: %s\n", target)
-        if g, ok := ctx.g.rules[target]; ok && g != nil {
+        if g, ok := ctx.g.files[target]; ok && g != nil {
                 updated = g.updateAll(ctx)
         }
         if m, ok := ctx.modules[target]; ok && m != nil {
@@ -921,4 +921,3 @@ func Build(vars map[string]string, cmds ...string) (ctx *Context) {
         Update(ctx, cmds...)
         return
 }
-
