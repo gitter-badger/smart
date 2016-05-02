@@ -104,7 +104,7 @@ type namespace interface {
         getDefineMap() map[string]*define
         //getRuleMap() map[string]*rule
         //addPattern(r *rule)
-        findMatchedRule(ctx *Context, target string) (m *match, r *rule)
+        findMatchedRules(ctx *Context, target string) (m *match, rs []*rule)
         isPhonyTarget(ctx *Context, target string) bool
         saveDefines(names ...string) (saveIndex int, m map[string]*define)
         restoreDefines(saveIndex int)
@@ -120,6 +120,7 @@ type namespaceEmbed struct {
         saveList []map[string]*define // saveDefines, restoreDefines
         files map[string]*rule
         patts map[string]*rule
+        pattList []*rule
         goal string
 }
 func (ns *namespaceEmbed) getGoalRule() string { return ns.goal }
@@ -160,6 +161,7 @@ func (ns *namespaceEmbed) link(targets ...string) (r *rule) {
                 case rulePercentPattern: fallthrough
                 case ruleRegexPattern:   fallthrough
                 case ruleGlobPattern:
+                        ns.pattList = append(ns.pattList, r)
                         ns.patts[target] = r
                 }
         }
@@ -235,14 +237,17 @@ func (ns *namespaceEmbed) getRuleMap() map[string]*rule {
         return ns.files
 } */
 
-func (ns *namespaceEmbed) findMatchedRule(ctx *Context, target string) (m *match, r *rule) {
+func (ns *namespaceEmbed) findMatchedRules(ctx *Context, target string) (m *match, rs []*rule) {
         if rr, ok := ns.files[target]; ok && rr != nil {
                 if m, ok = rr.match(target); ok && m != nil {
-                        r = rr
+                        rs = append(rs, rr)
                 }
         } else {
-                fmt.Printf("findMatchedRule: %v, %v\n", target, ns.files)
-                /// TODO: perform pattern match for a perfect rule
+                for _, rr := range ns.pattList {
+                        if m, ok = rr.match(target); ok && m != nil {
+                                rs = append(rs, rr) //; break // return
+                        }
+                }
         }
         return
 }

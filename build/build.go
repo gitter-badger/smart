@@ -581,7 +581,7 @@ func (c *phonyTargetUpdater) check(ctx *Context, r *rule, m *match) bool {
 func (c *phonyTargetUpdater) update(ctx *Context, r *rule, m *match) bool {
         //fmt.Printf("phonyTargetUpdater.update: %v\n", m.target)
 
-        err, matchedPrerequisites, _ := r.updatePrerequisites(ctx)
+        err, matchedPrerequisites, _ := r.updatePrerequisites(ctx, m)
         if err != nil {
                 fmt.Fprintf(os.Stderr, "%v\n", err)
                 //os.Exit(-1)
@@ -617,7 +617,7 @@ func (c *defaultTargetUpdater) check(ctx *Context, r *rule, m *match) bool {
 func (c *defaultTargetUpdater) update(ctx *Context, r *rule, m *match) bool {
         //fmt.Printf("defaultTargetUpdater.update: %v\n", m.target)
         
-        err, matchedPrerequisites, updatedPrerequisites := r.updatePrerequisites(ctx)
+        err, matchedPrerequisites, updatedPrerequisites := r.updatePrerequisites(ctx, m)
         if err != nil {
                 fmt.Fprintf(os.Stderr, "%v\n", err)
                 //os.Exit(-1)
@@ -648,18 +648,44 @@ type match struct {
         stem string
 }
 
-type matchrule struct {
+func (m *match) unstem(s string) (ss string, ok bool) {
+        if pos := strings.Index(s, "%"); 0 <= pos {
+                prefix, suffix := s[0:pos], s[pos+1:]
+                s, ok = fmt.Sprintf("%s%s%s", prefix, m.stem, suffix), true
+        }
+        return s, ok
+}
+
+type matchrules struct {
         *match
-        rule *rule 
+        rules []*rule 
 }
 
 func (r *rule) match(target string) (m *match, matched bool) {
-        for _, t := range r.targets {
-                if t == target {
-                        matched, m = true, &match{
-                                target: t,
+        switch r.kind {
+        case ruleFileTarget:
+                for _, t := range r.targets {
+                        if t == target {
+                                matched, m = true, &match{
+                                        target: t,
+                                }
                         }
                 }
+        case rulePercentPattern:
+                for _, pat := range r.targets {
+                        if pos := strings.Index(pat, "%"); 0 <= pos {
+                                prefix, suffix := pat[0:pos], pat[pos+1:]
+                                if strings.HasPrefix(target, prefix) && strings.HasSuffix(target, suffix) {
+                                        matched, m = true, &match{ target:target }
+                                        m.stem = strings.TrimSuffix(strings.TrimPrefix(target, prefix), suffix)
+                                        return
+                                }
+                        } else {
+                                errorf(fmt.Sprintf("invalid pattern '%v'", pat))
+                        }
+                }
+        case ruleRegexPattern:
+        case ruleGlobPattern:
         }
         return
 }
@@ -698,24 +724,32 @@ func (r *rule) updateAll(ctx *Context) bool {
         return 0 < num
 }
 
-func (r *rule) updatePrerequisites(ctx *Context) (err error, matchedPrerequisites, updatedPrerequisites []*matchrule) {
+func (r *rule) updatePrerequisites(ctx *Context, m *match) (err error, matchedPrerequisites, updatedPrerequisites []*matchrules) {
         for _, prerequisite := range r.prerequisites {
-                if m, r := r.ns.findMatchedRule(ctx, prerequisite); m != nil && r != nil {
-                        matchedPrerequisites = append(matchedPrerequisites, &matchrule{ m, r })
-                } else {
+                prerequisite, _ = m.unstem(prerequisite)
+                if m, rs := r.ns.findMatchedRules(ctx, prerequisite); m != nil && 0 < len(rs) {
+                        matchedPrerequisites = append(matchedPrerequisites, &matchrules{ m, rs })
+                } else if r.kind == ruleFileTarget {
                         err = errors.New(fmt.Sprintf("no rule to update '%v'", prerequisite))
                         return
+                } else {
+                        fi, _ := os.Stat(prerequisite)
+                        fmt.Printf("updatePrerequisites: %v %v stat: %v\n", r.prerequisites, prerequisite, fi)
                 }
         }
+        //fmt.Printf("updatePrerequisites: %v %v\n", r.prerequisites, matchedPrerequisites)
         for _, mr := range matchedPrerequisites {
-                if ok := mr.rule.update(ctx, mr.match); ok {
-                        updatedPrerequisites = append(updatedPrerequisites, mr)
+                for _, r := range mr.rules {
+                        if ok := r.update(ctx, mr.match); ok {
+                                updatedPrerequisites = append(updatedPrerequisites, mr)
+                                break
+                        }
                 }
         }
         return
 }
 
-func (r *rule) makeExecuteContext(ctx *Context, ti os.FileInfo, m *match, matchedPrerequisites []*matchrule) *ruleExecuteContext {
+func (r *rule) makeExecuteContext(ctx *Context, ti os.FileInfo, m *match, matchedPrerequisites []*matchrules) *ruleExecuteContext {
         ec := &ruleExecuteContext{ target: m.target, stem: m.stem }
         for _, mr := range matchedPrerequisites {
                 ec.prerequisites = append(ec.prerequisites, mr.target)
@@ -727,6 +761,7 @@ func (r *rule) makeExecuteContext(ctx *Context, ti os.FileInfo, m *match, matche
                         }
                 }
         }
+        //fmt.Printf("makeExecuteContext: prerequisites: %v %v\n", ec.prerequisites, matchedPrerequisites)
         return ec
 }
 
